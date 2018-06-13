@@ -3,8 +3,19 @@
 #
 # DESCRIPTION: This Stack create a Splunk Host as well as an Internet facing LoadBalancer. The Splunk host uses an EFS 
 #   MountPoint where it stores the Splunk instalation.
-#  
+#
 # BEWARE: that it uses a publicly accessible S3 bucket to retrieve it instalation RPMs/sources.
+#   splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm: https://download.splunk.com/products/splunk/releases/7.1.1/linux/splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm
+#   nmon-performance-monitor-for-unix-and-linux-systems_1916.tgz: https://splunkbase.splunk.com/app/1753/
+#   ta-nmon-technical-addon-for-nmon-performance-monitor_1333.tgz: https://splunkbase.splunk.com/app/3248/
+#
+# NOTE: in order to create the AMI mapping you can run the following command. (needs a bit of massaging: 
+#   should extract the ami and the region name, and output everything in the YAML compatible format)
+# 
+# for region in $(aws ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text); do
+#   aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" --query 'Images[*].{ID:ImageId}'
+# done
+#
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -38,6 +49,42 @@ Parameters:
     Type: String
     Default: ''
     NoEcho: true
+  SplunkInstanceType:
+    Description: 'The instance type of the Jenkins master.'
+    Type: String
+    Default: 'c4.large'    
+Mappings:
+  RegionMap:
+    'ap-south-1':
+      AMI: 'ami-76d6f519'
+    'eu-west-3':
+      AMI: 'ami-969c2deb'
+    'eu-west-2':
+      AMI: 'ami-a36f8dc4'
+    'eu-west-1':
+      AMI: 'ami-ca0135b3'
+    'ap-northeast-2':
+      AMI: 'ami-c10fa6af'
+    'ap-northeast-1':
+      AMI: 'ami-92df37ed'
+    'sa-east-1':
+      AMI: 'ami-3885d854'
+    'ca-central-1':
+      AMI: 'ami-338a0a57'
+    'ap-southeast-1':
+      AMI: 'ami-de90a5a2'
+    'ap-southeast-2':
+      AMI: 'ami-423bec20'
+    'eu-central-1':
+      AMI: 'ami-9a91b371'
+    'us-east-1':
+      AMI: 'ami-14c5486b'
+    'us-east-2':
+      AMI: 'ami-922914f7'
+    'us-west-1':
+      AMI: 'ami-25110f45'
+    'us-west-2':
+      AMI: 'ami-e251209a'    
 Resources: 
   #
   # Let's create the SecurityGroup for the EFS FileSystem. Basically it should only allow traffic on the NFS Port from 
@@ -250,8 +297,8 @@ Resources:
     Properties: 
       DisableApiTermination: false
       InstanceInitiatedShutdownBehavior: stop
-      ImageId: "ami-c51e3eb6"
-      InstanceType: "t2.micro"
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref SplunkInstanceType
       KeyName: !Ref 'KeyName'
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
