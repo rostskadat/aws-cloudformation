@@ -111,6 +111,7 @@ Resources:
   FileSystemSplunk:
     Type: 'AWS::EFS::FileSystem'
     Properties:
+      Encrypted: true
       FileSystemTags:
       - Key: PLATFORM
         Value: 
