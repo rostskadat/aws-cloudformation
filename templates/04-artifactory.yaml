@@ -1,13 +1,7 @@
 #
-# FILE: 03-splunk.yaml
+# FILE: 03-artifactory.yaml
 #
-# DESCRIPTION: This Stack create a Splunk Host as well as an Internet facing LoadBalancer. The Splunk host uses an EFS 
-#   MountPoint where it stores the Splunk instalation.
-#
-# BEWARE: that it uses a publicly accessible S3 bucket to retrieve it instalation RPMs/sources.
-#   splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm: https://download.splunk.com/products/splunk/releases/7.1.1/linux/splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm
-#   nmon-performance-monitor-for-unix-and-linux-systems_1916.tgz: https://splunkbase.splunk.com/app/1753/
-#   ta-nmon-technical-addon-for-nmon-performance-monitor_1333.tgz: https://splunkbase.splunk.com/app/3248/
+# DESCRIPTION: This Stack create a Artifactory Host as well as an Internet facing LoadBalancer.
 #
 # NOTE: in order to create the AMI mapping you can run the following command. (needs a bit of massaging: 
 #   should extract the ami and the region name, and output everything in the YAML compatible format)
@@ -19,7 +13,7 @@
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "This stack create a Splunk host and install the NMON application"
+Description: "This stack create a Artifactory host"
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
@@ -31,26 +25,26 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - SplunkInstanceType
+      - ArtifactoryInstanceType
     - Label:
-        default: 'Splunk Parameters'
+        default: 'Artifactory Parameters'
       Parameters:
-      - SplunkAdminPassword
+      - ArtifactoryAdminPassword
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Stack where Splunk will reside"
+    Description: "Enter the name of the VPC Stack where Artifactory will reside"
     Type: String
     Default: ''
   KeyName: 
-    Description: "Enter the name of the Key Pair to use for the Splunk instance"
+    Description: "Enter the name of the Key Pair to use for the Artifactory instance"
     Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
-  SplunkInstanceType:
+  ArtifactoryInstanceType:
     Description: 'The instance type of the Jenkins master.'
     Type: String
     Default: 'c4.large'    
-  SplunkAdminPassword: 
-    Description: "Enter the default Admin password for Splunk"
+  ArtifactoryAdminPassword: 
+    Description: "Enter the default Admin password for Artifactory"
     Type: String
     Default: ''
     NoEcho: true
@@ -94,7 +88,7 @@ Resources:
   SecurityGroupEFS:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access Splunk EFS'
+      GroupDescription: 'Security Group to access Artifactory EFS'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
@@ -109,7 +103,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
-  FileSystemSplunk:
+  FileSystemArtifactory:
     Type: 'AWS::EFS::FileSystem'
     Properties:
       Encrypted: true
@@ -118,20 +112,20 @@ Resources:
         Value: 
           'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
       - Key: Name
-        Value: !Sub '${AWS::StackName}-FileSystemSplunk'
+        Value: !Sub '${AWS::StackName}-FileSystemArtifactory'
       PerformanceMode: generalPurpose
-  MountTargetSplunkA:
+  MountTargetArtifactoryA:
     Type: 'AWS::EFS::MountTarget'
     Properties:
-      FileSystemId: !Ref FileSystemSplunk
+      FileSystemId: !Ref FileSystemArtifactory
       SecurityGroups:
         - !Ref SecurityGroupEFS
       SubnetId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-  MountTargetSplunkB:
+  MountTargetArtifactoryB:
     Type: 'AWS::EFS::MountTarget'
     Properties:
-      FileSystemId: !Ref FileSystemSplunk
+      FileSystemId: !Ref FileSystemArtifactory
       SecurityGroups:
         - !Ref SecurityGroupEFS
       SubnetId:
@@ -144,7 +138,7 @@ Resources:
   SecurityGroupELB:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access Splunk EFS'
+      GroupDescription: 'Security Group to access Artifactory EFS'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
@@ -162,7 +156,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupELB'
-  LoadBalancerSplunk:
+  LoadBalancerArtifactory:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
       Scheme: 'internet-facing'
@@ -176,8 +170,8 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancerSplunk'
-  TargetGroupSplunk:
+          Value: !Sub '${AWS::StackName}-LoadBalancerArtifactory'
+  TargetGroupArtifactory:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
@@ -196,35 +190,35 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupSplunk'
+          Value: !Sub '${AWS::StackName}-TargetGroupArtifactory'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
       Targets:
-        - Id: !Ref SplunkHost
-    DependsOn: SplunkHost
-  ListenerSplunk:
+        - Id: !Ref ArtifactoryHost
+    DependsOn: ArtifactoryHost
+  ListenerArtifactory:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupSplunk
+      - TargetGroupArn: !Ref TargetGroupArtifactory
         Type: forward
-      LoadBalancerArn: !Ref LoadBalancerSplunk
+      LoadBalancerArn: !Ref LoadBalancerArtifactory
       Port: 80
       Protocol: HTTP
   #
-  # Let's create the Splunk instance.
+  # Let's create the Artifactory instance.
   # 
   # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
-  #   Splunk port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
+  #   Artifactory port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
   #   communications with a host presenting a self-signed certificate.
   #
-  SecurityGroupSplunk:
+  SecurityGroupArtifactory:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access the Splunk instance'
+      GroupDescription: 'Security Group to access the Artifactory instance'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
@@ -238,8 +232,8 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupSplunk'
-  SplunkHost: 
+          Value: !Sub '${AWS::StackName}-SecurityGroupArtifactory'
+  ArtifactoryHost: 
     Type: "AWS::EC2::Instance"
     Metadata:
       AWS::CloudFormation::Init:
@@ -247,7 +241,7 @@ Resources:
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
         #
         configSets: 
-          default: [ InstallFS, InstallSplunk, InstallSplunkApps, StartSplunk ]
+          default: [ InstallFS, InstallArtifactory, InstallArtifactoryApps, StartArtifactory ]
         InstallFS:
           packages:
             yum:
@@ -266,74 +260,74 @@ Resources:
               group: "ec2-user"
           commands:
             "01_mount_efs":
-              command: !Sub 'sudo mkdir -p /opt/splunk && sudo mount -t efs -o tls ${FileSystemSplunk}:/ /opt/splunk'
+              command: !Sub 'sudo mkdir -p /opt/Artifactory && sudo mount -t efs -o tls ${FileSystemArtifactory}:/ /opt/Artifactory'
             "02_install_aws_inspector":
               command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
-        InstallSplunk: 
+        InstallArtifactory: 
           packages: 
             rpm: 
-              splunk: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm'
+              Artifactory: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/Artifactory-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm'
           files:
-            "/opt/splunk/etc/system/local/user-seed.conf":
+            "/opt/Artifactory/etc/system/local/user-seed.conf":
               content: !Sub |
                 [user_info]
                 USERNAME = admin
-                PASSWORD = ${SplunkAdminPassword}
+                PASSWORD = ${ArtifactoryAdminPassword}
               mode: "000677"
               owner: "root"
               group: "root"
           commands:
-            "01_splunk_enable":
-              command: 'sudo /opt/splunk/bin/splunk enable boot-start --accept-license -user splunk'
+            "01_Artifactory_enable":
+              command: 'sudo /opt/Artifactory/bin/Artifactory enable boot-start --accept-license -user Artifactory'
               cwd: '~'
-        InstallSplunkApps: 
+        InstallArtifactoryApps: 
           files:
-            "/opt/splunk/etc/apps/":
+            "/opt/Artifactory/etc/apps/":
               source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/nmon-performance-monitor-for-unix-and-linux-systems_1916.tgz'
-            "/opt/splunk/etc/apps/":
+            "/opt/Artifactory/etc/apps/":
               source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/ta-nmon-technical-addon-for-nmon-performance-monitor_1333.tgz'
-        StartSplunk:              
+        StartArtifactory:              
           commands:
-            "01_splunk_start":
-              command: 'sudo /opt/splunk/bin/splunk start'
+            "01_Artifactory_start":
+              command: 'sudo /opt/Artifactory/bin/Artifactory start'
     Properties: 
       DisableApiTermination: false
       InstanceInitiatedShutdownBehavior: stop
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref SplunkInstanceType
+      InstanceType: !Ref ArtifactoryInstanceType
       KeyName: !Ref 'KeyName'
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        - !Ref SecurityGroupSplunk
+        - !Ref SecurityGroupArtifactory
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
       Monitoring: false
       UserData:  
         'Fn::Base64': !Sub |
           #!/bin/bash
-          echo "Updating ${AWS::StackName} Splunk host..."
+          echo "Updating ${AWS::StackName} Artifactory host..."
           yum-config-manager --enable epel
           yum update -y
           echo "Installing required packages..."
           yum install -y wget aws-cfn-bootstrap awslogs
           echo "Running cf-init script with default configset..."
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource SplunkHost --region ${AWS::Region}
+          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource ArtifactoryHost --region ${AWS::Region}
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SplunkHost'
-    DependsOn: MountTargetSplunkA
+          Value: !Sub '${AWS::StackName}-ArtifactoryHost'
+    DependsOn: MountTargetArtifactoryA
 Outputs: 
   InstanceId: 
-    Description: "InstanceId of the newly created Splunk instance"
-    Value: !Ref SplunkHost
+    Description: "InstanceId of the newly created Artifactory instance"
+    Value: !Ref ArtifactoryHost
     Export:
       Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
     Description: "Public DNS address of the internet facing ELB"
-    Value: !GetAtt LoadBalancerSplunk.DNSName
+    Value: !GetAtt LoadBalancerArtifactory.DNSName
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
       

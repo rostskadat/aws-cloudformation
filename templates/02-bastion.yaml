@@ -91,7 +91,7 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-PublicIP'
   PublicDnsName: 
-    Description: "Public IP address of the newly created Bastion instance"
+    Description: "Public DNS address of the newly created Bastion instance"
     Value: !GetAtt BastionHost.PublicDnsName
     Export:
       Name: !Sub '${AWS::StackName}-PublicDnsName'
