@@ -1,0 +1,97 @@
+#
+# FILE: 02-bastion.yaml
+#
+# DESCRIPTION: This Stack create a Bastion Host in the DMZ of the Parent VPC stack. The Bastion Host is necessary in 
+#   order to access other instances within the VPC.
+#
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "This stack create a Simple multi-tier VPC with a public/private subnet in 2 AZs. It will futher more create a BASTION host and a NAT Gateway to allow instances in the private subnet to access internet"
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Parent VPC Stack'
+      Parameters:
+      - ParentVpcStack
+    - Label:
+        default: 'EC2 Parameters'
+      Parameters:
+      - KeyName
+Parameters: 
+  ParentVpcStack: 
+    Description: "Enter the name of the VPC Parent Stack"
+    Type: String
+    Default: ''
+  KeyName: 
+    Description: "Enter the name of the Key pair for your instances"
+    Type: "AWS::EC2::KeyPair::KeyName"
+    ConstraintDescription: "must be the name of an existing EC2 KeyPair."
+Resources: 
+  BastionHost: 
+    Type: "AWS::EC2::Instance"
+    Metadata:
+      Comment1: "Update and install the Inspector"
+      AWS::CloudFormation::Init:
+        configSets: 
+          default:
+            - Install 
+        Install: 
+          packages: 
+            yum: 
+              wget: []
+              awslogs: []
+          files: 
+            "/home/ec2-user/.bashrc":
+              content: !Sub |
+                [ -f /etc/bashrc ] && . /etc/bashrc
+                alias c=clear
+                alias l='ls -l'
+              mode: "000600"
+              owner: "ec2-user"
+              group: "ec2-user"
+    Properties: 
+      DisableApiTermination: false
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: "ami-c51e3eb6"
+      InstanceType: "t2.micro"
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub '${ParentVpcStack}-SecurityGroupDMZ'
+      SubnetId: 
+        Fn::ImportValue: !Sub '${ParentVpcStack}-SubnetDMZ'
+      Monitoring: false
+      UserData:  
+        'Fn::Base64': !Sub |
+          #!/bin/bash
+          echo "Updating ${AWS::StackName} Bastion host..."
+          yum update -y
+          echo "Installing AWS Inspector Agent..."
+          wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s
+          echo "Installing aws-cfn-bootstrap..."
+          yum install -y aws-cfn-bootstrap
+          echo "Running cf-init script with default configset..."
+          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource BastionHost --region ${AWS::Region}
+          echo "Bastion Host is up and running!"
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-BastionHost'
+Outputs: 
+  InstanceId: 
+    Description: "InstanceId of the newly created Bastion instance"
+    Value: !Ref BastionHost
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
+  PublicIP: 
+    Description: "Public IP address of the newly created Bastion instance"
+    Value: !GetAtt BastionHost.PublicIp
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicIP'
+  PublicDnsName: 
+    Description: "Public IP address of the newly created Bastion instance"
+    Value: !GetAtt BastionHost.PublicDnsName
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicDnsName'

@@ -1,0 +1,284 @@
+#
+# FILE: 03-splunk.yaml
+#
+# DESCRIPTION: This Stack create a Splunk Host as well as an Internet facing LoadBalancer. The Splunk host uses an EFS 
+#   MountPoint where it stores the Splunk instalation.
+#  
+# BEWARE: that it uses a publicly accessible S3 bucket to retrieve it instalation RPMs/sources.
+#
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "This stack create a Splunk host and install the NMON application"
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Parent Stack'
+      Parameters:
+      - ParentVpcStack
+    - Label:
+        default: 'EC2 Parameters'
+      Parameters:
+      - KeyName
+    - Label:
+        default: 'Splunk Parameters'
+      Parameters:
+      - SplunkAdminPassword
+Parameters: 
+  ParentVpcStack: 
+    Description: "Enter the name of the VPC Stack where Splunk will reside"
+    Type: String
+    Default: ''
+  KeyName: 
+    Description: "Enter the name of the Key Pair to use for the Splunk instance"
+    Type: "AWS::EC2::KeyPair::KeyName"
+    ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
+  SplunkAdminPassword: 
+    Description: "Enter the default Admin password for Splunk"
+    Type: String
+    Default: ''
+    NoEcho: true
+Resources: 
+  #
+  # Let's create the SecurityGroup for the EFS FileSystem. Basically it should only allow traffic on the NFS Port from 
+  #   the SecurityGroupPrivate from the parent stack (associated with resources in the Private Subnet)
+  #
+  SecurityGroupEFS:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access Splunk EFS'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        FromPort: 2049
+        ToPort: 2049
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
+  FileSystemSplunk:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      FileSystemTags:
+      - Key: PLATFORM
+        Value: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+      - Key: Name
+        Value: !Sub '${AWS::StackName}-FileSystemSplunk'
+      PerformanceMode: generalPurpose
+  MountTargetSplunkA:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystemSplunk
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+  MountTargetSplunkB:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystemSplunk
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+  #
+  # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
+  #   from the Internet. If you want to restrict the IP from which to accept traffic, do it here. you can have a look 
+  #   at the 01-vpc.yaml, and more specifically the SecurityGroupDMZ for an example.
+  #
+  SecurityGroupELB:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access Splunk EFS'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp : "0.0.0.0/0"
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
+      - CidrIp : "0.0.0.0/0"
+        FromPort: 80
+        ToPort: 80
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupELB'
+  LoadBalancerSplunk:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Scheme: 'internet-facing'
+      SecurityGroups:
+      - !Ref SecurityGroupELB
+      Subnets: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-LoadBalancerSplunk'
+  TargetGroupSplunk:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: '/en-GB/account/login'
+      HealthCheckPort: 8000
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 2
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200-299'
+      Port: 8000
+      Protocol: HTTP
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TargetGroupSplunk'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      TargetGroupAttributes:
+        - Key: 'deregistration_delay.timeout_seconds'
+          Value: 30
+      Targets:
+        - Id: !Ref SplunkHost
+    DependsOn: SplunkHost
+  ListenerSplunk:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref TargetGroupSplunk
+        Type: forward
+      LoadBalancerArn: !Ref LoadBalancerSplunk
+      Port: 80
+      Protocol: HTTP
+  #
+  # Let's create the Splunk instance.
+  # 
+  # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
+  #   Splunk port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
+  #   communications with a host presenting a self-signed certificate.
+  #
+  SecurityGroupSplunk:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access the Splunk instance'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: 
+          !Ref 'SecurityGroupELB'
+        FromPort: 8000
+        ToPort: 8000
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupSplunk'
+  SplunkHost: 
+    Type: "AWS::EC2::Instance"
+    Metadata:
+      AWS::CloudFormation::Init:
+        #
+        # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
+        #
+        configSets: 
+          default: [ InstallFS, InstallSplunk, InstallSplunkApps, StartSplunk ]
+        InstallFS:
+          packages:
+            yum:
+              htop: []
+              awslogs: []
+              amazon-efs-utils: []
+          files: 
+            "/home/ec2-user/.bashrc":
+              content: !Sub |
+                [ -f /etc/bashrc ] && . /etc/bashrc
+                alias c=clear
+                alias l='ls -l'
+                alias vi=vim
+              mode: "000600"
+              owner: "ec2-user"
+              group: "ec2-user"
+          commands:
+            "01_mount_efs":
+              command: !Sub 'sudo mkdir -p /opt/splunk && sudo mount -t efs -o tls ${FileSystemSplunk}:/ /opt/splunk'
+            "02_install_aws_inspector":
+              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
+        InstallSplunk: 
+          packages: 
+            rpm: 
+              splunk: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm'
+          files:
+            "/opt/splunk/etc/system/local/user-seed.conf":
+              content: !Sub |
+                [user_info]
+                USERNAME = admin
+                PASSWORD = ${SplunkAdminPassword}
+              mode: "000677"
+              owner: "root"
+              group: "root"
+          commands:
+            "01_splunk_enable":
+              command: 'sudo /opt/splunk/bin/splunk enable boot-start --accept-license -user splunk'
+              cwd: '~'
+        InstallSplunkApps: 
+          files:
+            "/opt/splunk/etc/apps/":
+              source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/nmon-performance-monitor-for-unix-and-linux-systems_1916.tgz'
+            "/opt/splunk/etc/apps/":
+              source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/ta-nmon-technical-addon-for-nmon-performance-monitor_1333.tgz'
+        StartSplunk:              
+          commands:
+            "01_splunk_start":
+              command: 'sudo /opt/splunk/bin/splunk start'
+    Properties: 
+      DisableApiTermination: false
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: "ami-c51e3eb6"
+      InstanceType: "t2.micro"
+      KeyName: !Ref 'KeyName'
+      SecurityGroupIds: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        - !Ref SecurityGroupSplunk
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+      Monitoring: false
+      UserData:  
+        'Fn::Base64': !Sub |
+          #!/bin/bash
+          echo "Updating ${AWS::StackName} Splunk host..."
+          yum-config-manager --enable epel
+          yum update -y
+          echo "Installing required packages..."
+          yum install -y wget aws-cfn-bootstrap awslogs
+          echo "Running cf-init script with default configset..."
+          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource SplunkHost --region ${AWS::Region}
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SplunkHost'
+    DependsOn: MountTargetSplunkA
+Outputs: 
+  InstanceId: 
+    Description: "InstanceId of the newly created Splunk instance"
+    Value: !Ref SplunkHost
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
