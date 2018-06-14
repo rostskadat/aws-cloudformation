@@ -82,55 +82,6 @@ Mappings:
       AMI: 'ami-e251209a'    
 Resources: 
   #
-  # Let's create the SecurityGroup for the EFS FileSystem. Basically it should only allow traffic on the NFS Port from 
-  #   the SecurityGroupPrivate from the parent stack (associated with resources in the Private Subnet)
-  #
-  SecurityGroupEFS:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access Artifactory EFS'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - SourceSecurityGroupId: 
-          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        FromPort: 2049
-        ToPort: 2049
-        IpProtocol: tcp
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
-  FileSystemArtifactory:
-    Type: 'AWS::EFS::FileSystem'
-    Properties:
-      Encrypted: true
-      FileSystemTags:
-      - Key: PLATFORM
-        Value: 
-          'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-      - Key: Name
-        Value: !Sub '${AWS::StackName}-FileSystemArtifactory'
-      PerformanceMode: generalPurpose
-  MountTargetArtifactoryA:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystemArtifactory
-      SecurityGroups:
-        - !Ref SecurityGroupEFS
-      SubnetId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-  MountTargetArtifactoryB:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystemArtifactory
-      SecurityGroups:
-        - !Ref SecurityGroupEFS
-      SubnetId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
-  #
   # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
   #   from the Internet. If you want to restrict the IP from which to accept traffic, do it here. you can have a look 
   #   at the 01-vpc.yaml, and more specifically the SecurityGroupDMZ for an example.
@@ -138,7 +89,7 @@ Resources:
   SecurityGroupELB:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access Artifactory EFS'
+      GroupDescription: 'Security Group to access Artifactory ELB'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
@@ -175,15 +126,15 @@ Resources:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
-      HealthCheckPath: '/en-GB/account/login'
-      HealthCheckPort: 8000
+      HealthCheckPath: '/artifactory/webapp/#/home'
+      HealthCheckPort: 8081
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
       Matcher:
         HttpCode: '200-299'
-      Port: 8000
+      Port: 8081
       Protocol: HTTP
       Tags:
         - Key: PLATFORM
@@ -224,8 +175,8 @@ Resources:
       SecurityGroupIngress:
       - SourceSecurityGroupId: 
           !Ref 'SecurityGroupELB'
-        FromPort: 8000
-        ToPort: 8000
+        FromPort: 8081
+        ToPort: 8081
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
@@ -234,65 +185,90 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupArtifactory'
   ArtifactoryHost: 
-    Type: "AWS::EC2::Instance"
+    Type: 'AWS::EC2::Instance'
     Metadata:
       AWS::CloudFormation::Init:
         #
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
-        #
+        # InstallArtifactory, InstallArtifactoryApps, StartArtifactory 
         configSets: 
-          default: [ InstallFS, InstallArtifactory, InstallArtifactoryApps, StartArtifactory ]
-        InstallFS:
+          default: [ Bootstrap, InstallArtifactory ]
+        Bootstrap:
           packages:
             yum:
               htop: []
               awslogs: []
-              amazon-efs-utils: []
-          files: 
-            "/home/ec2-user/.bashrc":
+              yum-cron: []
+          files:
+            '/home/ec2-user/.bashrc':
               content: !Sub |
                 [ -f /etc/bashrc ] && . /etc/bashrc
                 alias c=clear
                 alias l='ls -l'
                 alias vi=vim
-              mode: "000600"
-              owner: "ec2-user"
-              group: "ec2-user"
-          commands:
-            "01_mount_efs":
-              command: !Sub 'sudo mkdir -p /opt/Artifactory && sudo mount -t efs -o tls ${FileSystemArtifactory}:/ /opt/Artifactory'
-            "02_install_aws_inspector":
-              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
-        InstallArtifactory: 
-          packages: 
-            rpm: 
-              Artifactory: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/Artifactory-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm'
-          files:
-            "/opt/Artifactory/etc/system/local/user-seed.conf":
+              mode: '000600'
+              owner: 'ec2-user'
+              group: 'ec2-user'
+            '/root/tag_root_volume.sh':
               content: !Sub |
-                [user_info]
-                USERNAME = admin
-                PASSWORD = ${ArtifactoryAdminPassword}
-              mode: "000677"
+                #!/bin/bash
+                STACK_NAME=${AWS::StackName}
+                REGION=${AWS::Region}
+                echo "Tagging Root volume..."
+                INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+                VOLUME_ID=$(aws --region $REGION ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/xvda" --query "Volumes[0].VolumeId" --output text)
+                PLATFORM=$(aws --region $REGION ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].Tags" --output table | grep PLATFORM | cut -d '|' -f 3 | sed -e 's/ //g')
+                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=Name,Value=$STACK_NAME-VolumeRoot"
+                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=PLATFORM,Value=$PLATFORM"
+              mode: '000744'
+              owner: 'root'
+              group: 'root'
+            '/etc/yum.repos.d/bintray-jfrog-artifactory-rpms.repo':
+              source: 'https://bintray.com/jfrog/artifactory-rpms/rpm'
+              mode: "000644"
               owner: "root"
               group: "root"
           commands:
-            "01_Artifactory_enable":
-              command: 'sudo /opt/Artifactory/bin/Artifactory enable boot-start --accept-license -user Artifactory'
-              cwd: '~'
-        InstallArtifactoryApps: 
-          files:
-            "/opt/Artifactory/etc/apps/":
-              source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/nmon-performance-monitor-for-unix-and-linux-systems_1916.tgz'
-            "/opt/Artifactory/etc/apps/":
-              source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/ta-nmon-technical-addon-for-nmon-performance-monitor_1333.tgz'
-        StartArtifactory:              
+            '01_install_aws_inspector': 
+              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
+            '02_yum_cron_hourly.conf':
+              command: "sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf"
+            '03_yum_cron.conf':
+              command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
+            '04_tag_root_volume':
+              command: "sudo /root/tag_root_volume.sh"
+        InstallArtifactory: 
+          packages:
+            yum:
+              java-1.8.0-openjdk: []
+              jfrog-artifactory-oss: []
+            '/root/configure_artifactory.sh':
+              content: |
+                #!/bin/bash
+                newPassword=$1
+                curl -X POST -u admin:password -H 'Content-type: application/json' -d "{ 'userName':'admin', 'oldPassword':'password', 'newPassword1':'$newPassword', 'newPassword2':'$newPassword'}" http://localhost:8081/artifactory/api/security/users/authorization/changePassword
+              mode: '000744'
+              owner: 'root'
+              group: 'root'
           commands:
-            "01_Artifactory_start":
-              command: 'sudo /opt/Artifactory/bin/Artifactory start'
+            '01_remove_jdk7':
+              command: 'sudo yum remove -y java-1.7.0-openjdk'
+            '02_artifactory_check':
+              command: 'sudo service artifactory check'              
+            '03_artifactory_start':
+              command: 'sudo service artifactory start'
+            '04_artifactory_change_password':
+              command: !Sub 'sudo /root/tag_root_volume.sh ${ArtifactoryAdminPassword}'
+          services: 
+            sysvinit: 
+              artifactory: 
+                enabled: true
+                ensureRunning: true
     Properties: 
       DisableApiTermination: false
       InstanceInitiatedShutdownBehavior: stop
+      IamInstanceProfile: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref ArtifactoryInstanceType
       KeyName: !Ref 'KeyName'
@@ -301,16 +277,16 @@ Resources:
         - !Ref SecurityGroupArtifactory
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+      Volumes: 
+        - VolumeId: !Ref VolumeData
+          Device: '/dev/xvdb'
       Monitoring: false
-      UserData:  
+      UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash
-          echo "Updating ${AWS::StackName} Artifactory host..."
           yum-config-manager --enable epel
           yum update -y
-          echo "Installing required packages..."
-          yum install -y wget aws-cfn-bootstrap awslogs
-          echo "Running cf-init script with default configset..."
+          yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource ArtifactoryHost --region ${AWS::Region}
       Tags: 
         - Key: PLATFORM
@@ -318,7 +294,20 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-ArtifactoryHost'
-    DependsOn: MountTargetArtifactoryA
+    DependsOn: VolumeData
+  VolumeData:
+    Type: 'AWS::EC2::Volume'
+    Properties:
+      Size: 500
+      Encrypted: true
+      AvailabilityZone: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPublicAZA'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-VolumeData'
 Outputs: 
   InstanceId: 
     Description: "InstanceId of the newly created Artifactory instance"
