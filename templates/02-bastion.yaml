@@ -6,7 +6,7 @@
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "This stack create a Simple multi-tier VPC with a public/private subnet in 2 AZs. It will futher more create a BASTION host and a NAT Gateway to allow instances in the private subnet to access internet"
+Description: "This stack create a Bastion host"
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
@@ -27,31 +27,69 @@ Parameters:
     Description: "Enter the name of the Key pair for your instances"
     Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "must be the name of an existing EC2 KeyPair."
-Resources: 
+Resources:
+  #
+  # In order to tag the Root volume of the EC2 instance the boot procedure uses a Instance Profile defined in the 
+  # VPC stack.
+  #
+  # Inspired from https://stackoverflow.com/questions/24026425/is-there-a-way-to-tag-a-root-volume-when-initializing-from-the-cloudformation-te
+  #
   BastionHost: 
-    Type: "AWS::EC2::Instance"
+    Type: 'AWS::EC2::Instance'
     Metadata:
-      Comment1: "Update and install the Inspector"
       AWS::CloudFormation::Init:
         configSets: 
-          default:
-            - Install 
-        Install: 
+          default: [ Bootstrap ] 
+        Bootstrap: 
           packages: 
             yum: 
               wget: []
               awslogs: []
+              yum-cron: []
           files: 
-            "/home/ec2-user/.bashrc":
+            '/home/ec2-user/.bashrc':
               content: !Sub |
                 [ -f /etc/bashrc ] && . /etc/bashrc
                 alias c=clear
                 alias l='ls -l'
-              mode: "000600"
-              owner: "ec2-user"
-              group: "ec2-user"
+                alias vi=vim
+              mode: '000600'
+              owner: 'ec2-user'
+              group: 'ec2-user'
+            '/root/tag_root_volume.sh':
+              content: !Sub |
+                #!/bin/bash
+                STACK_NAME=${AWS::StackName}
+                REGION=${AWS::Region}
+                echo "Tagging Root volume..."
+                INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+                VOLUME_ID=$(aws --region $REGION ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/xvda" --query "Volumes[0].VolumeId" --output text)
+                PLATFORM=$(aws --region $REGION ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].Tags" --output table | grep PLATFORM | cut -d '|' -f 3 | sed -e 's/ //g')
+                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=Name,Value=$STACK_NAME-VolumeRoot"
+                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=PLATFORM,Value=$PLATFORM"
+              mode: '000744'
+              owner: 'root'
+              group: 'root'
+          commands:
+            '01_install_aws_inspector': 
+              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
+            '02_yum_cron_hourly.conf':
+              command: "sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf"
+            '03_yum_cron.conf':
+              command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
+            '04_tag_root_volume':
+              command: "sudo /root/tag_root_volume.sh"
+          services:
+            sysvinit:
+              yum-cron: 
+                enabled: true
+                ensureRunning: true
     Properties: 
+      AvailabilityZone: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetDMZ'
       DisableApiTermination: false
+      IamInstanceProfile: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       InstanceInitiatedShutdownBehavior: stop
       ImageId: "ami-c51e3eb6"
       InstanceType: "t2.micro"
@@ -64,15 +102,10 @@ Resources:
       UserData:  
         'Fn::Base64': !Sub |
           #!/bin/bash
-          echo "Updating ${AWS::StackName} Bastion host..."
+          yum-config-manager --enable epel
           yum update -y
-          echo "Installing AWS Inspector Agent..."
-          wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s
-          echo "Installing aws-cfn-bootstrap..."
           yum install -y aws-cfn-bootstrap
-          echo "Running cf-init script with default configset..."
           /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource BastionHost --region ${AWS::Region}
-          echo "Bastion Host is up and running!"
       Tags: 
         - Key: PLATFORM
           Value: 
