@@ -21,7 +21,40 @@ Resources:
         - Key: PLATFORM
           Value: !Ref "AWS::StackName"
         - Key: Name
-          Value: !Join [ ":", [ !Ref "AWS::StackName", "Vpc" ]]
+          Value: !Sub '${AWS::StackName}-Vpc'
+  #
+  # In order to be able to tag the root EBS volumes of the different instances it is necessary to create a role and
+  # attach this role to each instance through an instance profile. Further more each instance must also during boot
+  # manually tag the volume with the correct tags.
+  #
+  RoleTagEC2Instance:
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'ec2.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies: 
+        - PolicyName: 'RoleTagEC2Instance'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:Describe*'
+                  - 'ec2:CreateTags'
+                Resource: '*'
+  InstanceProfileTagEC2Instance:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: '/'
+      Roles: [ !Ref RoleTagEC2Instance ]
   #
   # Ok let's create the different subnet
   #
@@ -29,7 +62,7 @@ Resources:
     Type: "AWS::EC2::Subnet"
     Properties: 
       CidrBlock: "10.0.0.0/24"
-      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", "a" ]]
+      AvailabilityZone: !Select [ 0, "Fn::GetAZs": !Ref 'AWS::Region' ]
       VpcId: !Ref Vpc
       MapPublicIpOnLaunch: true
       Tags: 
@@ -330,36 +363,11 @@ Outputs:
     Value: !Ref Vpc
     Export:
       Name: !Sub '${AWS::StackName}-Vpc'
-  SubnetsPublic:
-    Description: 'Public subnets.'
-    Value: !Join [',', [!Ref SubnetDMZ, !Ref SubnetPublicAZA, !Ref SubnetPublicAZB]]
+  InstanceProfileTagEC2Instance:
+    Description: "The Instance Profile allowing to tag Root volume of each instances in this VPC"
+    Value: !Ref InstanceProfileTagEC2Instance
     Export:
-      Name: !Sub '${AWS::StackName}-SubnetsPublic'
-  SubnetsPrivate:
-    Description: 'Subnets private.'
-    Value: !Join [',', [!Ref SubnetPrivateAZA, !Ref SubnetPrivateAZB]]
-    Export:
-      Name: !Sub '${AWS::StackName}-SubnetsPrivate'
-  SubnetPublicAZA:
-    Description: 'Subnet Public AZA'
-    Value: !Ref SubnetPublicAZA
-    Export:
-      Name: !Sub '${AWS::StackName}-SubnetPublicAZA'
-  SubnetPublicAZB:
-    Description: 'Subnet Public AZB'
-    Value: !Ref SubnetPublicAZB
-    Export:
-      Name: !Sub '${AWS::StackName}-SubnetPublicAZB'      
-  SubnetPrivateAZA:
-    Description: 'Subnet Private AZA'
-    Value: !Ref SubnetPrivateAZA
-    Export:
-      Name: !Sub '${AWS::StackName}-SubnetPrivateAZA'
-  SubnetPrivateAZB:
-    Description: 'Subnet Private AZB'
-    Value: !Ref SubnetPrivateAZB
-    Export:
-      Name: !Sub '${AWS::StackName}-SubnetPrivateAZB'      
+      Name: !Sub '${AWS::StackName}-InstanceProfileTagEC2Instance'
   SecurityGroupDMZ:
     Description: 'Security Group for the DMZ instances'
     Value: !Ref SecurityGroupDMZ
@@ -370,13 +378,68 @@ Outputs:
     Value: !Ref SubnetDMZ
     Export:
       Name: !Sub '${AWS::StackName}-SubnetDMZ'
+  AvailabilityZoneSubnetDMZ:
+    Description: 'AZ for the DMZ Subnet'
+    Value: !GetAtt SubnetDMZ.AvailabilityZone
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityZoneSubnetDMZ'
   SecurityGroupPublic:
     Description: 'Security Group for the Public instances'
     Value: !Ref SecurityGroupPublic
     Export:
       Name: !Sub '${AWS::StackName}-SecurityGroupPublic'
+  SubnetPublicAZA:
+    Description: 'Subnet Public AZA'
+    Value: !Ref SubnetPublicAZA
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetPublicAZA'
+  AvailabilityZoneSubnetPublicAZA:
+    Description: 'AZ for the SubnetPublicAZA'
+    Value: !GetAtt SubnetPublicAZA.AvailabilityZone
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityZoneSubnetPublicAZA'
+  SubnetPublicAZB:
+    Description: 'Subnet Public AZB'
+    Value: !Ref SubnetPublicAZB
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetPublicAZB'
+  AvailabilityZoneSubnetPublicAZB:
+    Description: 'AZ for the SubnetPublicAZB'
+    Value: !GetAtt SubnetPublicAZB.AvailabilityZone
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityZoneSubnetPublicAZB'
   SecurityGroupPrivate:
     Description: 'Security Group for the Private instances'
     Value: !Ref SecurityGroupPrivate
     Export:
       Name: !Sub '${AWS::StackName}-SecurityGroupPrivate'
+  SubnetPrivateAZA:
+    Description: 'Subnet Private AZA'
+    Value: !Ref SubnetPrivateAZA
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetPrivateAZA'
+  AvailabilityZoneSubnetPrivateAZA:
+    Description: 'AZ for the SubnetPrivateAZA'
+    Value: !GetAtt SubnetPrivateAZA.AvailabilityZone
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityZoneSubnetPrivateAZA'
+  SubnetPrivateAZB:
+    Description: 'Subnet Private AZB'
+    Value: !Ref SubnetPrivateAZB
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetPrivateAZB'      
+  AvailabilityZoneSubnetPrivateAZB:
+    Description: 'AZ for the SubnetPrivateAZB'
+    Value: !GetAtt SubnetPrivateAZB.AvailabilityZone
+    Export:
+      Name: !Sub '${AWS::StackName}-AvailabilityZoneSubnetPrivateAZB'
+  SubnetsPublic:
+    Description: 'Public subnets.'
+    Value: !Join [',', [!Ref SubnetDMZ, !Ref SubnetPublicAZA, !Ref SubnetPublicAZB]]
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetsPublic'
+  SubnetsPrivate:
+    Description: 'Subnets private.'
+    Value: !Join [',', [!Ref SubnetPrivateAZA, !Ref SubnetPrivateAZB]]
+    Export:
+      Name: !Sub '${AWS::StackName}-SubnetsPrivate'
