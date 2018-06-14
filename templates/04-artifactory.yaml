@@ -246,19 +246,17 @@ Resources:
               content: |
                 #!/bin/bash
                 newPassword=$1
-                curl -X POST -u admin:password -H 'Content-type: application/json' -d "{ 'userName':'admin', 'oldPassword':'password', 'newPassword1':'$newPassword', 'newPassword2':'$newPassword'}" http://localhost:8081/artifactory/api/security/users/authorization/changePassword
+                curl -X POST -u admin:password -H 'Content-type: application/json' -d '{ "userName":"admin", "oldPassword":"password", "newPassword1":"'"$newPassword"'", "newPassword2":"'"$newPassword"'"}' http://localhost:8081/artifactory/api/security/users/authorization/changePassword
               mode: '000744'
               owner: 'root'
               group: 'root'
           commands:
             '01_remove_jdk7':
               command: 'sudo yum remove -y java-1.7.0-openjdk'
-            '02_artifactory_check':
-              command: 'sudo service artifactory check'              
-            '03_artifactory_start':
+            '02_artifactory_start':
               command: 'sudo service artifactory start'
-            '04_artifactory_change_password':
-              command: !Sub 'sudo /root/tag_root_volume.sh ${ArtifactoryAdminPassword}'
+            '03_artifactory_change_password':
+              command: !Sub 'sudo /root/configure_artifactory.sh ${ArtifactoryAdminPassword}'
           services: 
             sysvinit: 
               artifactory: 
@@ -285,8 +283,11 @@ Resources:
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
+          sleep 1
           yum update -y
+          sleep 1
           yum install -y aws-cfn-bootstrap
+          sleep 1
           /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource ArtifactoryHost --region ${AWS::Region}
       Tags: 
         - Key: PLATFORM
