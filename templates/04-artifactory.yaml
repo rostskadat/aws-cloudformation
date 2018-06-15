@@ -463,7 +463,7 @@ Resources:
       Size: 500
       Encrypted: true
       AvailabilityZone: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPublicAZA'
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
       Tags: 
         - Key: PLATFORM
           Value: 

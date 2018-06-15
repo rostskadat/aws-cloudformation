@@ -31,7 +31,7 @@ Metadata:
     - Label:
         default: 'OpenLDAP Parameters'
       Parameters:
-      - OpenLDAPAdminEmail
+      - OpenLDAPRootDC
       - OpenLDAPAdminPassword
 Parameters: 
   ParentVpcStack: 
@@ -41,13 +41,13 @@ Parameters:
   KeyName: 
     Description: "The OpenLDAP instance Key Pair"
     Type: "AWS::EC2::KeyPair::KeyName"
-    ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
+    ConstraintDescription: "must be an existing EC2 KeyPair."
   OpenLDAPInstanceType:
     Description: 'The OpenLDAP instance type'
-    Type: String
-    Default: 't2.small'    
-  OpenLDAPAdminEmail: 
-    Description: 'The OpenLDAP Admin email'
+    Type: 'String'
+    Default: 't2.micro'    
+  OpenLDAPRootDC: 
+    Description: 'The OpenLDAP base dc element'
     Type: String
     Default: ''
   OpenLDAPAdminPassword: 
@@ -202,50 +202,79 @@ Resources:
               openldap-clients: []
               openldap-servers: []
           files:
+            '/etc/openldap/slapd.conf':
+              content: !Sub |
+                suffix "dc=${OpenLDAPRootDC},dc=com"
+              mode: '000744'
+              owner: 'root'
+              group: 'root'
+            '/root/bootstrap.ldif':
+              content: |
+                include /etc/openldap/schema/core.schema
+                include /etc/openldap/schema/cosine.schema
+                include /etc/openldap/schema/inetorgperson.schema
+                include /etc/openldap/schema/nis.schema
+              mode: '000744'
+              owner: 'root'
+              group: 'root'
             '/root/configure_ldap.sh':
               content: !Sub |
                 #!/bin/bash
                 password=$1
                 domainComponent="$2"
                 [ -z "$password" ] && echo "Invalid password" && exit
-                
-                
+                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
+                # BEWARE the 'dn' line should be equals to the file found in /etc/openldap/slapd.d/cn=config
                 ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
-                dn: olcDatabase={2}hdb,cn=config
+                dn: olcDatabase={2}bdb,cn=config
                 changetype: modify
                 replace: olcSuffix
                 olcSuffix: dc=$domainComponent,dc=local
                 EOF
+                # TODO: explain
                 ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
-                dn: olcDatabase={2}hdb,cn=config
+                dn: olcDatabase={2}bdb,cn=config
                 changetype: modify
                 replace: olcRootDN
                 olcRootDN: cn=Manager,dc=$domainComponent,dc=local
                 EOF
+                # Adding the Root password
                 ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
-                dn: olcDatabase={2}hdb,cn=config
+                dn: olcDatabase={2}bdb,cn=config
                 changetype: modify
                 add: olcRootPW
                 olcRootPW: $(slappasswd -s "$password")
                 EOF
-                ldapadd -Q -Y EXTERNAL -H ldapi:/// <<EOF
+                # TODO: explain
+                ldapadd -Q -Y EXTERNAL -D "cn=Manager,dc=$domainComponent,dc=local" -w "$password" -H ldapi:/// <<EOF
                 dn: dc=$domainComponent,dc=local
                 dc: $domainComponent
-                o: Development $domainComponent LDAP Server
-                description: Root entry for Development $domainComponent LDAP Server
+                o: $domainComponent LDAP Server
+                description: Root entry for $domainComponent LDAP Server
                 objectClass: top
                 objectclass: dcObject
                 objectclass: organization
                 EOF
-                
-                
+                # Testing the configuration and importing it into the LDAP directory
+                tempDir=$(mktemp -d)
+                outputDir=/etc/openldap/slapd.d
+                slaptest -f /root/bootstrap.ldif -F $tempDir
+                mv $tempDir/cn\=config/cn\=schema/cn\=\{1\}cosine.ldif        $outputDir/cn\=config/cn\=schema
+                mv $tempDir/cn\=config/cn\=schema/cn\=\{2\}inetorgperson.ldif $outputDir/cn\=config/cn\=schema
+                mv $tempDir/cn\=config/cn\=schema/cn\=\{3\}nis.ldif           $outputDir/cn\=config/cn\=schema
+                chown ldap:ldap $outputDir/*
+              mode: '000744'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_copy_default_config':
               command: 'sudo cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG'
             '02_start_slpad':
               command: 'sudo service slapd start'
-            '03_':
-              command: /root/configure_ldap.sh
+            '03_configure_ldap':
+              command: !Sub 'sudo /root/configure_ldap.sh ${OpenLDAPAdminPassword} ${OpenLDAPRootDC}'
+            '04_restart_slpad':
+              command: 'sudo service slapd restart'
           services:
             sysvinit:
               slapd: 

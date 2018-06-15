@@ -39,13 +39,13 @@ Parameters:
     Type: String
     Default: ''
   KeyName: 
-    Description: "The Gitlab instance Key Pair"
-    Type: "AWS::EC2::KeyPair::KeyName"
+    Description: 'The Gitlab instance Key Pair'
+    Type: 'AWS::EC2::KeyPair::KeyName'
     ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
   GitlabInstanceType:
     Description: 'The Gitlab instance type'
-    Type: String
-    Default: 'c4.large'    
+    Type: 'AWS::EC2::Instance::Id'
+    Default: 'c4.large'
   GitlabAdminEmail: 
     Description: 'The Gitlab Admin email'
     Type: String
@@ -266,6 +266,7 @@ Resources:
                 [ -z "$email" ] && echo "Invalid email" && exit
                 [ -z "$password" ] && echo "Invalid password" && exit
                 EXTERNAL_URL="http://${LoadBalancerGitlab.DNSName}" yum install -y gitlab-ee
+                # Changing the default password
                 gitlab-rake gitlab:setup RAILS_ENV=production GITLAB_ROOT_PASSWORD="$password" GITLAB_ROOT_EMAIL="$email" < <(echo yes)
               mode: '000744'
               owner: 'root'
