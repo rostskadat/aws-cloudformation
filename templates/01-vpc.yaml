@@ -6,6 +6,9 @@
 #   - 2 Public Subnets in different AZ with an Internet Gateway and a NAT Gateway
 #   - 2 Private Subnets in different AZ with a routing table pointing to the NAT Gateway
 #
+# TODO: 
+# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
+#
 ---
 AWSTemplateFormatVersion: "2010-09-09"
 Description: This stack create a simple multi-tier VPC with a DMZ, and public/private subnet in 2 AZs

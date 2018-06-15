@@ -1,5 +1,5 @@
 #
-# FILE: 03-artifactory.yaml
+# FILE: 04-artifactory.yaml
 #
 # DESCRIPTION: This Stack create a Artifactory Host as well as an Internet facing LoadBalancer.
 #
@@ -9,6 +9,10 @@
 # for region in $(aws ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text); do
 #   aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" --query 'Images[*].{ID:ImageId}'
 # done
+#
+# TODO: 
+# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
+# - Should configure the filestore in artifactory https://www.jfrog.com/confluence/display/RTF/Configuring+the+Filestore 
 #
 #
 ---
@@ -30,21 +34,45 @@ Metadata:
         default: 'Artifactory Parameters'
       Parameters:
       - ArtifactoryAdminPassword
+    - Label:
+        default: 'Artifactory DB Parameters'
+      Parameters:
+      - ArtifactoryDBInstanceType
+      - ArtifactoryDBName
+      - ArtifactoryDBAdminUsername
+      - ArtifactoryDBAdminPassword
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Artifactory will reside"
     Type: String
     Default: ''
   KeyName: 
-    Description: "Enter the name of the Key Pair to use for the Artifactory instance"
+    Description: "The Artifactory instance Key Pair"
     Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
   ArtifactoryInstanceType:
-    Description: 'The instance type of the Jenkins master.'
+    Description: 'The Artifactory instance type'
     Type: String
     Default: 'c4.large'    
   ArtifactoryAdminPassword: 
-    Description: "Enter the default Admin password for Artifactory"
+    Description: 'The Artifactory Admin password'
+    Type: String
+    Default: ''
+    NoEcho: true
+  ArtifactoryDBInstanceType:
+    Description: 'The Artifactory DB instance type'
+    Type: String
+    Default: 'db.t2.small'    
+  ArtifactoryDBName:
+    Description: 'The Artifactory DB database name'
+    Type: String
+    Default: 'artifactorydb'    
+  ArtifactoryDBAdminUsername: 
+    Description: "The Artifactory DB Admin username"
+    Type: String
+    Default: 'admin'
+  ArtifactoryDBAdminPassword: 
+    Description: "The Artifactory DB Admin password"
     Type: String
     Default: ''
     NoEcho: true
@@ -184,6 +212,89 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupArtifactory'
+  SecurityGroupDB:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access the Artifactory DB'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - SourceSecurityGroupId:
+          !Ref 'SecurityGroupArtifactory'
+        FromPort: 3306
+        ToPort: 3306
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupDB'
+  DBSubnetGroupDB:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties: 
+      DBSubnetGroupDescription: 'The subnet where the Artifactory DB reside'
+      DBSubnetGroupName: !Sub '${AWS::StackName}-DBSubnetGroupDB'
+      SubnetIds:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-DBSubnetGroupDB'
+  #
+  # The backend database for artifactory
+  #
+  DBParameterGroupDB:
+    Type: 'AWS::RDS::DBParameterGroup'
+    Properties: 
+      Description: 'Parameters necessary for Artifactory DB'
+      Family: 'mysql5.6'
+      # These parameters are from https://www.jfrog.com/confluence/display/RTF/MySQL
+      Parameters: { "max_allowed_packet": 8388608, "tmp_table_size": 536870912, "max_heap_table_size": 536870912, "innodb_log_file_size": 268435456 }
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-DBParameterGroupDB'
+  ArtifactoryDB: 
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      AllocatedStorage: 20
+      AutoMinorVersionUpgrade: true
+      AvailabilityZone: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
+      BackupRetentionPeriod: 7
+      CopyTagsToSnapshot: true
+      DBInstanceClass: !Ref ArtifactoryDBInstanceType
+      DBName: !Ref ArtifactoryDBName
+      DBParameterGroupName: !Ref DBParameterGroupDB
+      DBSubnetGroupName: !Ref DBSubnetGroupDB
+      Engine: mysql
+      EngineVersion: '5.6.39'
+      MasterUsername: !Ref ArtifactoryDBAdminUsername
+      MasterUserPassword: !Ref ArtifactoryDBAdminPassword
+      PreferredBackupWindow: "01:00-03:00"
+      PreferredMaintenanceWindow: "Sun:03:01-Sun:05:00"
+      MultiAZ: false
+      StorageEncrypted: true
+      StorageType: gp2
+      VPCSecurityGroups:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        - !Ref SecurityGroupDB
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ArtifactoryDB'
+    
+  #
+  # Ok let's configure the main host then
+  #
   ArtifactoryHost: 
     Type: 'AWS::EC2::Instance'
     Metadata:
@@ -237,29 +348,75 @@ Resources:
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
               command: "sudo /root/tag_root_volume.sh"
+            '05_remove_jdk7':
+              command: 'sudo yum remove -y java-1.7.0-openjdk'
+          services:
+            sysvinit:
+              yum-cron: 
+                enabled: true
+                ensureRunning: true
         InstallArtifactory: 
           packages:
             yum:
+              mysql56: []
               java-1.8.0-openjdk: []
+              mysql-connector-java: []
               jfrog-artifactory-oss: []
           files:
-            '/root/configure_artifactory.sh':
+            '/etc/opt/jfrog/artifactory/db.properties':
+              content: !Sub |
+                type=mysql
+                driver=com.mysql.jdbc.Driver
+                url=jdbc:mysql://${ArtifactoryDB.Endpoint.Address}:${ArtifactoryDB.Endpoint.Port}/artdb?characterEncoding=UTF-8&elideSetAutoCommits=true
+                username=artifactory
+                password=password
+              mode: '000740'
+              owner: 'artifactory'
+              group: 'artifactory'
+            '/root/artifactory_createdb.sh':
+              content: !Sub |
+                #!/bin/bash
+                username=$1
+                password=$2
+                [ -z "$username" ] && echo "Invalid username" && exit
+                [ -z "$password" ] && echo "Invalid password" && exit
+                mysql -h ${ArtifactoryDB.Endpoint.Address} -P ${ArtifactoryDB.Endpoint.Port} --user=$username --password=$password <<EOF
+                CREATE DATABASE artdb CHARACTER SET utf8 COLLATE utf8_bin;
+                GRANT ALL on artdb.* TO 'artifactory'@'%' IDENTIFIED BY 'password';
+                FLUSH PRIVILEGES;
+                EOF
+              mode: '000740'
+              owner: 'root'
+              group: 'root'
+            '/root/artifactory_change_password.sh':
               content: |
                 #!/bin/bash
                 oldPassword=$1
                 newPassword=$2
-                [ -z "$newPassword" ] && echo "Invalid Password" 
-                curl -X POST -u admin:password -H 'Content-type: application/json' -d '{ "userName":"admin", "oldPassword":"'"$oldPassword"'", "newPassword1":"'"$newPassword"'", "newPassword2":"'"$newPassword"'"}' http://localhost:8081/artifactory/api/security/users/authorization/changePassword
+                [ -z "$oldPassword" ] && echo "Invalid old password" && exit
+                [ -z "$newPassword" ] && echo "Invalid new password" && exit
+                header="Content-type: application/json"
+                data='{ "userName":"admin", "oldPassword":"'"$oldPassword"'", "newPassword1":"'"$newPassword"'", "newPassword2":"'"$newPassword"'"}'
+                url="http://localhost:8081/artifactory/api/security/users/authorization/changePassword"
+                echo "Changing default password for user admin"
+                while (true); do
+                        result=$(curl -s -X POST -u "admin:$oldPassword" -H "$header" -d "$data" "$url")
+                        [ $(echo -n "$result" | grep -c "Password has been successfully changed") -gt 0 ] && exit
+                        echo -n "."
+                        sleep 2
+                done
               mode: '000744'
               owner: 'root'
               group: 'root'
           commands:
-            '01_remove_jdk7':
-              command: 'sudo yum remove -y java-1.7.0-openjdk'
-            '02_artifactory_start':
+            '01_artifactory_createdb':
+              command: !Sub 'sudo /root/artifactory_createdb.sh ${ArtifactoryDBAdminUsername} ${ArtifactoryDBAdminPassword}'
+            '02_create_symlink':
+              command: !Sub 'sudo ln -s /usr/share/java/mysql-connector-java.jar /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
+            '03_artifactory_start':
               command: 'sudo service artifactory start'
-            '03_artifactory_change_password':
-              command: !Sub 'sudo /root/configure_artifactory.sh password ${ArtifactoryAdminPassword}'
+            '04_artifactory_change_password':
+              command: !Sub 'sudo /root/artifactory_change_password.sh password ${ArtifactoryAdminPassword}'
           services: 
             sysvinit: 
               artifactory: 
@@ -299,6 +456,7 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-ArtifactoryHost'
     DependsOn: VolumeData
+    DependsOn: ArtifactoryDB
   VolumeData:
     Type: 'AWS::EC2::Volume'
     Properties:

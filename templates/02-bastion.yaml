@@ -4,6 +4,9 @@
 # DESCRIPTION: This Stack create a Bastion Host in the DMZ of the Parent VPC stack. The Bastion Host is necessary in 
 #   order to access other instances within the VPC.
 #
+# TODO: 
+# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
+#
 ---
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "This stack create a Bastion host"
