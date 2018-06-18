@@ -25,11 +25,13 @@ Parameters:
   ParentVpcStack: 
     Description: "Enter the name of the VPC Parent Stack"
     Type: String
-    Default: ''
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the parent VPC stack (01-vpc.yaml)'
   KeyName: 
-    Description: "Enter the name of the Key pair for your instances"
+    Description: "Enter the name of the Key Pair for your instances"
     Type: "AWS::EC2::KeyPair::KeyName"
-    ConstraintDescription: "must be the name of an existing EC2 KeyPair."
+    MinLength: 1
+    ConstraintDescription: 'must be the name of an existing Key Pair to use to log to the EC2 Instance'
 Resources:
   #
   # In order to tag the Root volume of the EC2 instance the boot procedure uses a Instance Profile defined in the 

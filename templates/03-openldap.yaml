@@ -37,15 +37,13 @@ Parameters:
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where OpenLDAP will reside"
     Type: String
-    Default: 'VPC'
-    MinLength: 3
-    ConstraintDescription: 'must be the name of the parent VPC stack'
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the parent VPC stack (01-vpc.yaml)'
   KeyName: 
-    Description: "The OpenLDAP instance Key Pair"
+    Description: "Enter the name of the Key Pair for your instances"
     Type: "AWS::EC2::KeyPair::KeyName"
-    ConstraintDescription: "must be an existing EC2 KeyPair."
-    MinLength: 3
-    ConstraintDescription: 'must be the name of the Key Pair to use to log to the EC2 Instance'
+    MinLength: 1
+    ConstraintDescription: 'must be the name of an existing Key Pair to use to log to the EC2 Instance'
   OpenLDAPInstanceType:
     Description: 'The OpenLDAP instance type'
     Type: 'String'

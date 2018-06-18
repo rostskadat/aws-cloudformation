@@ -429,9 +429,11 @@ Resources:
             '/root/artifactory_configure_ldap.sh':
               content: |
                 #!/bin/bash
-                ldapUrl="$1"
-                domainComponent="$2"
-                ldapPassword="$3"
+                artifactoryPassword="$1"
+                ldapUrl="$2"
+                domainComponent="$3"
+                ldapPassword="$4"
+                [ -z "$artifactoryPassword" ] && echo "Invalid artifactoryPassword" && exit
                 [ -z "$ldapUrl" ] && echo "Invalid ldapUrl" && exit
                 [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
                 [ -z "$ldapPassword" ] && echo "Invalid ldap password" && exit
@@ -448,7 +450,7 @@ Resources:
                       ldapPoisoningProtection: true
                       ldapUrl: '$ldapUrl'
                       search:
-                        managerDn: 'cn=Manager,dc=$domainComponent,dc=local' ] ]
+                        managerDn: 'cn=Manager,dc=$domainComponent,dc=local'
                         managerPassword: $ldapPassword
                         searchBase: ou=People
                         searchFilter: (uid={0})
@@ -457,7 +459,7 @@ Resources:
                       autoCreateUser: true
                       enabled: true
                 EOF
-                curl --user "admin:$newPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
+                curl --user "admin:$artifactoryPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -475,7 +477,7 @@ Resources:
             '06_artifactory_configure_ldap': 
               command: !Join
                 - ' '
-                - - 'sudo /root/artifactory_configure_ldap.sh'
+                - - !Sub 'sudo /root/artifactory_configure_ldap.sh ${ArtifactoryAdminPassword}'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPUrl'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - !Sub '${OpenLDAPAdminPassword}'
