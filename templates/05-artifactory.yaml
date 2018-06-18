@@ -14,7 +14,7 @@
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 # - Should configure the filestore in artifactory https://www.jfrog.com/confluence/display/RTF/Configuring+the+Filestore 
 # - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
-# - FIX the ELB healthcheck
+# - Should provide alert when the platform is unhealthy
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"

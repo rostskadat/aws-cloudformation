@@ -18,6 +18,7 @@
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 # - Provide LDAP authentication http://docs.splunk.com/Documentation/Splunk/7.1.1/Security/SetupuserauthenticationwithLDAP
+# - Should provide alert when the platform is unhealthy
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
