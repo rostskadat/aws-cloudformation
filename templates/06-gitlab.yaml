@@ -12,7 +12,6 @@
 #
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
-# - Provide LDAP authentication https://docs.gitlab.com/ee/administration/auth/how_to_configure_ldap_gitlab_ce/
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -24,6 +23,8 @@ Metadata:
         default: 'Parent Stack'
       Parameters:
       - ParentVpcStack
+      - ParentLDAPStack
+      - OpenLDAPAdminPassword
     - Label:
         default: 'EC2 Parameters'
       Parameters:
@@ -38,15 +39,26 @@ Parameters:
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Gitlab will reside"
     Type: String
-    Default: ''
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the VPC stack'
+  ParentLDAPStack:
+    Description: "Enter the name of the OpenLDAP Stack"
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the LDAP stack'
+  OpenLDAPAdminPassword: 
+    Description: 'The OpenLDAP Admin password'
+    Type: String
+    NoEcho: true
+    MinLength: 3
   KeyName: 
     Description: 'The Gitlab instance Key Pair'
     Type: 'AWS::EC2::KeyPair::KeyName'
     ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
   GitlabInstanceType:
     Description: 'The Gitlab instance type'
-    Type: 'AWS::EC2::Instance::Id'
-    Default: 'c4.large'
+    Type: String
+    Default: 'c4.large'    
   GitlabAdminEmail: 
     Description: 'The Gitlab Admin email'
     Type: String
@@ -256,28 +268,70 @@ Resources:
           files:
             '/root/add_gitlab_repo.sh':
               source: 'https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh'
-              mode: '000744'
+              mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/install_gitlab.sh':
+            '/root/gitlab_change_password.sh':
               content: !Sub |
                 #!/bin/bash
                 email=$1
                 password=$2
                 [ -z "$email" ] && echo "Invalid email" && exit
                 [ -z "$password" ] && echo "Invalid password" && exit
-                EXTERNAL_URL="http://${LoadBalancerGitlab.DNSName}" yum install -y gitlab-ee
                 # Changing the default password
-                gitlab-rake gitlab:setup RAILS_ENV=production GITLAB_ROOT_PASSWORD="$password" GITLAB_ROOT_EMAIL="$email" < <(echo yes)
+                gitlab-rake gitlab:setup GITLAB_ROOT_PASSWORD="$password" GITLAB_ROOT_EMAIL="$email" < <(echo yes)
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/gitlab_configure_ldap.sh':
+              content: !Sub |
+                #!/bin/bash
+                ldapHostname="$1"
+                domainComponent="$2"
+                ldapPassword="$3"
+                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit
+                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
+                [ -z "$ldapPassword" ] && echo "Invalid ldap password" && exit
+                echo "Configuring LDAP ($ldapHostname w/ $domainComponent) ..."
+                cat >> /etc/gitlab/gitlab.rb <<EOF
+                gitlab_rails['ldap_enabled'] = true
+                gitlab_rails['ldap_servers'] = {
+                  'main' => { 
+                    'label' => 'OpenLDAP',
+                    'host' => '$ldapHostname',
+                    'port' => 389,
+                    'uid' => 'uid',
+                    'bind_dn' => 'cn=Manager,dc=$domainComponent,dc=local',
+                    'password' => '$ldapPassword',
+                    'encryption' => 'plain',
+                    'verify_certificates' => false,
+                    'active_directory' => false,
+                    'allow_username_or_email_login' => false,
+                    'lowercase_usernames' => false,
+                    'block_auto_created_users' => false,
+                    'base' => 'OU=People,DC=allfundsbank,DC=local',
+                    'user_filter' => '(objectclass=person)'
+                  }
+                }
+                EOF
               mode: '000744'
               owner: 'root'
               group: 'root'
           commands:
             '01_add_gitlab_repo':
-              command: !Sub 'sudo /root/add_gitlab_repo.sh'
-            '02_install_gitlab':
-              command: !Sub 'sudo /root/install_gitlab.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
-            '03_gitlab_reconfigure':
+              command: 'sudo /root/add_gitlab_repo.sh'
+            '02_install_gitlab_ee':
+              command: !Sub 'sudo EXTERNAL_URL="http://${LoadBalancerGitlab.DNSName}" yum install -y gitlab-ee'
+            '03_gitlab_change_password':
+              command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
+            '04_gitlab_configure_ldap':
+              command: !Join
+                - ' '
+                - - 'sudo /root/gitlab_configure_ldap.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPHostname'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                  - !Sub '${OpenLDAPAdminPassword}'
+            '05_gitlab_reconfigure':
               command: 'sudo gitlab-ctl reconfigure'
           services:
             sysvinit:

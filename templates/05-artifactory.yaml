@@ -48,15 +48,18 @@ Parameters:
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Artifactory will reside"
     Type: String
-    Default: 'VPC'
     MinLength: 1
     ConstraintDescription: 'must be the name of the VPC stack'
   ParentLDAPStack:
     Description: "Enter the name of the OpenLDAP Stack"
     Type: String
-    Default: 'LDAP'
     MinLength: 1
     ConstraintDescription: 'must be the name of the LDAP stack'
+  OpenLDAPAdminPassword: 
+    Description: 'The OpenLDAP Admin password'
+    Type: String
+    NoEcho: true
+    MinLength: 3
   KeyName: 
     Description: "The Artifactory instance Key Pair"
     Type: "AWS::EC2::KeyPair::KeyName"
@@ -68,14 +71,8 @@ Parameters:
   ArtifactoryAdminPassword: 
     Description: 'The Artifactory Admin password'
     Type: String
-    Default: ''
+    MinLength: 1
     NoEcho: true
-  OpenLDAPAdminPassword: 
-    Description: 'The OpenLDAP Admin password'
-    Type: String
-    Default: 'Passw0rd'
-    NoEcho: true
-    MinLength: 3
   ArtifactoryDBInstanceType:
     Description: 'The Artifactory DB instance type'
     Type: String
@@ -91,7 +88,7 @@ Parameters:
   ArtifactoryDBAdminPassword: 
     Description: "The Artifactory DB Admin password"
     Type: String
-    Default: ''
+    MinLength: 1
     NoEcho: true
 Mappings:
   RegionMap:
@@ -459,7 +456,7 @@ Resources:
                       autoCreateUser: true
                       enabled: true
                 EOF
-                curl --user "admin:$artifactoryPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
+                curl -s --user "admin:$artifactoryPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
               mode: '000700'
               owner: 'root'
               group: 'root'

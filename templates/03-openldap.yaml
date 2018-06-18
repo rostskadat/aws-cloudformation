@@ -300,6 +300,11 @@ Outputs:
     Value: !Ref OpenLDAPHost
     Export:
       Name: !Sub '${AWS::StackName}-InstanceId'
+  LDAPHostname:
+    Description: "LDAP hostname to use when connecting"
+    Value: !Sub "${OpenLDAPHost.PrivateDnsName}"
+    Export:
+      Name: !Sub '${AWS::StackName}-LDAPHostname'
   LDAPUrl: 
     Description: "LDAP URL to use when connecting"
     Value: !Sub "ldap://${OpenLDAPHost.PrivateDnsName}/dc=${OpenLDAPRootDC},dc=local"
