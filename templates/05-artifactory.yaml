@@ -14,12 +14,7 @@
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 # - Should configure the filestore in artifactory https://www.jfrog.com/confluence/display/RTF/Configuring+the+Filestore 
 # - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
-#
-# LDAPURL: ldap://ip-10-0-3-34.eu-west-1.compute.internal/dc=allfundsbank,dc=local
-# EMAIL: mail
-# FILTER: (uid={0})
-# SEARCH_BASE: ou=People
-# MANAGER_DN=cn=Manager,dc=$domainComponent,dc=local
+# - FIX the ELB healthcheck
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -407,43 +402,44 @@ Resources:
                 GRANT ALL on ${ArtifactoryDBName}.* TO 'artifactory'@'%' IDENTIFIED BY 'password';
                 FLUSH PRIVILEGES;
                 EOF
-              mode: '000740'
+              mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/configure_artifactory.sh':
+            '/root/artifactory_change_password.sh':
               content: |
                 #!/bin/bash
                 oldPassword="$1"
                 newPassword="$2"
-                ldapUrl="$3"
-                domainComponent="$4"
-                ldapPassword="$5"
                 [ -z "$oldPassword" ] && echo "Invalid old password" && exit
                 [ -z "$newPassword" ] && echo "Invalid new password" && exit
-                [ -z "$ldapUrl" ] && echo "Invalid ldapUrl" && exit
-                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
-                [ -z "$ldapPassword" ] && echo "Invalid ldap password" && exit
-                
                 API_URL="http://localhost:8081/artifactory/api"
-                #
-                # Ok changing the default password
-                #
                 header="Content-type: application/json"
                 data='{ "userName":"admin", "oldPassword":"'"$oldPassword"'", "newPassword1":"'"$newPassword"'", "newPassword2":"'"$newPassword"'"}'
                 url="$API_URL/security/users/authorization/changePassword"
-                echo "Changing default password for user admin"
+                echo -n "Changing default password for user admin"
                 while (true); do
                         result=$(curl -s --user "admin:$oldPassword" -H "$header" -d "$data" -X POST "$url")
                         [ $(echo -n "$result" | grep -c "Password has been successfully changed") -gt 0 ] && exit
                         echo -n "."
                         sleep 2
                 done
-                #
-                # Configuring LDAP settings...
-                #
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/artifactory_configure_ldap.sh':
+              content: |
+                #!/bin/bash
+                ldapUrl="$1"
+                domainComponent="$2"
+                ldapPassword="$3"
+                [ -z "$ldapUrl" ] && echo "Invalid ldapUrl" && exit
+                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
+                [ -z "$ldapPassword" ] && echo "Invalid ldap password" && exit
+                
+                API_URL="http://localhost:8081/artifactory/api"
                 header="Content-Type: application/yaml"
                 url="$API_URL/system/configuration"
-                echo "Configuring LDAP..."
+                echo "Configuring LDAP ($ldapUrl w/ $domainComponent) ..."
                 cat > /root/ldap_settings.yaml <<EOF
                 security:
                   ldapSettings:
@@ -462,26 +458,28 @@ Resources:
                       enabled: true
                 EOF
                 curl --user "admin:$newPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
-              mode: '000744'
+              mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
             '01_artifactory_createdb':
               command: !Sub 'sudo /root/artifactory_createdb.sh ${ArtifactoryDBAdminUsername} ${ArtifactoryDBAdminPassword}'
             '02_alternatives':
-              command: !Sub 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'              
+              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'              
             '03_create_symlink_for_mysql':
-              command: !Sub 'sudo ln -s /usr/share/java/mysql-connector-java.jar /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
+              command: 'sudo ln -s /usr/share/java/mysql-connector-java.jar /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
             '04_artifactory_start':
               command: 'sudo service artifactory start'
-            '05_configure_artifactory':
+            '05_artifactory_change_password': 
+              command: !Sub 'sudo /root/artifactory_change_password.sh password ${ArtifactoryAdminPassword}'
+            '06_artifactory_configure_ldap': 
               command: !Join
                 - ' '
-                - - !Sub 'sudo /root/configure_artifactory.sh password ${ArtifactoryAdminPassword}'
+                - - 'sudo /root/artifactory_configure_ldap.sh'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPUrl'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - !Sub '${OpenLDAPAdminPassword}'
-            '06_artifactory_restart':
+            '07_artifactory_restart': 
               command: 'sudo service artifactory restart'
           services: 
             sysvinit: 
