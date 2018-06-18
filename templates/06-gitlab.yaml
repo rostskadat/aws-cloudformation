@@ -147,7 +147,7 @@ Resources:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
-      HealthCheckPath: '/'
+      HealthCheckPath: '/users/sign_in'
       HealthCheckPort: 80
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 2
