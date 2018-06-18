@@ -1,7 +1,7 @@
 #
 # FILE: 05-gitlab.yaml
 #
-# DESCRIPTION: This Stack create a OpenLDAP Host.
+# DESCRIPTION: This Stack create a Gitlab Host as well as an Internet facing LoadBalancer.
 #
 # NOTE: in order to create the AMI mapping you can run the following command. (needs a bit of massaging: 
 #   should extract the ami and the region name, and output everything in the YAML compatible format)
@@ -12,10 +12,11 @@
 #
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
+# - Provide LDAP authentication https://docs.gitlab.com/ee/administration/auth/how_to_configure_ldap_gitlab_ce/
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "This stack create a OpenLDAP host"
+Description: "This stack create a Gitlab host"
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
@@ -27,31 +28,31 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - OpenLDAPInstanceType
+      - GitlabInstanceType
     - Label:
-        default: 'OpenLDAP Parameters'
+        default: 'Gitlab Parameters'
       Parameters:
-      - OpenLDAPRootDC
-      - OpenLDAPAdminPassword
+      - GitlabAdminEmail
+      - GitlabAdminPassword
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Stack where OpenLDAP will reside"
+    Description: "Enter the name of the VPC Stack where Gitlab will reside"
     Type: String
     Default: ''
   KeyName: 
-    Description: "The OpenLDAP instance Key Pair"
-    Type: "AWS::EC2::KeyPair::KeyName"
-    ConstraintDescription: "must be an existing EC2 KeyPair."
-  OpenLDAPInstanceType:
-    Description: 'The OpenLDAP instance type'
-    Type: 'String'
-    Default: 't2.micro'    
-  OpenLDAPRootDC: 
-    Description: 'The OpenLDAP base dc element'
+    Description: 'The Gitlab instance Key Pair'
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
+  GitlabInstanceType:
+    Description: 'The Gitlab instance type'
+    Type: 'AWS::EC2::Instance::Id'
+    Default: 'c4.large'
+  GitlabAdminEmail: 
+    Description: 'The Gitlab Admin email'
     Type: String
     Default: ''
-  OpenLDAPAdminPassword: 
-    Description: 'The OpenLDAP Admin password'
+  GitlabAdminPassword: 
+    Description: 'The Gitlab Admin password'
     Type: String
     Default: ''
     NoEcho: true
@@ -93,64 +94,116 @@ Resources:
   #   from the Internet. If you want to restrict the IP from which to accept traffic, do it here. you can have a look 
   #   at the 01-vpc.yaml, and more specifically the SecurityGroupDMZ for an example.
   #
-  LoadBalancerOpenLDAP:
-    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+  SecurityGroupELB:
+    Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      Scheme: 'internal'
-      Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
-      Type: 'network'
+      GroupDescription: 'Security Group to access Gitlab ELB'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp : "0.0.0.0/0"
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
+      - CidrIp : "0.0.0.0/0"
+        FromPort: 80
+        ToPort: 80
+        IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancerOpenLDAP'
-  TargetGroupOpenLDAP:
+          Value: !Sub '${AWS::StackName}-SecurityGroupELB'
+  LoadBalancerGitlab:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Scheme: 'internet-facing'
+      SecurityGroups:
+      - !Ref SecurityGroupELB
+      Subnets: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-LoadBalancerGitlab'
+  TargetGroupGitlab:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
-      HealthCheckPort: 389
+      HealthCheckPath: '/'
+      HealthCheckPort: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
-      Port: 389
-      Protocol: TCP
+      Matcher:
+        HttpCode: '200-299'
+      Port: 80
+      Protocol: HTTP
       Tags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupOpenLDAP'
+          Value: !Sub '${AWS::StackName}-TargetGroupGitlab'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
       Targets:
-        - Id: !Ref OpenLDAPHost
-    DependsOn: OpenLDAPHost
-  ListenerOpenLDAP:
+        - Id: !Ref GitlabHost
+    DependsOn: GitlabHost
+  ListenerGitlab:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupOpenLDAP
+      - TargetGroupArn: !Ref TargetGroupGitlab
         Type: forward
-      LoadBalancerArn: !Ref LoadBalancerOpenLDAP
-      Port: 389
-      Protocol: TCP
+      LoadBalancerArn: !Ref LoadBalancerGitlab
+      Port: 80
+      Protocol: HTTP
+  #
+  # Let's create the Gitlab instance.
+  # 
+  # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
+  #   Gitlab port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
+  #   communications with a host presenting a self-signed certificate.
+  #
+  SecurityGroupGitlab:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access the Gitlab instance'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: 
+          !Ref 'SecurityGroupELB'
+        FromPort: 80
+        ToPort: 80
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupGitlab'
   #
   # Ok let's configure the main host then
   #
-  OpenLDAPHost: 
+  GitlabHost: 
     Type: 'AWS::EC2::Instance'
     Metadata:
       AWS::CloudFormation::Init:
         #
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
-        # InstallOpenLDAP, InstallOpenLDAPApps, StartOpenLDAP 
+        # InstallGitlab, InstallGitlabApps, StartGitlab 
         configSets: 
-          default: [ Bootstrap, InstallOpenLDAP ]
+          default: [ Bootstrap, InstallGitlab ]
         Bootstrap:
           packages:
             yum:
@@ -195,89 +248,40 @@ Resources:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
-        InstallOpenLDAP:
+        InstallGitlab: 
           packages:
             yum:
-              openldap: []
-              openldap-clients: []
-              openldap-servers: []
+              postfix: []
+              policycoreutils-python: []
           files:
-            '/etc/openldap/slapd.conf':
-              content: !Sub |
-                suffix "dc=${OpenLDAPRootDC},dc=com"
+            '/root/add_gitlab_repo.sh':
+              source: 'https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh'
               mode: '000744'
               owner: 'root'
               group: 'root'
-            '/root/bootstrap.ldif':
-              content: |
-                include /etc/openldap/schema/core.schema
-                include /etc/openldap/schema/cosine.schema
-                include /etc/openldap/schema/inetorgperson.schema
-                include /etc/openldap/schema/nis.schema
-              mode: '000744'
-              owner: 'root'
-              group: 'root'
-            '/root/configure_ldap.sh':
+            '/root/install_gitlab.sh':
               content: !Sub |
                 #!/bin/bash
-                password=$1
-                domainComponent="$2"
+                email=$1
+                password=$2
+                [ -z "$email" ] && echo "Invalid email" && exit
                 [ -z "$password" ] && echo "Invalid password" && exit
-                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
-                # BEWARE the 'dn' line should be equals to the file found in /etc/openldap/slapd.d/cn=config
-                ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
-                dn: olcDatabase={2}bdb,cn=config
-                changetype: modify
-                replace: olcSuffix
-                olcSuffix: dc=$domainComponent,dc=local
-                EOF
-                # TODO: explain
-                ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
-                dn: olcDatabase={2}bdb,cn=config
-                changetype: modify
-                replace: olcRootDN
-                olcRootDN: cn=Manager,dc=$domainComponent,dc=local
-                EOF
-                # Adding the Root password
-                ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
-                dn: olcDatabase={2}bdb,cn=config
-                changetype: modify
-                add: olcRootPW
-                olcRootPW: $(slappasswd -s "$password")
-                EOF
-                # TODO: explain
-                ldapadd -Q -Y EXTERNAL -D "cn=Manager,dc=$domainComponent,dc=local" -w "$password" -H ldapi:/// <<EOF
-                dn: dc=$domainComponent,dc=local
-                dc: $domainComponent
-                o: $domainComponent LDAP Server
-                description: Root entry for $domainComponent LDAP Server
-                objectClass: top
-                objectclass: dcObject
-                objectclass: organization
-                EOF
-                # Testing the configuration and importing it into the LDAP directory
-                tempDir=$(mktemp -d)
-                outputDir=/etc/openldap/slapd.d
-                slaptest -f /root/bootstrap.ldif -F $tempDir
-                mv $tempDir/cn\=config/cn\=schema/cn\=\{1\}cosine.ldif        $outputDir/cn\=config/cn\=schema
-                mv $tempDir/cn\=config/cn\=schema/cn\=\{2\}inetorgperson.ldif $outputDir/cn\=config/cn\=schema
-                mv $tempDir/cn\=config/cn\=schema/cn\=\{3\}nis.ldif           $outputDir/cn\=config/cn\=schema
-                chown ldap:ldap $outputDir/*
+                EXTERNAL_URL="http://${LoadBalancerGitlab.DNSName}" yum install -y gitlab-ee
+                # Changing the default password
+                gitlab-rake gitlab:setup RAILS_ENV=production GITLAB_ROOT_PASSWORD="$password" GITLAB_ROOT_EMAIL="$email" < <(echo yes)
               mode: '000744'
               owner: 'root'
               group: 'root'
           commands:
-            '01_copy_default_config':
-              command: 'sudo cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG'
-            '02_start_slpad':
-              command: 'sudo service slapd start'
-            '03_configure_ldap':
-              command: !Sub 'sudo /root/configure_ldap.sh ${OpenLDAPAdminPassword} ${OpenLDAPRootDC}'
-            '04_restart_slpad':
-              command: 'sudo service slapd restart'
+            '01_add_gitlab_repo':
+              command: !Sub 'sudo /root/add_gitlab_repo.sh'
+            '02_install_gitlab':
+              command: !Sub 'sudo /root/install_gitlab.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
+            '03_gitlab_reconfigure':
+              command: 'sudo gitlab-ctl reconfigure'
           services:
             sysvinit:
-              slapd: 
+              postfix: 
                 enabled: true
                 ensureRunning: true
     Properties: 
@@ -286,37 +290,53 @@ Resources:
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref OpenLDAPInstanceType
+      InstanceType: !Ref GitlabInstanceType
       KeyName: !Ref 'KeyName'
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        - !Ref SecurityGroupGitlab
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+      Volumes: 
+        - VolumeId: !Ref VolumeData
+          Device: '/dev/xvdb'
       Monitoring: false
       UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
-          sleep 1
           yum update -y
-          sleep 1
           yum install -y aws-cfn-bootstrap
-          sleep 1
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource OpenLDAPHost --region ${AWS::Region}
+          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource GitlabHost --region ${AWS::Region}
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-OpenLDAPHost'
+          Value: !Sub '${AWS::StackName}-GitlabHost'
+    DependsOn: VolumeData
+  VolumeData:
+    Type: 'AWS::EC2::Volume'
+    Properties:
+      Size: 500
+      Encrypted: true
+      AvailabilityZone: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPublicAZA'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-VolumeData'
 Outputs: 
   InstanceId: 
-    Description: "InstanceId of the newly created OpenLDAP instance"
-    Value: !Ref OpenLDAPHost
+    Description: "InstanceId of the newly created Gitlab instance"
+    Value: !Ref GitlabHost
     Export:
       Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
     Description: "Public DNS address of the internet facing ELB"
-    Value: !GetAtt LoadBalancerOpenLDAP.DNSName
+    Value: !GetAtt LoadBalancerGitlab.DNSName
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
+      

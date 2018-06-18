@@ -13,7 +13,13 @@
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 # - Should configure the filestore in artifactory https://www.jfrog.com/confluence/display/RTF/Configuring+the+Filestore 
+# - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
 #
+# LDAPURL: ldap://ip-10-0-3-34.eu-west-1.compute.internal/dc=allfundsbank,dc=local
+# EMAIL: mail
+# FILTER: (uid={0})
+# SEARCH_BASE: ou=People
+# MANAGER_DN=cn=Manager,dc=$domainComponent,dc=local
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -25,7 +31,9 @@ Metadata:
         default: 'Parent Stack'
       Parameters:
       - ParentVpcStack
-    - Label:
+      - ParentLDAPStack
+      - OpenLDAPAdminPassword
+    - Label: 
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
@@ -45,7 +53,15 @@ Parameters:
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Artifactory will reside"
     Type: String
-    Default: ''
+    Default: 'VPC'
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the VPC stack'
+  ParentLDAPStack:
+    Description: "Enter the name of the OpenLDAP Stack"
+    Type: String
+    Default: 'LDAP'
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the LDAP stack'
   KeyName: 
     Description: "The Artifactory instance Key Pair"
     Type: "AWS::EC2::KeyPair::KeyName"
@@ -59,6 +75,12 @@ Parameters:
     Type: String
     Default: ''
     NoEcho: true
+  OpenLDAPAdminPassword: 
+    Description: 'The OpenLDAP Admin password'
+    Type: String
+    Default: 'Passw0rd'
+    NoEcho: true
+    MinLength: 3
   ArtifactoryDBInstanceType:
     Description: 'The Artifactory DB instance type'
     Type: String
@@ -367,7 +389,7 @@ Resources:
               content: !Sub |
                 type=mysql
                 driver=com.mysql.jdbc.Driver
-                url=jdbc:mysql://${ArtifactoryDB.Endpoint.Address}:${ArtifactoryDB.Endpoint.Port}/artdb?characterEncoding=UTF-8&elideSetAutoCommits=true
+                url=jdbc:mysql://${ArtifactoryDB.Endpoint.Address}:${ArtifactoryDB.Endpoint.Port}/${ArtifactoryDBName}?characterEncoding=UTF-8&elideSetAutoCommits=true
                 username=artifactory
                 password=password
               mode: '000740'
@@ -381,42 +403,86 @@ Resources:
                 [ -z "$username" ] && echo "Invalid username" && exit
                 [ -z "$password" ] && echo "Invalid password" && exit
                 mysql -h ${ArtifactoryDB.Endpoint.Address} -P ${ArtifactoryDB.Endpoint.Port} --user=$username --password=$password <<EOF
-                CREATE DATABASE artdb CHARACTER SET utf8 COLLATE utf8_bin;
-                GRANT ALL on artdb.* TO 'artifactory'@'%' IDENTIFIED BY 'password';
+                -- CREATE DATABASE ${ArtifactoryDBName} CHARACTER SET utf8 COLLATE utf8_bin;
+                GRANT ALL on ${ArtifactoryDBName}.* TO 'artifactory'@'%' IDENTIFIED BY 'password';
                 FLUSH PRIVILEGES;
                 EOF
               mode: '000740'
               owner: 'root'
               group: 'root'
-            '/root/artifactory_change_password.sh':
+            '/root/configure_artifactory.sh':
               content: |
                 #!/bin/bash
-                oldPassword=$1
-                newPassword=$2
+                oldPassword="$1"
+                newPassword="$2"
+                ldapUrl="$3"
+                domainComponent="$4"
+                ldapPassword="$5"
                 [ -z "$oldPassword" ] && echo "Invalid old password" && exit
                 [ -z "$newPassword" ] && echo "Invalid new password" && exit
+                [ -z "$ldapUrl" ] && echo "Invalid ldapUrl" && exit
+                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
+                [ -z "$ldapPassword" ] && echo "Invalid ldap password" && exit
+                
+                API_URL="http://localhost:8081/artifactory/api"
+                #
+                # Ok changing the default password
+                #
                 header="Content-type: application/json"
                 data='{ "userName":"admin", "oldPassword":"'"$oldPassword"'", "newPassword1":"'"$newPassword"'", "newPassword2":"'"$newPassword"'"}'
-                url="http://localhost:8081/artifactory/api/security/users/authorization/changePassword"
+                url="$API_URL/security/users/authorization/changePassword"
                 echo "Changing default password for user admin"
                 while (true); do
-                        result=$(curl -s -X POST -u "admin:$oldPassword" -H "$header" -d "$data" "$url")
+                        result=$(curl -s --user "admin:$oldPassword" -H "$header" -d "$data" -X POST "$url")
                         [ $(echo -n "$result" | grep -c "Password has been successfully changed") -gt 0 ] && exit
                         echo -n "."
                         sleep 2
                 done
+                #
+                # Configuring LDAP settings...
+                #
+                header="Content-Type: application/yaml"
+                url="$API_URL/system/configuration"
+                echo "Configuring LDAP..."
+                cat > /root/ldap_settings.yaml <<EOF
+                security:
+                  ldapSettings:
+                    OpenLDAP:
+                      emailAttribute: mail
+                      ldapPoisoningProtection: true
+                      ldapUrl: '$ldapUrl'
+                      search:
+                        managerDn: 'cn=Manager,dc=$domainComponent,dc=local' ] ]
+                        managerPassword: $ldapPassword
+                        searchBase: ou=People
+                        searchFilter: (uid={0})
+                        searchSubTree: true
+                      allowUserToAccessProfile: true
+                      autoCreateUser: true
+                      enabled: true
+                EOF
+                curl --user "admin:$newPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
               mode: '000744'
               owner: 'root'
               group: 'root'
           commands:
             '01_artifactory_createdb':
               command: !Sub 'sudo /root/artifactory_createdb.sh ${ArtifactoryDBAdminUsername} ${ArtifactoryDBAdminPassword}'
-            '02_create_symlink':
+            '02_alternatives':
+              command: !Sub 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'              
+            '03_create_symlink_for_mysql':
               command: !Sub 'sudo ln -s /usr/share/java/mysql-connector-java.jar /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
-            '03_artifactory_start':
+            '04_artifactory_start':
               command: 'sudo service artifactory start'
-            '04_artifactory_change_password':
-              command: !Sub 'sudo /root/artifactory_change_password.sh password ${ArtifactoryAdminPassword}'
+            '05_configure_artifactory':
+              command: !Join
+                - ' '
+                - - !Sub 'sudo /root/configure_artifactory.sh password ${ArtifactoryAdminPassword}'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPUrl'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                  - !Sub '${OpenLDAPAdminPassword}'
+            '06_artifactory_restart':
+              command: 'sudo service artifactory restart'
           services: 
             sysvinit: 
               artifactory: 
@@ -443,11 +509,8 @@ Resources:
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
-          sleep 1
           yum update -y
-          sleep 1
           yum install -y aws-cfn-bootstrap
-          sleep 1
           /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource ArtifactoryHost --region ${AWS::Region}
       Tags: 
         - Key: PLATFORM
@@ -478,7 +541,7 @@ Outputs:
       Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
     Description: "Public DNS address of the internet facing ELB"
-    Value: !GetAtt LoadBalancerArtifactory.DNSName
+    Value: !Sub '${LoadBalancerArtifactory.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
       

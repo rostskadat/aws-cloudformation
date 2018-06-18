@@ -1,7 +1,12 @@
 #
-# FILE: 05-gitlab.yaml
+# FILE: 03-splunk.yaml
 #
-# DESCRIPTION: This Stack create a Gitlab Host as well as an Internet facing LoadBalancer.
+# DESCRIPTION: This Stack create a Splunk Host as well as an Internet facing LoadBalancer.
+#
+# BEWARE: that it uses a publicly accessible S3 bucket to retrieve it instalation RPMs/sources.
+#   splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm: https://download.splunk.com/products/splunk/releases/7.1.1/linux/splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm
+#   nmon-performance-monitor-for-unix-and-linux-systems_1916.tgz: https://splunkbase.splunk.com/app/1753/
+#   ta-nmon-technical-addon-for-nmon-performance-monitor_1333.tgz: https://splunkbase.splunk.com/app/3248/
 #
 # NOTE: in order to create the AMI mapping you can run the following command. (needs a bit of massaging: 
 #   should extract the ami and the region name, and output everything in the YAML compatible format)
@@ -12,10 +17,11 @@
 #
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
+# - Provide LDAP authentication http://docs.splunk.com/Documentation/Splunk/7.1.1/Security/SetupuserauthenticationwithLDAP
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "This stack create a Gitlab host"
+Description: "This stack create a Splunk host and install the NMON application"
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
@@ -27,31 +33,26 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - GitlabInstanceType
+      - SplunkInstanceType
     - Label:
-        default: 'Gitlab Parameters'
+        default: 'Splunk Parameters'
       Parameters:
-      - GitlabAdminEmail
-      - GitlabAdminPassword
+      - SplunkAdminPassword
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Stack where Gitlab will reside"
+    Description: "Enter the name of the VPC Stack where Splunk will reside"
     Type: String
     Default: ''
   KeyName: 
-    Description: 'The Gitlab instance Key Pair'
-    Type: 'AWS::EC2::KeyPair::KeyName'
+    Description: "Enter the name of the Key Pair to use for the Splunk instance"
+    Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
-  GitlabInstanceType:
-    Description: 'The Gitlab instance type'
-    Type: 'AWS::EC2::Instance::Id'
-    Default: 'c4.large'
-  GitlabAdminEmail: 
-    Description: 'The Gitlab Admin email'
+  SplunkInstanceType:
+    Description: 'The instance type of the Jenkins master.'
     Type: String
-    Default: ''
-  GitlabAdminPassword: 
-    Description: 'The Gitlab Admin password'
+    Default: 'c4.large'    
+  SplunkAdminPassword: 
+    Description: "Enter the default Admin password for Splunk"
     Type: String
     Default: ''
     NoEcho: true
@@ -96,7 +97,7 @@ Resources:
   SecurityGroupELB:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access Gitlab ELB'
+      GroupDescription: 'Security Group to access Splunk ELB'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
@@ -114,7 +115,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupELB'
-  LoadBalancerGitlab:
+  LoadBalancerSplunk:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
       Scheme: 'internet-facing'
@@ -128,88 +129,85 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancerGitlab'
-  TargetGroupGitlab:
+          Value: !Sub '${AWS::StackName}-LoadBalancerSplunk'
+  TargetGroupSplunk:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
-      HealthCheckPath: '/'
-      HealthCheckPort: 80
+      HealthCheckPath: '/en-GB/account/login'
+      HealthCheckPort: 8000
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
       Matcher:
         HttpCode: '200-299'
-      Port: 80
+      Port: 8000
       Protocol: HTTP
       Tags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupGitlab'
+          Value: !Sub '${AWS::StackName}-TargetGroupSplunk'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
       Targets:
-        - Id: !Ref GitlabHost
-    DependsOn: GitlabHost
-  ListenerGitlab:
+        - Id: !Ref SplunkHost
+    DependsOn: SplunkHost
+  ListenerSplunk:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupGitlab
+      - TargetGroupArn: !Ref TargetGroupSplunk
         Type: forward
-      LoadBalancerArn: !Ref LoadBalancerGitlab
+      LoadBalancerArn: !Ref LoadBalancerSplunk
       Port: 80
       Protocol: HTTP
   #
-  # Let's create the Gitlab instance.
+  # Let's create the Splunk instance.
   # 
   # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
-  #   Gitlab port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
+  #   Splunk port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
   #   communications with a host presenting a self-signed certificate.
   #
-  SecurityGroupGitlab:
+  SecurityGroupSplunk:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access the Gitlab instance'
+      GroupDescription: 'Security Group to access the Splunk instance'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
       - SourceSecurityGroupId: 
           !Ref 'SecurityGroupELB'
-        FromPort: 80
-        ToPort: 80
+        FromPort: 8000
+        ToPort: 8000
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupGitlab'
-  #
-  # Ok let's configure the main host then
-  #
-  GitlabHost: 
+          Value: !Sub '${AWS::StackName}-SecurityGroupSplunk'
+  SplunkHost: 
     Type: 'AWS::EC2::Instance'
     Metadata:
       AWS::CloudFormation::Init:
         #
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
-        # InstallGitlab, InstallGitlabApps, StartGitlab 
+        #
         configSets: 
-          default: [ Bootstrap, InstallGitlab ]
+          default: [ Bootstrap, InstallSplunk, InstallSplunkApps, StartSplunk ]
         Bootstrap:
           packages:
             yum:
               htop: []
               awslogs: []
               yum-cron: []
-          files:
+          files: 
             '/home/ec2-user/.bashrc':
               content: !Sub |
                 [ -f /etc/bashrc ] && . /etc/bashrc
@@ -242,61 +240,58 @@ Resources:
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
               command: "sudo /root/tag_root_volume.sh"
+            '05_mkfs': 
+              command: 'sudo mkfs -t ext4 /dev/xvdb'
+            '06_mount': 
+              command: 'sudo mkdir -p /opt/splunk && sudo mount /dev/xvdb /opt/splunk'
+            '07_fix_fstab': 
+              command: 'echo "/dev/xvdb /opt/splunk ext4 rw,relatime,data=ordered 0 2" >> /etc/fstab'
           services:
             sysvinit:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
-        InstallGitlab: 
-          packages:
-            yum:
-              postfix: []
-              policycoreutils-python: []
+        InstallSplunk: 
+          packages: 
+            rpm: 
+              splunk: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm'
           files:
-            '/root/add_gitlab_repo.sh':
-              source: 'https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh'
-              mode: '000744'
-              owner: 'root'
-              group: 'root'
-            '/root/install_gitlab.sh':
+            '/opt/splunk/etc/system/local/user-seed.conf':
               content: !Sub |
-                #!/bin/bash
-                email=$1
-                password=$2
-                [ -z "$email" ] && echo "Invalid email" && exit
-                [ -z "$password" ] && echo "Invalid password" && exit
-                EXTERNAL_URL="http://${LoadBalancerGitlab.DNSName}" yum install -y gitlab-ee
-                # Changing the default password
-                gitlab-rake gitlab:setup RAILS_ENV=production GITLAB_ROOT_PASSWORD="$password" GITLAB_ROOT_EMAIL="$email" < <(echo yes)
-              mode: '000744'
-              owner: 'root'
-              group: 'root'
+                [user_info]
+                USERNAME = admin
+                PASSWORD = ${SplunkAdminPassword}
+              mode: "000644"
+              owner: "root"
+              group: "root"
           commands:
-            '01_add_gitlab_repo':
-              command: !Sub 'sudo /root/add_gitlab_repo.sh'
-            '02_install_gitlab':
-              command: !Sub 'sudo /root/install_gitlab.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
-            '03_gitlab_reconfigure':
-              command: 'sudo gitlab-ctl reconfigure'
-          services:
-            sysvinit:
-              postfix: 
-                enabled: true
-                ensureRunning: true
+            '01_splunk_enable':
+              command: 'sudo /opt/splunk/bin/splunk enable boot-start --accept-license -user splunk'
+              cwd: '~'
+        InstallSplunkApps: 
+          files:
+            '/opt/splunk/etc/apps/':
+              source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/nmon-performance-monitor-for-unix-and-linux-systems_1916.tgz'
+#            '/opt/splunk/etc/apps/':
+#              source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/ta-nmon-technical-addon-for-nmon-performance-monitor_1333.tgz'
+        StartSplunk:              
+          commands:
+            "01_splunk_start":
+              command: 'sudo /opt/splunk/bin/splunk start'
     Properties: 
       DisableApiTermination: false
       InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref GitlabInstanceType
+      InstanceType: !Ref SplunkInstanceType
       KeyName: !Ref 'KeyName'
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        - !Ref SecurityGroupGitlab
+        - !Ref SecurityGroupSplunk
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-      Volumes: 
+      Volumes : 
         - VolumeId: !Ref VolumeData
           Device: '/dev/xvdb'
       Monitoring: false
@@ -304,24 +299,22 @@ Resources:
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
-          sleep 1
           yum update -y
-          sleep 1
           yum install -y aws-cfn-bootstrap
-          sleep 1
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource GitlabHost --region ${AWS::Region}
+          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource BastionHost --region ${AWS::Region}
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-GitlabHost'
+          Value: !Sub '${AWS::StackName}-SplunkHost'
     DependsOn: VolumeData
   VolumeData:
     Type: 'AWS::EC2::Volume'
     Properties:
       Size: 500
       Encrypted: true
+      VolumeType: gp2
       AvailabilityZone: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPublicAZA'
       Tags: 
@@ -332,13 +325,13 @@ Resources:
           Value: !Sub '${AWS::StackName}-VolumeData'
 Outputs: 
   InstanceId: 
-    Description: "InstanceId of the newly created Gitlab instance"
-    Value: !Ref GitlabHost
+    Description: "InstanceId of the newly created Splunk instance"
+    Value: !Ref SplunkHost
     Export:
       Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
     Description: "Public DNS address of the internet facing ELB"
-    Value: !GetAtt LoadBalancerGitlab.DNSName
+    Value: !GetAtt LoadBalancerSplunk.DNSName
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
       
