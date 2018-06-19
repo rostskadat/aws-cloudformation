@@ -1,0 +1,515 @@
+#
+# FILE: 07-sonarqube.yaml
+#
+# DESCRIPTION: This Stack create a Sonarqube Host as well as an Internet facing LoadBalancer.
+#
+# NOTE: in order to create the AMI mapping you can run the following command. (needs a bit of massaging: 
+#   should extract the ami and the region name, and output everything in the YAML compatible format)
+# 
+# for region in $(aws ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text); do
+#   aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" --query 'Images[*].{ID:ImageId}'
+# done
+#
+# TODO: 
+# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
+# - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
+# - Should provide alert when the platform is unhealthy
+# - LOOK AT https://docs.sonarqube.org/display/SONAR/Hardware+Recommendations
+#
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "This stack create a Sonarqube host"
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Parent Stack'
+      Parameters:
+      - ParentVpcStack
+      - ParentLDAPStack
+      - ParentDBStack
+      - OpenLDAPAdminPassword
+    - Label: 
+        default: 'EC2 Parameters'
+      Parameters:
+      - KeyName
+      - SonarqubeInstanceType
+    - Label:
+        default: 'Sonarqube Parameters'
+      Parameters:
+      - SonarqubeAdminPassword
+Parameters: 
+  ParentVpcStack: 
+    Description: "Enter the name of the VPC Stack where Sonarqube will reside"
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the VPC stack'
+  ParentLDAPStack:
+    Description: "Enter the name of the OpenLDAP Stack"
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the LDAP stack'
+  ParentDBStack:
+    Description: 'Enter the name of the DB Stack'
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the DB stack'
+  OpenLDAPAdminPassword: 
+    Description: 'The OpenLDAP Admin password'
+    Type: String
+    NoEcho: true
+    MinLength: 3
+  DBAdminPassword: 
+    Description: 'The DB Admin password'
+    Type: String
+    NoEcho: true
+    MinLength: 3
+  KeyName: 
+    Description: "The Sonarqube instance Key Pair"
+    Type: "AWS::EC2::KeyPair::KeyName"
+    ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
+  SonarqubeInstanceType:
+    Description: 'The Sonarqube instance type'
+    Type: String
+    Default: 'c4.large'    
+  SonarqubeAdminPassword: 
+    Description: 'The Sonarqube Admin password'
+    Type: String
+    MinLength: 1
+    NoEcho: true
+Mappings:
+  RegionMap:
+    'ap-south-1':
+      AMI: 'ami-76d6f519'
+    'eu-west-3':
+      AMI: 'ami-969c2deb'
+    'eu-west-2':
+      AMI: 'ami-a36f8dc4'
+    'eu-west-1':
+      AMI: 'ami-ca0135b3'
+    'ap-northeast-2':
+      AMI: 'ami-c10fa6af'
+    'ap-northeast-1':
+      AMI: 'ami-92df37ed'
+    'sa-east-1':
+      AMI: 'ami-3885d854'
+    'ca-central-1':
+      AMI: 'ami-338a0a57'
+    'ap-southeast-1':
+      AMI: 'ami-de90a5a2'
+    'ap-southeast-2':
+      AMI: 'ami-423bec20'
+    'eu-central-1':
+      AMI: 'ami-9a91b371'
+    'us-east-1':
+      AMI: 'ami-14c5486b'
+    'us-east-2':
+      AMI: 'ami-922914f7'
+    'us-west-1':
+      AMI: 'ami-25110f45'
+    'us-west-2':
+      AMI: 'ami-e251209a'    
+Resources: 
+  #
+  # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
+  #   from the Internet. If you want to restrict the IP from which to accept traffic, do it here. you can have a look 
+  #   at the 01-vpc.yaml, and more specifically the SecurityGroupDMZ for an example.
+  #
+  SecurityGroupELB:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access Sonarqube ELB'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp : "0.0.0.0/0"
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
+      - CidrIp : "0.0.0.0/0"
+        FromPort: 80
+        ToPort: 80
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupELB'
+  LoadBalancerSonarqube:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Scheme: 'internet-facing'
+      SecurityGroups:
+      - !Ref SecurityGroupELB
+      Subnets: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-LoadBalancerSonarqube'
+  TargetGroupSonarqube:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: '/about'
+      HealthCheckPort: 9000
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 2
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200-299'
+      Port: 9000
+      Protocol: HTTP
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TargetGroupSonarqube'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      TargetGroupAttributes:
+        - Key: 'deregistration_delay.timeout_seconds'
+          Value: 30
+      Targets:
+        - Id: !Ref SonarqubeHost
+    DependsOn: SonarqubeHost
+  ListenerSonarqube:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref TargetGroupSonarqube
+        Type: forward
+      LoadBalancerArn: !Ref LoadBalancerSonarqube
+      Port: 80
+      Protocol: HTTP
+  #
+  # Let's create the Sonarqube instance.
+  # 
+  # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
+  #   Sonarqube port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
+  #   communications with a host presenting a self-signed certificate.
+  #
+  SecurityGroupSonarqube:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access the Sonarqube instance'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: 
+          !Ref 'SecurityGroupELB'
+        FromPort: 9000
+        ToPort: 9000
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupSonarqube'
+  #
+  # Ok let's configure the main host then
+  #
+  SonarqubeHost: 
+    Type: 'AWS::EC2::Instance'
+    Metadata:
+      AWS::CloudFormation::Init:
+        #
+        # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
+        # , InstallSonarqube
+        configSets: 
+          default: [ Bootstrap, InstallSonarqube ]
+        Bootstrap:
+          packages:
+            yum:
+              htop: []
+              awslogs: []
+              yum-cron: []
+          files:
+            '/home/ec2-user/.bashrc':
+              content: !Sub |
+                [ -f /etc/bashrc ] && . /etc/bashrc
+                alias c=clear
+                alias l='ls -l'
+                alias vi=vim
+              mode: '000600'
+              owner: 'ec2-user'
+              group: 'ec2-user'
+            '/root/tag_root_volume.sh':
+              content: !Sub |
+                #!/bin/bash
+                STACK_NAME=${AWS::StackName}
+                REGION=${AWS::Region}
+                echo "Tagging Root volume..."
+                INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+                VOLUME_ID=$(aws --region $REGION ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/xvda" --query "Volumes[0].VolumeId" --output text)
+                PLATFORM=$(aws --region $REGION ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].Tags" --output table | grep PLATFORM | cut -d '|' -f 3 | sed -e 's/ //g')
+                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=Name,Value=$STACK_NAME-VolumeRoot"
+                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=PLATFORM,Value=$PLATFORM"
+              mode: '000744'
+              owner: 'root'
+              group: 'root'
+            '/etc/yum.repos.d/sonar.repo':
+              source: 'http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo'
+              mode: "000644"
+              owner: "root"
+              group: "root"
+          commands:
+            '01_install_aws_inspector': 
+              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
+            '02_yum_cron_hourly.conf':
+              command: "sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf"
+            '03_yum_cron.conf':
+              command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
+            '04_tag_root_volume':
+              command: "sudo /root/tag_root_volume.sh"
+            '05_remove_jdk7':
+              command: 'sudo yum remove -y java-1.7.0-openjdk'
+          services:
+            sysvinit:
+              yum-cron: 
+                enabled: true
+                ensureRunning: true
+        InstallSonarqube: 
+          packages:
+            yum:
+              mysql56: []
+              java-1.8.0-openjdk: []
+              sonar: []
+              py-bcrypt: []
+          files:
+            '/root/sonarqube_createdb.sh':
+              content: |
+                #!/bin/bash
+                address=$1
+                port=$2
+                username=$3
+                password=$4
+                [ -z "$address" ] && echo "Invalid address" && exit
+                [ -z "$port" ] && echo "Invalid port" && exit
+                [ -z "$username" ] && echo "Invalid username" && exit
+                [ -z "$password" ] && echo "Invalid password" && exit
+                mysql -h $address -P $port --user=$username --password=$password <<EOF
+                DROP DATABASE IF EXISTS sonarqube;
+                CREATE DATABASE sonarqube CHARACTER SET utf8 COLLATE utf8_bin;
+                GRANT ALL on sonarqube.* TO 'sonarqube'@'%' IDENTIFIED BY 'sonarqube';
+                FLUSH PRIVILEGES;
+                EOF
+                sed -ibckp -E "s/%address%/$address/;s/%port%/$port/" /opt/sonar/conf/sonar.properties
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/sonarqube_configure_ldap.sh':
+              content: |
+                #!/bin/bash
+                ldapHostname=$1
+                ldapPort=$2
+                domainComponent=$3
+                password=$4
+                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit
+                [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit
+                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
+                [ -z "$password" ] && echo "Invalid password" && exit
+                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%domainComponent%/$domainComponent/;s/%password%/$password/" /opt/sonar/conf/sonar.properties
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/sonarqube_change_password.sh':
+              content: |
+                #!/bin/bash
+                address=$1
+                port=$2
+                password=$3
+                [ -z "$address" ] && echo "Invalid address" && exit
+                [ -z "$port" ] && echo "Invalid port" && exit
+                [ -z "$password" ] && echo "Invalid password" && exit
+                
+                while : ; do 
+                    table_exists=$(mysql -h $address -P $port --user=sonarqube --password=sonarqube --database=sonarqube --execute="SELECT * FROM sonarqube.users WHERE login = 'admin';" --batch --skip-column-names 2> /dev/null | wc -l);
+                    [ $table_exists -eq 0 ] || break;
+                    sleep 1
+                    echo -n . 
+                done
+                mysql -h $address -P $port --user=sonarqube --password=sonarqube --database=sonarqube  <<EOF
+                UPDATE users SET crypted_password=SHA1(CONCAT('--', salt, '--', '$password', '--')) WHERE id='1';
+                COMMIT;
+                EOF
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/opt/sonar/conf/sonar.properties': 
+              content: !Sub |
+                sonar.jdbc.url=jdbc:mysql://%address%:%port%/sonarqube?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true&useConfigs=maxPerformance&useSSL=false
+                sonar.jdbc.username=sonarqube
+                sonar.jdbc.password=sonarqube
+                sonar.updatecenter.activate=true
+                sonar.forceAuthentication=true
+                sonar.security.realm=LDAP
+                ldap.url=ldap://%ldapHostname%:%ldapPort%
+                ldap.bindDn=cn=Manager,dc=%domainComponent%,dc=local
+                ldap.bindPassword=%password%
+                ldap.authentication=simple
+                ldap.user.baseDn=ou=People,dc=%domainComponent%,dc=local
+                ldap.user.request=(&(objectClass=person)(uid={login}))
+                ldap.user.realNameAttribute=displayName
+                ldap.user.emailAttribute=mail
+              mode: '000600'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/sonar-ldap-plugin-2.2.0.608.jar':
+              source: 'https://sonarsource.bintray.com/Distribution/sonar-ldap-plugin/sonar-ldap-plugin-2.2.0.608.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/checkstyle-sonar-plugin-4.10.1.jar':
+              source: 'https://github.com/checkstyle/sonar-checkstyle/releases/download/4.10.1/checkstyle-sonar-plugin-4.10.1.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/sonar-findbugs-plugin-3.7.0.jar':
+              source: 'https://github.com/spotbugs/sonar-findbugs/releases/download/3.7.0/sonar-findbugs-plugin-3.7.0.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/sonar-gitlab-plugin-3.0.1.jar':
+              source: 'https://github.com/gabrie-allaigre/sonar-gitlab-plugin/releases/download/3.0.1/sonar-gitlab-plugin-3.0.1.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/sonar-auth-gitlab-plugin-1.3.2.jar':
+              source: 'https://github.com/gabrie-allaigre/sonar-auth-gitlab-plugin/releases/download/1.3.2/sonar-auth-gitlab-plugin-1.3.2.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/sonar-pmd-plugin-2.6.jar':
+              source: 'https://github.com/SonarQubeCommunity/sonar-pmd/releases/download/2.6/sonar-pmd-plugin-2.6.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/qualinsight-sonarqube-badges-3.0.1.jar':
+              source: 'https://github.com/QualInsight/qualinsight-plugins-sonarqube-badges/releases/download/qualinsight-plugins-sonarqube-badges-3.0.1/qualinsight-sonarqube-badges-3.0.1.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/sonar-sonargraph-plugin-3.5.jar':
+              source: 'https://github.com/SonarQubeCommunity/sonar-sonargraph/releases/download/sonar-sonargraph-plugin-3.5/sonar-sonargraph-plugin-3.5.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/sonar-sonargraph-integration-2.1.5.jar':
+              source: 'https://github.com/sonargraph/sonar-sonargraph-integration/releases/download/Release-2.1.5/sonar-sonargraph-integration-2.1.5.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/opt/sonar/extensions/plugins/sonar-jdepend-plugin-1.1.1.jar':
+              source: 'https://github.com/willemsrb/sonar-jdepend-plugin/releases/download/sonar-jdepend-plugin-1.1.1/sonar-jdepend-plugin-1.1.1.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
+            '/etc/limits.conf':
+              # Taken from https://docs.sonarqube.org/display/SONAR/Requirements#Requirements-Linux 
+              content: !Sub |
+                sonarqube   -   nofile   65536
+                sonarqube   -   nproc    2048
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+          commands:
+            '01_alternatives_java':
+              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
+            '02_alternatives_python':
+              command: 'sudo /usr/sbin/alternatives --set python /usr/bin/python2.6'
+            '03_sonarqube_createdb':
+              command: !Join
+                - ' '
+                - - !Sub 'sudo /root/sonarqube_createdb.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+                  - !Sub '${DBAdminPassword}'
+            '04_sonarqube_configure_ldap':
+              command: !Join
+                - ' '
+                - - !Sub 'sudo /root/sonarqube_configure_ldap.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPHostname'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                  - !Sub '${OpenLDAPAdminPassword}'
+            '05_sonarqube_start':
+              command: 'sudo service sonar start'
+            '06_sonarqube_change_password':
+              command: !Join
+                - ' '
+                - - !Sub 'sudo /root/sonarqube_change_password.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+                  - !Sub '${SonarqubeAdminPassword}'
+            '07_sonarqube_start':
+              command: 'sudo service sonar restart'
+          services: 
+            sysvinit: 
+              sonarqube: 
+                enabled: true
+                ensureRunning: true
+    Properties: 
+      DisableApiTermination: false
+      InstanceInitiatedShutdownBehavior: stop
+      IamInstanceProfile: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      InstanceType: !Ref SonarqubeInstanceType
+      KeyName: !Ref 'KeyName'
+      SecurityGroupIds: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        - !Ref SecurityGroupSonarqube
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+      Volumes: 
+        - VolumeId: !Ref VolumeData
+          Device: '/dev/xvdb'
+      Monitoring: false
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash
+          yum-config-manager --enable epel
+          yum update -y
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource SonarqubeHost --region ${AWS::Region}
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SonarqubeHost'
+    DependsOn: VolumeData
+  VolumeData:
+    Type: 'AWS::EC2::Volume'
+    Properties:
+      Size: 500
+      Encrypted: true
+      AvailabilityZone: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-VolumeData'
+Outputs: 
+  InstanceId: 
+    Description: "InstanceId of the newly created Sonarqube instance"
+    Value: !Ref SonarqubeHost
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
+  DNSName: 
+    Description: "Public DNS address of the internet facing ELB"
+    Value: !Sub '${LoadBalancerSonarqube.DNSName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-DNSName'
+      

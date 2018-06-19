@@ -58,7 +58,6 @@ Parameters:
   OpenLDAPAdminPassword: 
     Description: 'The OpenLDAP Admin password'
     Type: String
-    Default: 'Passw0rd'
     NoEcho: true
     MinLength: 3
   OpenLDAPUsersLdif: 
@@ -297,28 +296,33 @@ Resources:
           Value: !Sub '${AWS::StackName}-OpenLDAPHost'
 Outputs: 
   InstanceId: 
-    Description: "InstanceId of the newly created OpenLDAP instance"
+    Description: 'InstanceId of the newly created OpenLDAP instance'
     Value: !Ref OpenLDAPHost
     Export:
       Name: !Sub '${AWS::StackName}-InstanceId'
   LDAPHostname:
-    Description: "LDAP hostname to use when connecting"
-    Value: !Sub "${OpenLDAPHost.PrivateDnsName}"
+    Description: 'LDAP hostname to use when connecting'
+    Value: !Sub '${OpenLDAPHost.PrivateDnsName}'
     Export:
       Name: !Sub '${AWS::StackName}-LDAPHostname'
+  LDAPPort:
+    Description: 'LDAP port to use when connecting'
+    Value: 389
+    Export:
+      Name: !Sub '${AWS::StackName}-LDAPPort'
   LDAPUrl: 
-    Description: "LDAP URL to use when connecting"
-    Value: !Sub "ldap://${OpenLDAPHost.PrivateDnsName}/dc=${OpenLDAPRootDC},dc=local"
+    Description: 'LDAP URL to use when connecting'
+    Value: !Sub 'ldap://${OpenLDAPHost.PrivateDnsName}/dc=${OpenLDAPRootDC},dc=local'
     Export:
       Name: !Sub '${AWS::StackName}-LDAPUrl'
   RootDC: 
-    Description: "LDAP URL to use when connecting"
+    Description: 'LDAP URL to use when connecting'
     Value: !Ref OpenLDAPRootDC
     Export:
       Name: !Sub '${AWS::StackName}-RootDC'
   RootDN: 
-    Description: "Root DN to use when accessing the LDAP Server"
-    Value: !Sub "cn=Manager,dc=${OpenLDAPRootDC},dc=local"
+    Description: 'Root DN to use when accessing the LDAP Server'
+    Value: !Sub 'cn=Manager,dc=${OpenLDAPRootDC},dc=local'
     Export:
       Name: !Sub '${AWS::StackName}-RootDN'
       
