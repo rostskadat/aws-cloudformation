@@ -65,9 +65,8 @@ Parameters:
     NoEcho: true
     MinLength: 3
   KeyName: 
-    Description: "The Sonarqube instance Key Pair"
+    Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
-    ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
   SonarqubeInstanceType:
     Description: 'The Sonarqube instance type'
     Type: String
@@ -109,6 +108,8 @@ Mappings:
       AMI: 'ami-25110f45'
     'us-west-2':
       AMI: 'ami-e251209a'    
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
   #
   # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
@@ -462,7 +463,7 @@ Resources:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref SonarqubeInstanceType
-      KeyName: !Ref 'KeyName'
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
         - !Ref SecurityGroupSonarqube

@@ -41,10 +41,8 @@ Parameters:
     MinLength: 1
     ConstraintDescription: 'must be the name of the parent VPC stack (01-vpc.yaml)'
   KeyName: 
-    Description: "Enter the name of the Key Pair for your instances"
+    Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
-    MinLength: 1
-    ConstraintDescription: 'must be the name of an existing Key Pair to use to log to the EC2 Instance'
   OpenLDAPInstanceType:
     Description: 'The OpenLDAP instance type'
     Type: 'String'
@@ -63,7 +61,8 @@ Parameters:
   OpenLDAPUsersLdif: 
     Description: 'The OpenLDAP initial User database'
     Type: String
-    Default: ''
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Mappings:
   RegionMap:
     'ap-south-1':
@@ -275,7 +274,7 @@ Resources:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref OpenLDAPInstanceType
-      KeyName: !Ref 'KeyName'
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
       SubnetId: 

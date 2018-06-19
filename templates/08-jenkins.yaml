@@ -15,6 +15,7 @@
 # - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
 # - Should provide alert when the platform is unhealthy
 # - LOOK AT https://docs.sonarqube.org/display/SONAR/Hardware+Recommendations
+# - Allow cfn-auto-reload (cf example in jenkins2-ha.yaml)
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -272,6 +273,37 @@ Resources:
               java-1.8.0-openjdk: []
               jenkins: []
           files:
+            '/root/ldap_config.xml':
+              content: !Sub |
+                <securityRealm class="hudson.security.LDAPSecurityRealm" plugin="ldap@1.20">
+                  <disableMailAddressResolver>false</disableMailAddressResolver>
+                  <configurations>
+                    <jenkins.security.plugins.ldap.LDAPConfiguration>
+                      <server>${ParentLDAPStack}-LDAPHostname:${ParentLDAPStack}-LDAPPort</server>
+                      <rootDN>dc=${ParentLDAPStack}-RootDC,dc=local</rootDN>
+                      <inhibitInferRootDN>false</inhibitInferRootDN>
+                      <userSearchBase>ou=People</userSearchBase>
+                      <userSearch>(&amp;(objectClass=person)(uid={0}))</userSearch>
+                      <groupMembershipStrategy class="jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy">
+                      <filter></filter>
+                      </groupMembershipStrategy>
+                      <managerDN>${ParentLDAPStack}-RootDN</managerDN>
+                      <managerPasswordSecret>{AQAAABAAAAAQxznUHu2iyS43uaGiIZ2amxTC+C2NqfGQ+FsJftAIGsU=}</managerPasswordSecret>
+                      <displayNameAttributeName>displayName</displayNameAttributeName>
+                      <mailAddressAttributeName>mail</mailAddressAttributeName>
+                      <ignoreIfUnavailable>false</ignoreIfUnavailable>
+                      <extraEnvVars class="linked-hash-map">
+                        <entry><string></string><string></string></entry>
+                      </extraEnvVars>
+                    </jenkins.security.plugins.ldap.LDAPConfiguration>
+                  </configurations>
+                  <userIdStrategy class="jenkins.model.IdStrategy$CaseInsensitive"/>
+                  <groupIdStrategy class="jenkins.model.IdStrategy$CaseInsensitive"/>
+                  <disableRolePrefixing>true</disableRolePrefixing>
+                </securityRealm>
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
             '/root/jenkins_change_password.sh': 
               content: |
                 #!/bin/bash
@@ -296,8 +328,11 @@ Resources:
                 - ' '
                 - - 'sudo /root/jenkins_change_password.sh'
                   - !Sub '${JenkinsAdminPassword}'
-            '04_jenkins_restart':
+            '04_install_plugins':
+              command: !Sub 'java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s "http://localhost:8080/" -auth "admin:${JenkinsAdminPassword}" install-plugin $(cat /root/plugins.txt | tr "\n" " ")'
+            '05_jenkins_restart':
               command: 'sudo service jenkins restart'
+              
           services: 
             sysvinit: 
               jenkins: 
