@@ -156,8 +156,6 @@ Resources:
     Properties:
       HealthCheckIntervalSeconds: 10
       HealthCheckPath: '/about'
-      HealthCheckPort: 9000
-      HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
@@ -446,7 +444,7 @@ Resources:
             '06_sonarqube_change_password':
               command: !Join
                 - ' '
-                - - !Sub 'sudo /root/sonarqube_change_password.sh'
+                - - 'sudo /root/sonarqube_change_password.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - !Sub '${SonarqubeAdminPassword}'
@@ -454,7 +452,7 @@ Resources:
               command: 'sudo service sonar restart'
           services: 
             sysvinit: 
-              sonarqube: 
+              sonar: 
                 enabled: true
                 ensureRunning: true
     Properties: 

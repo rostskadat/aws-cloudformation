@@ -136,8 +136,6 @@ Resources:
     Properties:
       HealthCheckIntervalSeconds: 10
       HealthCheckPath: '/en-GB/account/login'
-      HealthCheckPort: 8000
-      HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2

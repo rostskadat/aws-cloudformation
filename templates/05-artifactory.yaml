@@ -169,8 +169,6 @@ Resources:
     Properties:
       HealthCheckIntervalSeconds: 10
       HealthCheckPath: '/artifactory/webapp/#/home'
-      HealthCheckPort: 8081
-      HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
@@ -474,7 +472,8 @@ Resources:
             '06_artifactory_configure_ldap': 
               command: !Join
                 - ' '
-                - - !Sub 'sudo /root/artifactory_configure_ldap.sh ${ArtifactoryAdminPassword}'
+                - - 'sudo /root/artifactory_configure_ldap.sh'
+                  - !Sub '${ArtifactoryAdminPassword}'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPUrl'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - !Sub '${OpenLDAPAdminPassword}'

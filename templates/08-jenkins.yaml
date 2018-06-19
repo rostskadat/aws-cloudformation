@@ -1,7 +1,7 @@
 #
-# FILE: 05-gitlab.yaml
+# FILE: 08-jenkins.yaml
 #
-# DESCRIPTION: This Stack create a Gitlab Host as well as an Internet facing LoadBalancer.
+# DESCRIPTION: This Stack create a Jenkins Host as well as an Internet facing LoadBalancer.
 #
 # NOTE: in order to create the AMI mapping you can run the following command. (needs a bit of massaging: 
 #   should extract the ami and the region name, and output everything in the YAML compatible format)
@@ -12,12 +12,13 @@
 #
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
-# - Should fine tune configuration (disable signin, etc)...
+# - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
 # - Should provide alert when the platform is unhealthy
+# - LOOK AT https://docs.sonarqube.org/display/SONAR/Hardware+Recommendations
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "This stack create a Gitlab host"
+Description: "This stack create a Jenkins host"
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
@@ -27,19 +28,18 @@ Metadata:
       - ParentVpcStack
       - ParentLDAPStack
       - OpenLDAPAdminPassword
-    - Label:
+    - Label: 
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - GitlabInstanceType
+      - JenkinsInstanceType
     - Label:
-        default: 'Gitlab Parameters'
+        default: 'Jenkins Parameters'
       Parameters:
-      - GitlabAdminEmail
-      - GitlabAdminPassword
+      - JenkinsAdminPassword
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Stack where Gitlab will reside"
+    Description: "Enter the name of the VPC Stack where Jenkins will reside"
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the VPC stack'
@@ -54,21 +54,17 @@ Parameters:
     NoEcho: true
     MinLength: 3
   KeyName: 
-    Description: 'The Gitlab instance Key Pair'
-    Type: 'AWS::EC2::KeyPair::KeyName'
+    Description: "The Jenkins instance Key Pair"
+    Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
-  GitlabInstanceType:
-    Description: 'The Gitlab instance type'
+  JenkinsInstanceType:
+    Description: 'The Jenkins instance type'
     Type: String
     Default: 'c4.large'    
-  GitlabAdminEmail: 
-    Description: 'The Gitlab Admin email'
+  JenkinsAdminPassword: 
+    Description: 'The Jenkins Admin password'
     Type: String
-    Default: ''
-  GitlabAdminPassword: 
-    Description: 'The Gitlab Admin password'
-    Type: String
-    Default: ''
+    MinLength: 1
     NoEcho: true
 Mappings:
   RegionMap:
@@ -111,7 +107,7 @@ Resources:
   SecurityGroupELB:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access Gitlab ELB'
+      GroupDescription: 'Security Group to access Jenkins ELB'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
@@ -129,7 +125,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupELB'
-  LoadBalancerGitlab:
+  LoadBalancerJenkins:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
       Scheme: 'internet-facing'
@@ -143,79 +139,79 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancerGitlab'
-  TargetGroupGitlab:
+          Value: !Sub '${AWS::StackName}-LoadBalancerJenkins'
+  TargetGroupJenkins:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
-      HealthCheckPath: '/users/sign_in'
+      HealthCheckPath: '/login'
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
       Matcher:
         HttpCode: '200-299'
-      Port: 80
+      Port: 8080
       Protocol: HTTP
       Tags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupGitlab'
+          Value: !Sub '${AWS::StackName}-TargetGroupJenkins'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
       Targets:
-        - Id: !Ref GitlabHost
-    DependsOn: GitlabHost
-  ListenerGitlab:
+        - Id: !Ref JenkinsHost
+    DependsOn: JenkinsHost
+  ListenerJenkins:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupGitlab
+      - TargetGroupArn: !Ref TargetGroupJenkins
         Type: forward
-      LoadBalancerArn: !Ref LoadBalancerGitlab
+      LoadBalancerArn: !Ref LoadBalancerJenkins
       Port: 80
       Protocol: HTTP
   #
-  # Let's create the Gitlab instance.
+  # Let's create the Jenkins instance.
   # 
   # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
-  #   Gitlab port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
+  #   Jenkins port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
   #   communications with a host presenting a self-signed certificate.
   #
-  SecurityGroupGitlab:
+  SecurityGroupJenkins:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access the Gitlab instance'
+      GroupDescription: 'Security Group to access the Jenkins instance'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
       - SourceSecurityGroupId: 
           !Ref 'SecurityGroupELB'
-        FromPort: 80
-        ToPort: 80
+        FromPort: 8080
+        ToPort: 8080
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupGitlab'
+          Value: !Sub '${AWS::StackName}-SecurityGroupJenkins'
   #
   # Ok let's configure the main host then
   #
-  GitlabHost: 
+  JenkinsHost: 
     Type: 'AWS::EC2::Instance'
     Metadata:
       AWS::CloudFormation::Init:
         #
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
-        # InstallGitlab, InstallGitlabApps, StartGitlab 
+        # , InstallJenkins
         configSets: 
-          default: [ Bootstrap, InstallGitlab ]
+          default: [ Bootstrap, InstallJenkins ]
         Bootstrap:
           packages:
             yum:
@@ -246,6 +242,11 @@ Resources:
               mode: '000744'
               owner: 'root'
               group: 'root'
+            '/etc/yum.repos.d/jenkins.repo':
+              source: 'http://pkg.jenkins-ci.org/redhat-stable/jenkins.repo'
+              mode: "000644"
+              owner: "root"
+              group: "root"
           commands:
             '01_install_aws_inspector': 
               command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
@@ -255,87 +256,51 @@ Resources:
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
               command: "sudo /root/tag_root_volume.sh"
+            '05_remove_jdk7':
+              command: 'sudo yum remove -y java-1.7.0-openjdk'
+            '06_rpm_import':
+              command: 'sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key'
           services:
             sysvinit:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
-        InstallGitlab: 
+        InstallJenkins: 
           packages:
             yum:
-              postfix: []
-              policycoreutils-python: []
+              py-bcrypt: []
+              java-1.8.0-openjdk: []
+              jenkins: []
           files:
-            '/root/add_gitlab_repo.sh':
-              source: 'https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/gitlab_change_password.sh':
-              content: !Sub |
+            '/root/jenkins_change_password.sh': 
+              content: |
                 #!/bin/bash
-                email=$1
-                password=$2
-                [ -z "$email" ] && echo "Invalid email" && exit
+                password=$1
                 [ -z "$password" ] && echo "Invalid password" && exit
-                # Changing the default password
-                gitlab-rake gitlab:setup GITLAB_ROOT_PASSWORD="$password" GITLAB_ROOT_EMAIL="$email" < <(echo yes)
+                bcrypt_password=$(python2.6 -c "import bcrypt; print(bcrypt.hashpw('$password', bcrypt.gensalt(log_rounds=10)))")
+                while [ ! -f /var/lib/jenkins/users/admin/config.xml ]; do
+                  echo -n '.'
+                  sleep 1
+                done
+                sed -ibckp "s-<passwordHash>.*</passwordHash>-<passwordHash>#jbcrypt:$bcrypt_password</passwordHash>-" /var/lib/jenkins/users/admin/config.xml
               mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/gitlab_configure_ldap.sh':
-              content: !Sub |
-                #!/bin/bash
-                ldapHostname="$1"
-                domainComponent="$2"
-                ldapPassword="$3"
-                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit
-                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
-                [ -z "$ldapPassword" ] && echo "Invalid ldap password" && exit
-                echo "Configuring LDAP ($ldapHostname w/ $domainComponent) ..."
-                cat >> /etc/gitlab/gitlab.rb <<EOF
-                gitlab_rails['ldap_enabled'] = true
-                gitlab_rails['ldap_servers'] = {
-                  'main' => { 
-                    'label' => 'OpenLDAP',
-                    'host' => '$ldapHostname',
-                    'port' => 389,
-                    'uid' => 'uid',
-                    'bind_dn' => 'cn=Manager,dc=$domainComponent,dc=local',
-                    'password' => '$ldapPassword',
-                    'encryption' => 'plain',
-                    'verify_certificates' => false,
-                    'active_directory' => false,
-                    'allow_username_or_email_login' => false,
-                    'lowercase_usernames' => false,
-                    'block_auto_created_users' => false,
-                    'base' => 'OU=People,DC=allfundsbank,DC=local',
-                    'user_filter' => '(objectclass=person)'
-                  }
-                }
-                EOF
-              mode: '000744'
               owner: 'root'
               group: 'root'
           commands:
-            '01_add_gitlab_repo':
-              command: 'sudo /root/add_gitlab_repo.sh'
-            '02_install_gitlab_ee':
-              command: !Sub 'sudo EXTERNAL_URL="http://${LoadBalancerGitlab.DNSName}" yum install -y gitlab-ee'
-            '03_gitlab_change_password':
-              command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
-            '04_gitlab_configure_ldap':
+            '01_alternatives_java':
+              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
+            '02_jenkins_start':
+              command: 'sudo service jenkins start'
+            '03_jenkins_change_password':
               command: !Join
                 - ' '
-                - - 'sudo /root/gitlab_configure_ldap.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPHostname'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                  - !Sub '${OpenLDAPAdminPassword}'
-            '05_gitlab_reconfigure':
-              command: 'sudo gitlab-ctl reconfigure'
-          services:
-            sysvinit:
-              postfix: 
+                - - 'sudo /root/jenkins_change_password.sh'
+                  - !Sub '${JenkinsAdminPassword}'
+            '04_jenkins_restart':
+              command: 'sudo service jenkins restart'
+          services: 
+            sysvinit: 
+              jenkins: 
                 enabled: true
                 ensureRunning: true
     Properties: 
@@ -344,11 +309,11 @@ Resources:
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref GitlabInstanceType
+      InstanceType: !Ref JenkinsInstanceType
       KeyName: !Ref 'KeyName'
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        - !Ref SecurityGroupGitlab
+        - !Ref SecurityGroupJenkins
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
       Volumes: 
@@ -361,13 +326,13 @@ Resources:
           yum-config-manager --enable epel
           yum update -y
           yum install -y aws-cfn-bootstrap
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource GitlabHost --region ${AWS::Region}
+          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource JenkinsHost --region ${AWS::Region}
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-GitlabHost'
+          Value: !Sub '${AWS::StackName}-JenkinsHost'
     DependsOn: VolumeData
   VolumeData:
     Type: 'AWS::EC2::Volume'
@@ -375,7 +340,7 @@ Resources:
       Size: 500
       Encrypted: true
       AvailabilityZone: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPublicAZA'
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
       Tags: 
         - Key: PLATFORM
           Value: 
@@ -384,13 +349,13 @@ Resources:
           Value: !Sub '${AWS::StackName}-VolumeData'
 Outputs: 
   InstanceId: 
-    Description: "InstanceId of the newly created Gitlab instance"
-    Value: !Ref GitlabHost
+    Description: "InstanceId of the newly created Jenkins instance"
+    Value: !Ref JenkinsHost
     Export:
       Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
     Description: "Public DNS address of the internet facing ELB"
-    Value: !GetAtt LoadBalancerGitlab.DNSName
+    Value: !Sub '${LoadBalancerJenkins.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
       
