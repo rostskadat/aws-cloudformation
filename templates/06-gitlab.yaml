@@ -331,6 +331,25 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
+            '/root/other_valuable_settings.json':
+              content: |
+                { 
+                  "default_project_visibility": "public",
+                  "email_author_in_body": true,
+                  "gravatar_enabled": false,
+                  "help_page_hide_commercial_content": true,
+                  "html_emails_enabled": true,
+                  "import_sources": [],
+                  "password_authentication_enabled_for_git": false,
+                  "repository_checks_enabled": true,
+                  "restricted_visibility_levels" : [ "private", "internal" ],
+                  "signup_enabled": false,
+                  
+                }
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+              
           commands:
             '01_gitlab_configure_url':
               command: !Sub 'sudo /root/gitlab_configure_url.sh ${LoadBalancerGitlab.DNSName}'
