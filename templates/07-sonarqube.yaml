@@ -28,12 +28,19 @@ Metadata:
       - ParentVpcStack
       - ParentLDAPStack
       - ParentDBStack
-      - OpenLDAPAdminPassword
     - Label: 
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - SonarqubeInstanceType
+      - InstanceType
+    - Label: 
+        default: 'LDAP Parameter'
+      Parameters:
+      - LDAPManagerPassword
+    - Label:
+        default: 'DB Parameters'
+      Parameters:
+      - DBMasterUserPassword
     - Label:
         default: 'Sonarqube Parameters'
       Parameters:
@@ -54,12 +61,12 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the DB stack'
-  OpenLDAPAdminPassword: 
-    Description: 'The OpenLDAP Admin password'
+  LDAPManagerPassword: 
+    Description: 'The LDAP Manager password'
     Type: String
     NoEcho: true
     MinLength: 3
-  DBAdminPassword: 
+  DBMasterUserPassword: 
     Description: 'The DB Admin password'
     Type: String
     NoEcho: true
@@ -67,7 +74,7 @@ Parameters:
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
-  SonarqubeInstanceType:
+  InstanceType:
     Description: 'The Sonarqube instance type'
     Type: String
     Default: 'c4.large'    
@@ -76,38 +83,6 @@ Parameters:
     Type: String
     MinLength: 1
     NoEcho: true
-Mappings:
-  RegionMap:
-    'ap-south-1':
-      AMI: 'ami-76d6f519'
-    'eu-west-3':
-      AMI: 'ami-969c2deb'
-    'eu-west-2':
-      AMI: 'ami-a36f8dc4'
-    'eu-west-1':
-      AMI: 'ami-ca0135b3'
-    'ap-northeast-2':
-      AMI: 'ami-c10fa6af'
-    'ap-northeast-1':
-      AMI: 'ami-92df37ed'
-    'sa-east-1':
-      AMI: 'ami-3885d854'
-    'ca-central-1':
-      AMI: 'ami-338a0a57'
-    'ap-southeast-1':
-      AMI: 'ami-de90a5a2'
-    'ap-southeast-2':
-      AMI: 'ami-423bec20'
-    'eu-central-1':
-      AMI: 'ami-9a91b371'
-    'us-east-1':
-      AMI: 'ami-14c5486b'
-    'us-east-2':
-      AMI: 'ami-922914f7'
-    'us-west-1':
-      AMI: 'ami-25110f45'
-    'us-west-2':
-      AMI: 'ami-e251209a'    
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
@@ -223,7 +198,7 @@ Resources:
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
         # , InstallSonarqube
         configSets: 
-          default: [ Bootstrap, InstallSonarqube ]
+          default: [ Bootstrap, BootstrapSonarqube, InstallSonarqube ]
         Bootstrap:
           packages:
             yum:
@@ -254,11 +229,6 @@ Resources:
               mode: '000744'
               owner: 'root'
               group: 'root'
-            '/etc/yum.repos.d/sonar.repo':
-              source: 'http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo'
-              mode: "000644"
-              owner: "root"
-              group: "root"
           commands:
             '01_install_aws_inspector': 
               command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
@@ -268,21 +238,69 @@ Resources:
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
               command: "sudo /root/tag_root_volume.sh"
-            '05_remove_jdk7':
-              command: 'sudo yum remove -y java-1.7.0-openjdk'
           services:
             sysvinit:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
+        BootstrapSonarqube:
+          packages:
+            yum: 
+              mysql56: []
+              py-bcrypt: []
+              java-1.8.0-openjdk: []
+          files: 
+            '/etc/yum.repos.d/sonar.repo':
+              source: 'http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo'
+              mode: "000644"
+              owner: "root"
+              group: "root"
+            '/root/create_fs.sh': 
+              content: |
+                #!/bin/bash -x
+                mkfs -t ext4 /dev/xvdb
+                MNT=/mnt/sonar
+                [ ! -d $MNT ] && mkdir $MNT
+                mount /dev/xvdb $MNT
+                echo "/dev/xvdb $MNT ext4 defaults,nofail 0 2" > /etc/fstab
+                [ ! -d $MNT/opt ] && mkdir $MNT/opt
+                [ ! -d /opt     ] && mkdir -p /opt; ln -s $MNT/opt /opt/sonar
+              mode: "000700"
+              owner: "root"
+              group: "root"
+          commands:
+            '01_alternatives_java':
+              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
+            '02_alternatives_python':
+              command: 'sudo /usr/sbin/alternatives --set python /usr/bin/python2.6'
+            '03_remove_jdk7':
+              command: 'sudo yum remove -y java-1.7.0-openjdk'
+            '04_create_fs':
+              command: 'sudo /root/create_fs.sh'              
         InstallSonarqube: 
           packages:
             yum:
-              mysql56: []
-              java-1.8.0-openjdk: []
               sonar: []
-              py-bcrypt: []
           files:
+            '/opt/sonar/conf/sonar.properties': 
+              content: !Sub |
+                sonar.jdbc.url=jdbc:mysql://%address%:%port%/sonarqube?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true&useConfigs=maxPerformance&useSSL=false
+                sonar.jdbc.username=sonarqube
+                sonar.jdbc.password=sonarqube
+                sonar.updatecenter.activate=true
+                sonar.forceAuthentication=true
+                sonar.security.realm=LDAP
+                ldap.url=ldap://%ldapHostname%:%ldapPort%
+                ldap.bindDn=%managerDN%
+                ldap.bindPassword=%managerPassword%
+                ldap.authentication=simple
+                ldap.user.baseDn=ou=People,%rootDC%
+                ldap.user.request=(&(objectClass=person)(uid={login}))
+                ldap.user.realNameAttribute=displayName
+                ldap.user.emailAttribute=mail
+              mode: '000600'
+              owner: 'sonar'
+              group: 'sonar'
             '/root/sonarqube_createdb.sh':
               content: |
                 #!/bin/bash
@@ -290,10 +308,10 @@ Resources:
                 port=$2
                 username=$3
                 password=$4
-                [ -z "$address" ] && echo "Invalid address" && exit
-                [ -z "$port" ] && echo "Invalid port" && exit
-                [ -z "$username" ] && echo "Invalid username" && exit
-                [ -z "$password" ] && echo "Invalid password" && exit
+                [ -z "$address" ] && echo "Invalid address" && exit 1
+                [ -z "$port" ] && echo "Invalid port" && exit 1
+                [ -z "$username" ] && echo "Invalid username" && exit 1
+                [ -z "$password" ] && echo "Invalid password" && exit 1
                 mysql -h $address -P $port --user=$username --password=$password <<EOF
                 DROP DATABASE IF EXISTS sonarqube;
                 CREATE DATABASE sonarqube CHARACTER SET utf8 COLLATE utf8_bin;
@@ -309,13 +327,15 @@ Resources:
                 #!/bin/bash
                 ldapHostname=$1
                 ldapPort=$2
-                domainComponent=$3
-                password=$4
-                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit
-                [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit
-                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
-                [ -z "$password" ] && echo "Invalid password" && exit
-                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%domainComponent%/$domainComponent/;s/%password%/$password/" /opt/sonar/conf/sonar.properties
+                rootDC=$3
+                managerDN="$4"
+                managerPassword=$5
+                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit 1
+                [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit 1
+                [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
+                [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1
+                [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
+                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%rootDC%/$rootDC/;s/%managerDN%/$managerDN/;s/%managerPassword%/$managerPassword/" /opt/sonar/conf/sonar.properties
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -325,10 +345,9 @@ Resources:
                 address=$1
                 port=$2
                 password=$3
-                [ -z "$address" ] && echo "Invalid address" && exit
-                [ -z "$port" ] && echo "Invalid port" && exit
-                [ -z "$password" ] && echo "Invalid password" && exit
-                
+                [ -z "$address" ] && echo "Invalid address" && exit 1
+                [ -z "$port" ] && echo "Invalid port" && exit 1
+                [ -z "$password" ] && echo "Invalid password" && exit 1
                 while : ; do 
                     table_exists=$(mysql -h $address -P $port --user=sonarqube --password=sonarqube --database=sonarqube --execute="SELECT * FROM sonarqube.users WHERE login = 'admin';" --batch --skip-column-names 2> /dev/null | wc -l);
                     [ $table_exists -eq 0 ] || break;
@@ -342,25 +361,6 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/opt/sonar/conf/sonar.properties': 
-              content: !Sub |
-                sonar.jdbc.url=jdbc:mysql://%address%:%port%/sonarqube?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true&useConfigs=maxPerformance&useSSL=false
-                sonar.jdbc.username=sonarqube
-                sonar.jdbc.password=sonarqube
-                sonar.updatecenter.activate=true
-                sonar.forceAuthentication=true
-                sonar.security.realm=LDAP
-                ldap.url=ldap://%ldapHostname%:%ldapPort%
-                ldap.bindDn=cn=Manager,dc=%domainComponent%,dc=local
-                ldap.bindPassword=%password%
-                ldap.authentication=simple
-                ldap.user.baseDn=ou=People,dc=%domainComponent%,dc=local
-                ldap.user.request=(&(objectClass=person)(uid={login}))
-                ldap.user.realNameAttribute=displayName
-                ldap.user.emailAttribute=mail
-              mode: '000600'
-              owner: 'sonar'
-              group: 'sonar'
             '/opt/sonar/extensions/plugins/sonar-ldap-plugin-2.2.0.608.jar':
               source: 'https://sonarsource.bintray.com/Distribution/sonar-ldap-plugin/sonar-ldap-plugin-2.2.0.608.jar'
               mode: '000644'
@@ -420,36 +420,35 @@ Resources:
               owner: 'root'
               group: 'root'
           commands:
-            '01_alternatives_java':
-              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
-            '02_alternatives_python':
-              command: 'sudo /usr/sbin/alternatives --set python /usr/bin/python2.6'
-            '03_sonarqube_createdb':
+            '01_chown':
+              command: 'sudo chown -R sonar.sonar /mnt/sonar'
+            '02_sonarqube_createdb':
               command: !Join
                 - ' '
-                - - !Sub 'sudo /root/sonarqube_createdb.sh'
+                - - 'sudo /root/sonarqube_createdb.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
-                  - !Sub '${DBAdminPassword}'
-            '04_sonarqube_configure_ldap':
+                  - !Sub '${DBMasterUserPassword}'
+            '03_sonarqube_configure_ldap':
               command: !Join
                 - ' '
-                - - !Sub 'sudo /root/sonarqube_configure_ldap.sh'
+                - - 'sudo /root/sonarqube_configure_ldap.sh'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPHostname'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                  - !Sub '${OpenLDAPAdminPassword}'
-            '05_sonarqube_start':
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                  - !Sub '${LDAPManagerPassword}'
+            '04_sonarqube_start':
               command: 'sudo service sonar start'
-            '06_sonarqube_change_password':
+            '05_sonarqube_change_password':
               command: !Join
                 - ' '
                 - - 'sudo /root/sonarqube_change_password.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - !Sub '${SonarqubeAdminPassword}'
-            '07_sonarqube_start':
+            '06_sonarqube_start':
               command: 'sudo service sonar restart'
           services: 
             sysvinit: 
@@ -461,8 +460,8 @@ Resources:
       InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref SonarqubeInstanceType
+      ImageId: 'ami-c51e3eb6'
+      InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
@@ -492,6 +491,7 @@ Resources:
     Properties:
       Size: 500
       Encrypted: true
+      VolumeType: gp2
       AvailabilityZone: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
       Tags: 
@@ -511,4 +511,3 @@ Outputs:
     Value: !Sub '${LoadBalancerSonarqube.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
-      

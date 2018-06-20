@@ -33,7 +33,7 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - JenkinsInstanceType
+      - InstanceType
     - Label:
         default: 'Jenkins Parameters'
       Parameters:
@@ -58,7 +58,7 @@ Parameters:
     Description: "The Jenkins instance Key Pair"
     Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
-  JenkinsInstanceType:
+  InstanceType:
     Description: 'The Jenkins instance type'
     Type: String
     Default: 'c4.large'    
@@ -99,6 +99,8 @@ Mappings:
       AMI: 'ami-25110f45'
     'us-west-2':
       AMI: 'ami-e251209a'    
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
   #
   # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
@@ -212,7 +214,7 @@ Resources:
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
         # , InstallJenkins
         configSets: 
-          default: [ Bootstrap, InstallJenkins ]
+          default: [ Bootstrap, BootstrapJenkins, InstallJenkins ]
         Bootstrap:
           packages:
             yum:
@@ -243,11 +245,6 @@ Resources:
               mode: '000744'
               owner: 'root'
               group: 'root'
-            '/etc/yum.repos.d/jenkins.repo':
-              source: 'http://pkg.jenkins-ci.org/redhat-stable/jenkins.repo'
-              mode: "000644"
-              owner: "root"
-              group: "root"
           commands:
             '01_install_aws_inspector': 
               command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
@@ -257,20 +254,32 @@ Resources:
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
               command: "sudo /root/tag_root_volume.sh"
-            '05_remove_jdk7':
-              command: 'sudo yum remove -y java-1.7.0-openjdk'
-            '06_rpm_import':
-              command: 'sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key'
           services:
             sysvinit:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
+        BootstrapJenkins:
+          packages:
+            yum: 
+              py-bcrypt: []
+              java-1.8.0-openjdk: []
+          files: 
+            '/etc/yum.repos.d/jenkins.repo':
+              source: 'http://pkg.jenkins-ci.org/redhat-stable/jenkins.repo'
+              mode: "000644"
+              owner: "root"
+              group: "root"
+          commands:
+            '01_alternatives_java':
+              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
+            '02_remove_jdk7':
+              command: 'sudo yum remove -y java-1.7.0-openjdk'
+            '03_rpm_import':
+              command: 'sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key'
         InstallJenkins: 
           packages:
             yum:
-              py-bcrypt: []
-              java-1.8.0-openjdk: []
               jenkins: []
           files:
             '/root/ldap_config.xml':
@@ -287,7 +296,7 @@ Resources:
                       <groupMembershipStrategy class="jenkins.security.plugins.ldap.FromGroupSearchLDAPGroupMembershipStrategy">
                       <filter></filter>
                       </groupMembershipStrategy>
-                      <managerDN>${ParentLDAPStack}-RootDN</managerDN>
+                      <managerDN>${ParentLDAPStack}-ManagerDN</managerDN>
                       <managerPasswordSecret>{AQAAABAAAAAQxznUHu2iyS43uaGiIZ2amxTC+C2NqfGQ+FsJftAIGsU=}</managerPasswordSecret>
                       <displayNameAttributeName>displayName</displayNameAttributeName>
                       <mailAddressAttributeName>mail</mailAddressAttributeName>
@@ -332,7 +341,6 @@ Resources:
               command: !Sub 'java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s "http://localhost:8080/" -auth "admin:${JenkinsAdminPassword}" install-plugin $(cat /root/plugins.txt | tr "\n" " ")'
             '05_jenkins_restart':
               command: 'sudo service jenkins restart'
-              
           services: 
             sysvinit: 
               jenkins: 
@@ -343,9 +351,9 @@ Resources:
       InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref JenkinsInstanceType
-      KeyName: !Ref 'KeyName'
+      ImageId: 'ami-c51e3eb6'
+      InstanceType: !Ref InstanceType
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
         - !Ref SecurityGroupJenkins
@@ -374,6 +382,7 @@ Resources:
     Properties:
       Size: 500
       Encrypted: true
+      VolumeType: gp2
       AvailabilityZone: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
       Tags: 

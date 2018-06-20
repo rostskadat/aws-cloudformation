@@ -12,7 +12,6 @@
 #
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
-# - Should configure the filestore in artifactory https://www.jfrog.com/confluence/display/RTF/Configuring+the+Filestore 
 # - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
 # - Should provide alert when the platform is unhealthy
 #
@@ -27,23 +26,24 @@ Metadata:
       Parameters:
       - ParentVpcStack
       - ParentLDAPStack
-      - OpenLDAPAdminPassword
+      - ParentDBStack
     - Label: 
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - ArtifactoryInstanceType
+      - InstanceType
+    - Label: 
+        default: 'LDAP Parameter'
+      Parameters:
+      - LDAPManagerPassword
+    - Label:
+        default: 'DB Parameters'
+      Parameters:
+      - DBMasterUserPassword
     - Label:
         default: 'Artifactory Parameters'
       Parameters:
       - ArtifactoryAdminPassword
-    - Label:
-        default: 'Artifactory DB Parameters'
-      Parameters:
-      - ArtifactoryDBInstanceType
-      - ArtifactoryDBName
-      - ArtifactoryDBAdminUsername
-      - ArtifactoryDBAdminPassword
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Artifactory will reside"
@@ -55,72 +55,33 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the LDAP stack'
-  OpenLDAPAdminPassword: 
-    Description: 'The OpenLDAP Admin password'
+  ParentDBStack:
+    Description: 'Enter the name of the DB Stack'
     Type: String
-    NoEcho: true
-    MinLength: 3
-  KeyName: 
-    Description: "Optional Key Pair to connect through SSH"
-    Type: "AWS::EC2::KeyPair::KeyName"
-  ArtifactoryInstanceType:
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the DB stack'
+  InstanceType:
     Description: 'The Artifactory instance type'
     Type: String
     Default: 'c4.large'    
+  KeyName: 
+    Description: "Optional Key Pair to connect through SSH"
+    Type: "AWS::EC2::KeyPair::KeyName"
+  LDAPManagerPassword: 
+    Description: 'The LDAP Manager password'
+    Type: String
+    NoEcho: true
+    MinLength: 3
+  DBMasterUserPassword: 
+    Description: 'The DB Admin password'
+    Type: String
+    NoEcho: true
+    MinLength: 3
   ArtifactoryAdminPassword: 
     Description: 'The Artifactory Admin password'
     Type: String
     MinLength: 1
     NoEcho: true
-  ArtifactoryDBInstanceType:
-    Description: 'The Artifactory DB instance type'
-    Type: String
-    Default: 'db.t2.small'    
-  ArtifactoryDBName:
-    Description: 'The Artifactory DB database name'
-    Type: String
-    Default: 'artifactorydb'    
-  ArtifactoryDBAdminUsername: 
-    Description: "The Artifactory DB Admin username"
-    Type: String
-    Default: 'admin'
-  ArtifactoryDBAdminPassword: 
-    Description: "The Artifactory DB Admin password"
-    Type: String
-    MinLength: 1
-    NoEcho: true
-Mappings:
-  RegionMap:
-    'ap-south-1':
-      AMI: 'ami-76d6f519'
-    'eu-west-3':
-      AMI: 'ami-969c2deb'
-    'eu-west-2':
-      AMI: 'ami-a36f8dc4'
-    'eu-west-1':
-      AMI: 'ami-ca0135b3'
-    'ap-northeast-2':
-      AMI: 'ami-c10fa6af'
-    'ap-northeast-1':
-      AMI: 'ami-92df37ed'
-    'sa-east-1':
-      AMI: 'ami-3885d854'
-    'ca-central-1':
-      AMI: 'ami-338a0a57'
-    'ap-southeast-1':
-      AMI: 'ami-de90a5a2'
-    'ap-southeast-2':
-      AMI: 'ami-423bec20'
-    'eu-central-1':
-      AMI: 'ami-9a91b371'
-    'us-east-1':
-      AMI: 'ami-14c5486b'
-    'us-east-2':
-      AMI: 'ami-922914f7'
-    'us-west-1':
-      AMI: 'ami-25110f45'
-    'us-west-2':
-      AMI: 'ami-e251209a'    
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
@@ -225,86 +186,6 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupArtifactory'
-  SecurityGroupDB:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access the Artifactory DB'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - SourceSecurityGroupId:
-          !Ref 'SecurityGroupArtifactory'
-        FromPort: 3306
-        ToPort: 3306
-        IpProtocol: tcp
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupDB'
-  DBSubnetGroupDB:
-    Type: "AWS::RDS::DBSubnetGroup"
-    Properties: 
-      DBSubnetGroupDescription: 'The subnet where the Artifactory DB reside'
-      DBSubnetGroupName: !Sub '${AWS::StackName}-DBSubnetGroupDB'
-      SubnetIds:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
-      Tags:
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-DBSubnetGroupDB'
-  #
-  # The backend database for artifactory
-  #
-  DBParameterGroupDB:
-    Type: 'AWS::RDS::DBParameterGroup'
-    Properties: 
-      Description: 'Parameters necessary for Artifactory DB'
-      Family: 'mysql5.6'
-      # These parameters are from https://www.jfrog.com/confluence/display/RTF/MySQL
-      Parameters: { "max_allowed_packet": 8388608, "tmp_table_size": 536870912, "max_heap_table_size": 536870912, "innodb_log_file_size": 268435456 }
-      Tags:
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-DBParameterGroupDB'
-  ArtifactoryDB: 
-    Type: 'AWS::RDS::DBInstance'
-    Properties:
-      AllocatedStorage: 20
-      AutoMinorVersionUpgrade: true
-      AvailabilityZone: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
-      BackupRetentionPeriod: 7
-      CopyTagsToSnapshot: true
-      DBInstanceClass: !Ref ArtifactoryDBInstanceType
-      DBName: !Ref ArtifactoryDBName
-      DBParameterGroupName: !Ref DBParameterGroupDB
-      DBSubnetGroupName: !Ref DBSubnetGroupDB
-      Engine: mysql
-      EngineVersion: '5.6.39'
-      MasterUsername: !Ref ArtifactoryDBAdminUsername
-      MasterUserPassword: !Ref ArtifactoryDBAdminPassword
-      PreferredBackupWindow: "01:00-03:00"
-      PreferredMaintenanceWindow: "Sun:03:01-Sun:05:00"
-      MultiAZ: false
-      StorageEncrypted: true
-      StorageType: gp2
-      VPCSecurityGroups:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        - !Ref SecurityGroupDB
-      Tags:
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-ArtifactoryDB'
-    
   #
   # Ok let's configure the main host then
   #
@@ -316,7 +197,7 @@ Resources:
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
         # InstallArtifactory, InstallArtifactoryApps, StartArtifactory 
         configSets: 
-          default: [ Bootstrap, InstallArtifactory ]
+          default: [ Bootstrap, BootstrapArtifactory, InstallArtifactory ]
         Bootstrap:
           packages:
             yum:
@@ -347,11 +228,6 @@ Resources:
               mode: '000744'
               owner: 'root'
               group: 'root'
-            '/etc/yum.repos.d/bintray-jfrog-artifactory-rpms.repo':
-              source: 'https://bintray.com/jfrog/artifactory-rpms/rpm'
-              mode: "000644"
-              owner: "root"
-              group: "root"
           commands:
             '01_install_aws_inspector': 
               command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
@@ -361,43 +237,100 @@ Resources:
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
               command: "sudo /root/tag_root_volume.sh"
-            '05_remove_jdk7':
-              command: 'sudo yum remove -y java-1.7.0-openjdk'
           services:
             sysvinit:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
-        InstallArtifactory: 
+        BootstrapArtifactory:
           packages:
-            yum:
+            yum: 
               mysql56: []
               java-1.8.0-openjdk: []
               mysql-connector-java: []
+          files: 
+            '/etc/yum.repos.d/bintray-jfrog-artifactory-rpms.repo':
+              source: 'https://bintray.com/jfrog/artifactory-rpms/rpm'
+              mode: "000644"
+              owner: "root"
+              group: "root"
+            '/root/create_fs.sh': 
+              content: |
+                #!/bin/bash -x
+                mkfs -t ext4 /dev/xvdb
+                MNT=/mnt/artifactory
+                [ ! -d $MNT ] && mkdir $MNT
+                mount /dev/xvdb $MNT
+                echo "/dev/xvdb $MNT ext4 defaults,nofail 0 2" > /etc/fstab
+                [ ! -d $MNT/etc ] && mkdir $MNT/etc
+                [ ! -d $MNT/opt ] && mkdir $MNT/opt
+                [ ! -d $MNT/var ] && mkdir $MNT/var
+                [ ! -d /etc/opt ] && mkdir -p /etc/opt; ln -s $MNT/etc /etc/opt/jfrog
+                [ ! -d /opt     ] && mkdir -p /opt;     ln -s $MNT/opt /opt/jfrog
+                [ ! -d /var/opt ] && mkdir -p /var/opt; ln -s $MNT/var /var/opt/jfrog
+              mode: "000700"
+              owner: "root"
+              group: "root"
+          commands:
+            '01_remove_jdk7':
+              command: 'sudo yum remove -y java-1.7.0-openjdk'
+            '02_alternatives':
+              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
+            '03_create_fs':
+              command: 'sudo /root/create_fs.sh'              
+        InstallArtifactory: 
+          packages:
+            yum:
               jfrog-artifactory-oss: []
           files:
             '/etc/opt/jfrog/artifactory/db.properties':
-              content: !Sub |
+              content: |
                 type=mysql
                 driver=com.mysql.jdbc.Driver
-                url=jdbc:mysql://${ArtifactoryDB.Endpoint.Address}:${ArtifactoryDB.Endpoint.Port}/${ArtifactoryDBName}?characterEncoding=UTF-8&elideSetAutoCommits=true
+                url=jdbc:mysql://%address%:%port%/artifactory?characterEncoding=UTF-8&elideSetAutoCommits=true
                 username=artifactory
-                password=password
+                password=artifactory
               mode: '000740'
               owner: 'artifactory'
               group: 'artifactory'
+            '/root/ldap_settings.yaml': 
+              content: |
+                security:
+                  ldapSettings:
+                    OpenLDAP:
+                      emailAttribute: mail
+                      ldapPoisoningProtection: true
+                      ldapUrl: 'ldap://%ldapHostname%:%ldapPort%'
+                      search:
+                        managerDn: '%managerDN%'
+                        managerPassword: %managerPassword%
+                        searchBase: ou=People,%rootDC%
+                        searchFilter: (uid={0})
+                        searchSubTree: true
+                      allowUserToAccessProfile: true
+                      autoCreateUser: true
+                      enabled: true
+              mode: '000600'
+              owner: 'root'
+              group: 'root'
             '/root/artifactory_createdb.sh':
               content: !Sub |
                 #!/bin/bash
-                username=$1
-                password=$2
-                [ -z "$username" ] && echo "Invalid username" && exit
-                [ -z "$password" ] && echo "Invalid password" && exit
-                mysql -h ${ArtifactoryDB.Endpoint.Address} -P ${ArtifactoryDB.Endpoint.Port} --user=$username --password=$password <<EOF
-                -- CREATE DATABASE ${ArtifactoryDBName} CHARACTER SET utf8 COLLATE utf8_bin;
-                GRANT ALL on ${ArtifactoryDBName}.* TO 'artifactory'@'%' IDENTIFIED BY 'password';
+                address=$1
+                port=$2
+                username=$3
+                password=$4
+                [ -z "$address" ] && echo "Invalid address" && exit 1
+                [ -z "$port" ] && echo "Invalid port" && exit 1
+                [ -z "$username" ] && echo "Invalid username" && exit 1
+                [ -z "$password" ] && echo "Invalid password" && exit 1
+                mysql -h $address -P $port --user=$username --password=$password <<EOF
+                DROP DATABASE IF EXISTS artifactory;
+                CREATE DATABASE artifactory CHARACTER SET utf8 COLLATE utf8_bin;
+                GRANT ALL on artifactory.* TO 'artifactory'@'%' IDENTIFIED BY 'artifactory';
                 FLUSH PRIVILEGES;
                 EOF
+                sed -ibckp -E "s/%address%/$address/;s/%port%/$port/" /etc/opt/jfrog/artifactory/db.properties
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -406,8 +339,8 @@ Resources:
                 #!/bin/bash
                 oldPassword="$1"
                 newPassword="$2"
-                [ -z "$oldPassword" ] && echo "Invalid old password" && exit
-                [ -z "$newPassword" ] && echo "Invalid new password" && exit
+                [ -z "$oldPassword" ] && echo "Invalid old password" && exit 1
+                [ -z "$newPassword" ] && echo "Invalid new password" && exit 1
                 API_URL="http://localhost:8081/artifactory/api"
                 header="Content-type: application/json"
                 data='{ "userName":"admin", "oldPassword":"'"$oldPassword"'", "newPassword1":"'"$newPassword"'", "newPassword2":"'"$newPassword"'"}'
@@ -415,7 +348,7 @@ Resources:
                 echo -n "Changing default password for user admin"
                 while (true); do
                         result=$(curl -s --user "admin:$oldPassword" -H "$header" -d "$data" -X POST "$url")
-                        [ $(echo -n "$result" | grep -c "Password has been successfully changed") -gt 0 ] && exit
+                        [ $(echo -n "$result" | grep -c "Password has been successfully changed") -gt 0 ] && break
                         echo -n "."
                         sleep 2
                 done
@@ -425,47 +358,41 @@ Resources:
             '/root/artifactory_configure_ldap.sh':
               content: |
                 #!/bin/bash
-                artifactoryPassword="$1"
-                ldapUrl="$2"
-                domainComponent="$3"
-                ldapPassword="$4"
-                [ -z "$artifactoryPassword" ] && echo "Invalid artifactoryPassword" && exit
-                [ -z "$ldapUrl" ] && echo "Invalid ldapUrl" && exit
-                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
-                [ -z "$ldapPassword" ] && echo "Invalid ldap password" && exit
+                ldapHostname=$1
+                ldapPort=$2
+                rootDC=$3
+                managerDN=$4
+                managerPassword=$5
+                adminPassword=$6
+                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit 1
+                [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit 1
+                [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
+                [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1 
+                [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
+                [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
                 
                 API_URL="http://localhost:8081/artifactory/api"
                 header="Content-Type: application/yaml"
                 url="$API_URL/system/configuration"
-                echo "Configuring LDAP ($ldapUrl w/ $domainComponent) ..."
-                cat > /root/ldap_settings.yaml <<EOF
-                security:
-                  ldapSettings:
-                    OpenLDAP:
-                      emailAttribute: mail
-                      ldapPoisoningProtection: true
-                      ldapUrl: '$ldapUrl'
-                      search:
-                        managerDn: 'cn=Manager,dc=$domainComponent,dc=local'
-                        managerPassword: $ldapPassword
-                        searchBase: ou=People
-                        searchFilter: (uid={0})
-                        searchSubTree: true
-                      allowUserToAccessProfile: true
-                      autoCreateUser: true
-                      enabled: true
-                EOF
-                curl -s --user "admin:$artifactoryPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
+                echo "Configuring LDAP ($ldapHostname:$ldapPort w/ $rootDC) ..."
+                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%managerDN%/$managerDN/;s/%rootDC%/$rootDC/;" /root/ldap_settings.yaml
+                curl -s --user "admin:$adminPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
               mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
-            '01_artifactory_createdb':
-              command: !Sub 'sudo /root/artifactory_createdb.sh ${ArtifactoryDBAdminUsername} ${ArtifactoryDBAdminPassword}'
-            '02_alternatives':
-              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'              
-            '03_create_symlink_for_mysql':
+            '01_create_symlink_for_mysql':
               command: 'sudo ln -s /usr/share/java/mysql-connector-java.jar /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
+            '02_artifactory_createdb':
+              command: !Join
+                - ' '
+                - - 'sudo /root/artifactory_createdb.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+                  - !Sub '${DBMasterUserPassword}'
+            '03_chown':
+              command: 'sudo chown -R artifactory.artifactory /mnt/artifactory'
             '04_artifactory_start':
               command: 'sudo service artifactory start'
             '05_artifactory_change_password': 
@@ -474,10 +401,12 @@ Resources:
               command: !Join
                 - ' '
                 - - 'sudo /root/artifactory_configure_ldap.sh'
-                  - !Sub '${ArtifactoryAdminPassword}'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPUrl'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPHostname'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                  - !Sub '${OpenLDAPAdminPassword}'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                  - !Sub '${LDAPManagerPassword}'
+                  - !Sub '${ArtifactoryAdminPassword}'
             '07_artifactory_restart': 
               command: 'sudo service artifactory restart'
           services: 
@@ -490,8 +419,8 @@ Resources:
       InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref ArtifactoryInstanceType
+      ImageId: 'ami-c51e3eb6'
+      InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
@@ -516,12 +445,12 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-ArtifactoryHost'
     DependsOn: VolumeData
-    DependsOn: ArtifactoryDB
   VolumeData:
     Type: 'AWS::EC2::Volume'
     Properties:
       Size: 500
       Encrypted: true
+      VolumeType: gp2
       AvailabilityZone: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
       Tags: 

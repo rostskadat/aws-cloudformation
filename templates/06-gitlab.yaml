@@ -26,12 +26,15 @@ Metadata:
       Parameters:
       - ParentVpcStack
       - ParentLDAPStack
-      - OpenLDAPAdminPassword
     - Label:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - GitlabInstanceType
+      - InstanceType
+    - Label: 
+        default: 'LDAP Parameter'
+      Parameters:
+      - LDAPManagerPassword
     - Label:
         default: 'Gitlab Parameters'
       Parameters:
@@ -48,18 +51,18 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the LDAP stack'
-  OpenLDAPAdminPassword: 
-    Description: 'The OpenLDAP Admin password'
-    Type: String
-    NoEcho: true
-    MinLength: 3
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
-  GitlabInstanceType:
+  InstanceType:
     Description: 'The Gitlab instance type'
     Type: String
     Default: 'c4.large'    
+  LDAPManagerPassword: 
+    Description: 'The LDAP Manager password'
+    Type: String
+    NoEcho: true
+    MinLength: 3
   GitlabAdminEmail: 
     Description: 'The Gitlab Admin email'
     Type: String
@@ -69,38 +72,6 @@ Parameters:
     Type: String
     Default: ''
     NoEcho: true
-Mappings:
-  RegionMap:
-    'ap-south-1':
-      AMI: 'ami-76d6f519'
-    'eu-west-3':
-      AMI: 'ami-969c2deb'
-    'eu-west-2':
-      AMI: 'ami-a36f8dc4'
-    'eu-west-1':
-      AMI: 'ami-ca0135b3'
-    'ap-northeast-2':
-      AMI: 'ami-c10fa6af'
-    'ap-northeast-1':
-      AMI: 'ami-92df37ed'
-    'sa-east-1':
-      AMI: 'ami-3885d854'
-    'ca-central-1':
-      AMI: 'ami-338a0a57'
-    'ap-southeast-1':
-      AMI: 'ami-de90a5a2'
-    'ap-southeast-2':
-      AMI: 'ami-423bec20'
-    'eu-central-1':
-      AMI: 'ami-9a91b371'
-    'us-east-1':
-      AMI: 'ami-14c5486b'
-    'us-east-2':
-      AMI: 'ami-922914f7'
-    'us-west-1':
-      AMI: 'ami-25110f45'
-    'us-west-2':
-      AMI: 'ami-e251209a'    
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
@@ -216,7 +187,7 @@ Resources:
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
         # InstallGitlab, InstallGitlabApps, StartGitlab 
         configSets: 
-          default: [ Bootstrap, InstallGitlab ]
+          default: [ Bootstrap, BootstrapGitlab, InstallGitlab ]
         Bootstrap:
           packages:
             yum:
@@ -261,91 +232,128 @@ Resources:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
-        InstallGitlab: 
+        BootstrapGitlab:
           packages:
-            yum:
+            yum: 
               postfix: []
               policycoreutils-python: []
-          files:
+          files: 
             '/root/add_gitlab_repo.sh':
               source: 'https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab_change_password.sh':
-              content: !Sub |
-                #!/bin/bash
-                email=$1
-                password=$2
-                [ -z "$email" ] && echo "Invalid email" && exit
-                [ -z "$password" ] && echo "Invalid password" && exit
-                # Changing the default password
-                gitlab-rake gitlab:setup GITLAB_ROOT_PASSWORD="$password" GITLAB_ROOT_EMAIL="$email" < <(echo yes)
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/gitlab_configure_ldap.sh':
-              content: !Sub |
-                #!/bin/bash
-                ldapHostname="$1"
-                domainComponent="$2"
-                ldapPassword="$3"
-                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit
-                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
-                [ -z "$ldapPassword" ] && echo "Invalid ldap password" && exit
-                echo "Configuring LDAP ($ldapHostname w/ $domainComponent) ..."
-                cat >> /etc/gitlab/gitlab.rb <<EOF
+            '/root/create_fs.sh': 
+              content: |
+                #!/bin/bash -x
+                mkfs -t ext4 /dev/xvdb
+                MNT=/mnt/gitlab
+                [ ! -d $MNT ] && mkdir $MNT
+                mount /dev/xvdb $MNT
+                echo "/dev/xvdb $MNT ext4 defaults,nofail 0 2" > /etc/fstab
+                [ ! -d $MNT/opt ] && mkdir $MNT/opt
+                [ ! -d /opt     ] && mkdir -p /opt; ln -s $MNT/opt /opt/gitlab
+              mode: "000700"
+              owner: "root"
+              group: "root"
+          commands:
+            '01_add_gitlab_repo':
+              command: 'sudo /root/add_gitlab_repo.sh'
+            '02_create_fs':
+              command: 'sudo /root/create_fs.sh'              
+          services:
+            sysvinit:
+              postfix: 
+                enabled: true
+                ensureRunning: true
+        InstallGitlab: 
+          packages:
+            yum:
+              gitlab-ee: []
+          files:
+            '/etc/gitlab/gitlab.rb':
+              content: |
+                external_url 'http://%external_url%'
                 gitlab_rails['ldap_enabled'] = true
                 gitlab_rails['ldap_servers'] = {
                   'main' => { 
                     'label' => 'OpenLDAP',
-                    'host' => '$ldapHostname',
-                    'port' => 389,
+                    'host' => '%ldapHostname%',
+                    'port' => %ldapPort%,
                     'uid' => 'uid',
-                    'bind_dn' => 'cn=Manager,dc=$domainComponent,dc=local',
-                    'password' => '$ldapPassword',
+                    'bind_dn' => '%managerDN%',
+                    'password' => '%managerPassword%',
                     'encryption' => 'plain',
                     'verify_certificates' => false,
                     'active_directory' => false,
                     'allow_username_or_email_login' => false,
                     'lowercase_usernames' => false,
                     'block_auto_created_users' => false,
-                    'base' => 'OU=People,DC=allfundsbank,DC=local',
+                    'base' => 'ou=People,%rootDC%',
                     'user_filter' => '(objectclass=person)'
                   }
                 }
-                EOF
-              mode: '000744'
+            '/root/gitlab_change_password.sh':
+              content: |
+                #!/bin/bash
+                email=$1
+                password=$2
+                [ -z "$email" ] && echo "Invalid email" && exit 1
+                [ -z "$password" ] && echo "Invalid password" && exit 1
+                gitlab-rake gitlab:setup GITLAB_ROOT_PASSWORD="$password" GITLAB_ROOT_EMAIL="$email" < <(echo yes) > /dev/null 2>&1
+                echo "Changed password for user root"
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/gitlab_configure_url.sh':
+              content: |
+                #!/bin/bash -x
+                external_url="$1"
+                [ -z "$external_url" ] && echo "Invalid external_url" && exit 1
+                sed -ibckp -E "s/%external_url%/$external_url/" /etc/gitlab/gitlab.rb
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/gitlab_configure_ldap.sh':
+              content: |
+                #!/bin/bash -x
+                ldapHostname=$1
+                ldapPort=$2
+                rootDC=$3
+                managerDN="$4"
+                managerPassword=$5
+                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit 1
+                [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit 1
+                [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
+                [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1
+                [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
+                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%rootDC%/$rootDC/;s/%managerDN%/$managerDN/;s/%managerPassword%/$managerPassword/" /etc/gitlab/gitlab.rb
+              mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
-            '01_add_gitlab_repo':
-              command: 'sudo /root/add_gitlab_repo.sh'
-            '02_install_gitlab_ee':
-              command: !Sub 'sudo EXTERNAL_URL="http://${LoadBalancerGitlab.DNSName}" yum install -y gitlab-ee'
-            '03_gitlab_change_password':
-              command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
-            '04_gitlab_configure_ldap':
+            '01_gitlab_configure_url':
+              command: !Sub 'sudo /root/gitlab_configure_url.sh ${LoadBalancerGitlab.DNSName}'
+            '02_gitlab_configure_ldap':
               command: !Join
                 - ' '
                 - - 'sudo /root/gitlab_configure_ldap.sh'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPHostname'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                  - !Sub '${OpenLDAPAdminPassword}'
-            '05_gitlab_reconfigure':
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                  - !Sub '${LDAPManagerPassword}'
+            '03_gitlab_reconfigure':
               command: 'sudo gitlab-ctl reconfigure'
-          services:
-            sysvinit:
-              postfix: 
-                enabled: true
-                ensureRunning: true
+            '04_gitlab_change_password':
+              command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
     Properties: 
       DisableApiTermination: false
       InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref GitlabInstanceType
+      ImageId: 'ami-c51e3eb6'
+      InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
@@ -375,6 +383,7 @@ Resources:
     Properties:
       Size: 500
       Encrypted: true
+      VolumeType: gp2
       AvailabilityZone: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPublicAZA'
       Tags: 

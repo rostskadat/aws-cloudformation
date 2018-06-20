@@ -28,12 +28,12 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - OpenLDAPInstanceType
+      - InstanceType
     - Label:
-        default: 'OpenLDAP Parameters'
+        default: 'LDAP Parameters'
       Parameters:
-      - OpenLDAPRootDC
-      - OpenLDAPAdminPassword
+      - RootDC
+      - ManagerPassword
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where OpenLDAP will reside"
@@ -43,58 +43,27 @@ Parameters:
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
-  OpenLDAPInstanceType:
-    Description: 'The OpenLDAP instance type'
+  InstanceType:
+    Description: 'The LDAP instance type'
     Type: 'String'
     Default: 't2.micro'    
-  OpenLDAPRootDC: 
-    Description: 'The OpenLDAP root DC element'
+  RootDC: 
+    Description: 'The LDAP Root DC element'
     Type: String
-    Default: 'my-company'
+    Default: 'dc=example,dc=com'
     MinLength: 3
+    AllowedPattern: '(dc=[^,]+)(,dc=[^,]+)*'
     ConstraintDescription: 'must be the name of the Domain Component to use as root of your LDAP domain'
-  OpenLDAPAdminPassword: 
-    Description: 'The OpenLDAP Admin password'
+  ManagerPassword: 
+    Description: 'The LDAP Manager password'
     Type: String
     NoEcho: true
     MinLength: 3
-  OpenLDAPUsersLdif: 
-    Description: 'The OpenLDAP initial User database'
+  LDAPUsersLdif: 
+    Description: 'The LDAP initial User database'
     Type: String
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
-Mappings:
-  RegionMap:
-    'ap-south-1':
-      AMI: 'ami-76d6f519'
-    'eu-west-3':
-      AMI: 'ami-969c2deb'
-    'eu-west-2':
-      AMI: 'ami-a36f8dc4'
-    'eu-west-1':
-      AMI: 'ami-ca0135b3'
-    'ap-northeast-2':
-      AMI: 'ami-c10fa6af'
-    'ap-northeast-1':
-      AMI: 'ami-92df37ed'
-    'sa-east-1':
-      AMI: 'ami-3885d854'
-    'ca-central-1':
-      AMI: 'ami-338a0a57'
-    'ap-southeast-1':
-      AMI: 'ami-de90a5a2'
-    'ap-southeast-2':
-      AMI: 'ami-423bec20'
-    'eu-central-1':
-      AMI: 'ami-9a91b371'
-    'us-east-1':
-      AMI: 'ami-14c5486b'
-    'us-east-2':
-      AMI: 'ami-922914f7'
-    'us-west-1':
-      AMI: 'ami-25110f45'
-    'us-west-2':
-      AMI: 'ami-e251209a'    
 Resources: 
   #
   # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
@@ -211,44 +180,50 @@ Resources:
             '/root/configure_ldap.sh':
               content: !Sub |
                 #!/bin/bash
-                password=$1
-                domainComponent="$2"
-                [ -z "$password" ] && echo "Invalid password" && exit
-                [ -z "$domainComponent" ] && echo "Invalid domainComponent" && exit
+                managerPassword="$1"
+                rootDC="$2"
+                [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
+                [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
                 # BEWARE the 'dn' line should be equals to the file found in /etc/openldap/slapd.d/cn=config
                 ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
                 dn: olcDatabase={2}bdb,cn=config
                 changetype: modify
                 replace: olcSuffix
-                olcSuffix: dc=$domainComponent,dc=local
+                olcSuffix: $rootDC
                 EOF
                 # Changing the root DN
+                echo "Changing olcRootDN to 'cn=Manager,$rootDC'..."
                 ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
                 dn: olcDatabase={2}bdb,cn=config
                 changetype: modify
                 replace: olcRootDN
-                olcRootDN: cn=Manager,dc=$domainComponent,dc=local
+                olcRootDN: cn=Manager,$rootDC
                 EOF
                 # Adding the Root password
+                echo "Changing olcRootPW..."
                 ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
                 dn: olcDatabase={2}bdb,cn=config
                 changetype: modify
                 add: olcRootPW
-                olcRootPW: $password
+                olcRootPW: $managerPassword
                 EOF
                 # TODO: explain
-                ldapadd -x -D "cn=Manager,dc=$domainComponent,dc=local" -w "$password" -H ldapi:/// <<EOF
-                dn: dc=$domainComponent,dc=local
+                # 
+                domainComponent=$(echo -n "$rootDC"|cut -d',' -f1|cut -d'=' -f2)
+                
+                echo "Adding '$rootDC' (w/ dc=$domainComponent)..."
+                ldapadd -x -D "cn=Manager,$rootDC" -w "$managerPassword" -H ldapi:/// <<EOF
+                dn: $rootDC
                 dc: $domainComponent
-                o: $domainComponent LDAP Server
-                description: Root entry for $domainComponent LDAP Server
+                o: LDAP Server
+                description: Root entry for LDAP Server
                 objectClass: top
                 objectclass: dcObject
                 objectclass: organization
                 EOF
-                if [ ! -z "${OpenLDAPUsersLdif}" ]; then
+                if [ ! -z "${LDAPUsersLdif}" ]; then
                   echo "Loading initial LDIF user database"
-                  ldapadd -x -D "cn=Manager,dc=$domainComponent,dc=local" -w "$password" -H ldapi:/// -f ${OpenLDAPUsersLdif}
+                  ldapadd -x -D "cn=Manager,$rootDC" -w "$managerPassword" -H ldapi:/// -f ${LDAPUsersLdif}
                 fi
               mode: '000744'
               owner: 'root'
@@ -259,7 +234,7 @@ Resources:
             '02_start_slpad':
               command: 'sudo service slapd start'
             '03_configure_ldap':
-              command: !Sub 'sudo /root/configure_ldap.sh ${OpenLDAPAdminPassword} ${OpenLDAPRootDC}'
+              command: !Sub 'sudo /root/configure_ldap.sh ${ManagerPassword} ${RootDC}'
             '04_restart_slpad':
               command: 'sudo service slapd restart'
           services:
@@ -272,8 +247,8 @@ Resources:
       InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref OpenLDAPInstanceType
+      ImageId:  'ami-c51e3eb6'
+      InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroupIds: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
@@ -309,19 +284,14 @@ Outputs:
     Value: 389
     Export:
       Name: !Sub '${AWS::StackName}-LDAPPort'
-  LDAPUrl: 
-    Description: 'LDAP URL to use when connecting'
-    Value: !Sub 'ldap://${OpenLDAPHost.PrivateDnsName}/dc=${OpenLDAPRootDC},dc=local'
-    Export:
-      Name: !Sub '${AWS::StackName}-LDAPUrl'
   RootDC: 
     Description: 'LDAP URL to use when connecting'
-    Value: !Ref OpenLDAPRootDC
+    Value: !Sub '${RootDC}'
     Export:
       Name: !Sub '${AWS::StackName}-RootDC'
-  RootDN: 
+  ManagerDN: 
     Description: 'Root DN to use when accessing the LDAP Server'
-    Value: !Sub 'cn=Manager,dc=${OpenLDAPRootDC},dc=local'
+    Value: !Sub 'cn=Manager,${RootDC}'
     Export:
-      Name: !Sub '${AWS::StackName}-RootDN'
+      Name: !Sub '${AWS::StackName}-ManagerDN'
       
