@@ -14,8 +14,10 @@
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 # - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
 # - Should provide alert when the platform is unhealthy
-# - LOOK AT https://docs.sonarqube.org/display/SONAR/Hardware+Recommendations
 # - Allow cfn-auto-reload (cf example in jenkins2-ha.yaml)
+# - Configure Artifactory
+# - Configure JDK
+# - Add docker tool
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -335,8 +337,8 @@ Resources:
               owner: 'jenkins'
               group: 'jenkins'
             '/root/jenkins_configure_ldap.groovy':
+              # Inspired from https://github.com/samrocketman/jenkins-bootstrap-shared
               content: |
-                // Inspired from https://github.com/samrocketman/jenkins-bootstrap-shared
                 import hudson.security.LDAPSecurityRealm
                 import hudson.util.Secret
                 import jenkins.model.Jenkins
@@ -345,7 +347,7 @@ Resources:
 
                 if(!(Jenkins.instance.securityRealm instanceof LDAPSecurityRealm)) {
                   LDAPConfiguration conf = new LDAPConfiguration(
-                    '%ldapHost%:%ldapPort%',
+                    '%ldapHostname%:%ldapPort%',
                     '%rootDC%',
                     false,
                     '%managerDN%',
@@ -373,11 +375,12 @@ Resources:
             '/root/jenkins_configure_ldap.sh':
               content: |
                 #!/bin/bash
-                ldapHostname=$1
-                ldapPort=$2
-                rootDC=$3
+                ldapHostname="$1"
+                ldapPort="$2"
+                rootDC="$3"
                 managerDN="$4"
-                managerPassword=$5
+                managerPassword="$5"
+                adminPassword="$6"
                 [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit 1
                 [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit 1
                 [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
@@ -386,10 +389,9 @@ Resources:
                 [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
                 sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%rootDC%/$rootDC/;s/%managerDN%/$managerDN/;s/%managerPassword%/$managerPassword/" /root/jenkins_configure_ldap.groovy
                 echo "Configuring LDAP..."
-                initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
                 cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
                 url=http://localhost:8080
-                java -jar $cli -s $url -auth "admin:$(cat $initialPassword)" groovy = --username admin --password $(cat $initialPassword) < <(cat /root/configure_ldap.groovy)
+                java -jar $cli -s $url -auth "admin:$adminPassword" groovy = --username admin --password $adminPassword < <(cat /root/jenkins_configure_ldap.groovy)
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -451,6 +453,8 @@ Resources:
             '/root/jenkins_configure.sh': 
               content: |
                 #!/bin/bash
+                password=$1
+                [ -z "$password" ] && echo "Invalid password" && exit 1
                 initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
                 cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
                 url=http://localhost:8080
@@ -469,29 +473,25 @@ Resources:
                 sed -i -e "s@<label>.*</label>@<label>master</label>@" /var/lib/jenkins/config.xml
                 service jenkins restart
                 wait
-                echo "Installing plugins..."
-                java -jar $cli -s $url -auth "admin:$(cat $initialPassword)" install-plugin $(cat /root/plugins.txt | tr "\n" " ")
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/jenkins_change_password.sh': 
-              content: |
-                #!/bin/bash
-                password=$1
-                [ -z "$password" ] && echo "Invalid password" && exit 1
-                initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
-                cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
-                url=http://localhost:8080
                 echo "Changing default password for admin..."
                 echo "jenkins.model.Jenkins.instance.securityRealm.createAccount('admin', '$password')" | \
                   java -jar $cli -s $url -auth "admin:$(cat $initialPassword)" groovy =
+                echo "Installing plugins..."
+                java -jar $cli -s $url -auth "admin:$password" install-plugin $(cat /root/plugins.txt | tr "\n" " ")
+                service jenkins restart
+                until $(curl -s --max-time 60 -o /dev/null --head --fail --user "admin:$password" $url/cli/); do
+                    echo -n '.'; sleep 1
+                done
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_alternatives_java':
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
             '02_jenkins_start':
               command: 'sudo service jenkins start'
             '03_jenkins_configure':
-              command: 'sudo /root/jenkins_configure.sh'
+              command: !Sub 'sudo /root/jenkins_configure.sh ${JenkinsAdminPassword}'
             '04_jenkins_configure_ldap':
               command: !Join
                 - ' '
@@ -500,10 +500,7 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-            '05_jenkins_change_password':
-              command: !Join
-                - ' '
-                - - 'sudo /root/jenkins_change_password.sh'
+                  - !Sub '${LDAPManagerPassword}'
                   - !Sub '${JenkinsAdminPassword}'
             '05_jenkins_restart':
               command: 'sudo service jenkins restart'
