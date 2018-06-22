@@ -328,37 +328,43 @@ Resources:
                 password=$2
                 [ -z "$email" ] && echo "Invalid email" && exit 1
                 [ -z "$password" ] && echo "Invalid password" && exit 1
-                gitlab-rake gitlab:setup GITLAB_ROOT_PASSWORD="$password" GITLAB_ROOT_EMAIL="$email" < <(echo yes) > /dev/null 2>&1
-                echo "Changed password for user root"
+                GITLAB_ROOT_EMAIL="$email" GITLAB_ROOT_PASSWORD="$password" gitlab-ctl reconfigure
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/gitlab_extra_config.sh':
               content: |
                 #!/bin/bash
-                email=$1
-                password=$2
-                [ -z "$email" ] && echo "Invalid email" && exit 1
+                password=$1
                 [ -z "$password" ] && echo "Invalid password" && exit 1
-                # Obtain a token
-                token=$(curl -s -F grant_type=password -F "username=$email" -F "password=$password" -X POST http://localhost:80/oauth/token | jq '.access_token' | tr -d '"')
+                # Obtain a token (https://github.com/doorkeeper-gem/doorkeeper/wiki/API-endpoint-descriptions-and-examples#curl-command-password-grant)
+                token=$(curl -s -F grant_type=password -F "username=root" -F "password=$password" -X POST http://localhost:80/oauth/token | jq '.access_token' | tr -d '"')
+                [ "$token" == "null" ] && echo "Failed to retrieve token" && exit 1 
                 url="http://localhost:80/api/v4/application/settings"
                 echo "Changing settings (token=$token)..."
-                curl -s --request PUT  -H "Authorization: Bearer $token" "$url?signup_enabled=false" > /dev/null
-                curl -s --request PUT  -H "Authorization: Bearer $token" "$url?default_project_visibility=public" > /dev/null
-                curl -s --request PUT  -H "Authorization: Bearer $token" "$url?email_author_in_body=true" > /dev/null
-                curl -s --request PUT  -H "Authorization: Bearer $token" "$url?gravatar_enabled=false" > /dev/null
-                curl -s --request PUT  -H "Authorization: Bearer $token" "$url?help_page_hide_commercial_content=true" > /dev/null
-                curl -s --request PUT  -H "Authorization: Bearer $token" "$url?html_emails_enabled=true" > /dev/null
-                curl -s --request PUT  -H "Authorization: Bearer $token" "$url?html_emails_enabled=true" > /dev/null
+                
+                change_settings()
+                {
+                  local key="$1"
+                  local value="$2"
+                  echo $key=$(curl -s --request PUT -H "Authorization: Bearer $token" "$url?$key=$value" | jq ".$key")                  
+                }
+                change_settings signup_enabled                    false
+                change_settings default_project_visibility        public
+                change_settings email_author_in_body              true
+                change_settings gravatar_enabled                  false
+                change_settings help_page_hide_commercial_content true
+                change_settings html_emails_enabled               true
                 curl -s --request POST -H "Authorization: Bearer $token" -F token=$token http://localhost:80/oauth/revoke > /dev/null
+                
+                cp lib/support/init.d/gitlab /etc/init.d/gitlab
               mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
-            '01_gitlab_configure_url':
+            '01_gitlab_configure_url': 
               command: !Sub 'sudo /root/gitlab_configure_url.sh ${LoadBalancerGitlab.DNSName}'
-            '02_gitlab_configure_ldap':
+            '02_gitlab_configure_ldap': 
               command: !Join
                 - ' '
                 - - 'sudo /root/gitlab_configure_ldap.sh'
@@ -367,12 +373,12 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
-            '03_gitlab_reconfigure':
-              command: 'sudo gitlab-ctl reconfigure'
-            '04_gitlab_change_password':
+            '04_gitlab_change_password': 
               command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
-            '05_gitlab_extra_config':
-              command: !Sub 'sudo /root/gitlab_extra_config.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
+            '05_gitlab_extra_config': 
+              command: !Sub 'sudo /root/gitlab_extra_config.sh "${GitlabAdminPassword}"'
+            '99_gitlab_restart': 
+              command: 'sudo gitlab-ctl restart'
     Properties: 
       DisableApiTermination: false
       InstanceInitiatedShutdownBehavior: stop

@@ -14,6 +14,7 @@
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 # - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
 # - Should provide alert when the platform is unhealthy
+# - Should create a Jenkins User (only available for Artifactory PRO :s)
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -293,26 +294,6 @@ Resources:
               mode: '000740'
               owner: 'artifactory'
               group: 'artifactory'
-            '/root/ldap_settings.yaml': 
-              content: |
-                security:
-                  ldapSettings:
-                    OpenLDAP:
-                      emailAttribute: mail
-                      ldapPoisoningProtection: true
-                      ldapUrl: 'ldap://%ldapHostname%:%ldapPort%'
-                      search:
-                        managerDn: '%managerDN%'
-                        managerPassword: %managerPassword%
-                        searchBase: ou=People,%rootDC%
-                        searchFilter: (uid={0})
-                        searchSubTree: true
-                      allowUserToAccessProfile: true
-                      autoCreateUser: true
-                      enabled: true
-              mode: '000600'
-              owner: 'root'
-              group: 'root'
             '/root/artifactory_createdb.sh':
               content: !Sub |
                 #!/bin/bash
@@ -355,6 +336,28 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
+            '/root/ldap_settings.yaml': 
+              content: |
+                security:
+                  anonAccessEnabled: false
+                  anonAccessToBuildInfosDisabled: true
+                  ldapSettings:
+                    OpenLDAP:
+                      emailAttribute: mail
+                      ldapPoisoningProtection: true
+                      ldapUrl: 'ldap://%ldapHostname%:%ldapPort%'
+                      search:
+                        managerDn: '%managerDN%'
+                        managerPassword: %managerPassword%
+                        searchBase: ou=People,%rootDC%
+                        searchFilter: (uid={0})
+                        searchSubTree: true
+                      allowUserToAccessProfile: true
+                      autoCreateUser: true
+                      enabled: true
+              mode: '000600'
+              owner: 'root'
+              group: 'root'
             '/root/artifactory_configure_ldap.sh':
               content: |
                 #!/bin/bash
@@ -375,7 +378,7 @@ Resources:
                 header="Content-Type: application/yaml"
                 url="$API_URL/system/configuration"
                 echo "Configuring LDAP ($ldapHostname:$ldapPort w/ $rootDC) ..."
-                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%managerDN%/$managerDN/;s/%rootDC%/$rootDC/;" /root/ldap_settings.yaml
+                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%managerDN%/$managerDN/;s/%rootDC%/$rootDC/;s/%managerPassword%/$managerPassword/;" /root/ldap_settings.yaml
                 curl -s --user "admin:$adminPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
               mode: '000700'
               owner: 'root'
@@ -407,7 +410,7 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
                   - !Sub '${ArtifactoryAdminPassword}'
-            '07_artifactory_restart': 
+            '99_artifactory_restart': 
               command: 'sudo service artifactory restart'
           services: 
             sysvinit: 
@@ -461,13 +464,18 @@ Resources:
           Value: !Sub '${AWS::StackName}-VolumeData'
 Outputs: 
   InstanceId: 
-    Description: "InstanceId of the newly created Artifactory instance"
+    Description: 'InstanceId of the newly created Artifactory instance'
     Value: !Ref ArtifactoryHost
     Export:
       Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
-    Description: "Public DNS address of the internet facing ELB"
+    Description: 'Public DNS address of the internet facing ELB'
     Value: !Sub '${LoadBalancerArtifactory.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
+  AdminUsername: 
+    Description: 'The name of the administrative user'
+    Value: 'admin'
+    Export:
+      Name: !Sub '${AWS::StackName}-AdminUsername'
       
