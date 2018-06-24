@@ -48,12 +48,14 @@ Metadata:
       Parameters:
       - DBMasterUserPassword
     - Label:
+        default: 'Gitlab Parameters'
+      Parameters:
+      - GitlabRootPassword
+    - Label:
         default: 'Sonarqube Parameters'
       Parameters:
       - SonarqubeAdminEmail
       - SonarqubeAdminPassword
-      - JenkinsUsername
-      - JenkinsPassword
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Sonarqube will reside"
@@ -92,6 +94,11 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 3
+  GitlabRootPassword: 
+    Description: 'The Gitlab Root password'
+    Type: String
+    NoEcho: true
+    MinLength: 3
   SonarqubeAdminEmail: 
     Description: 'The Sonarqube Admin email'
     Type: String
@@ -100,17 +107,6 @@ Parameters:
     Description: 'The Sonarqube Admin password'
     Type: String
     MinLength: 1
-    NoEcho: true
-  JenkinsUsername: 
-    Description: 'The username Jenkins will use to execute analysis'
-    Type: String
-    MinLength: 1
-    Default: 'jenkins'    
-  JenkinsPassword: 
-    Description: 'The password Jenkins will use to execute analysis (default to jenkins)'
-    Type: String
-    MinLength: 1
-    Default: 'jenkins'    
     NoEcho: true
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
@@ -309,6 +305,7 @@ Resources:
         InstallSonarqube: 
           packages:
             yum:
+              jq: []
               sonar: []
           files:
             '/opt/sonar/conf/sonar.properties': 
@@ -335,7 +332,7 @@ Resources:
                 ldap.user.emailAttribute=mail
                 sonar.gitlab.url=http://%gitlabDNSName%
                 sonar.gitlab.ignore_certificate=true
-                sonar.gitlab.user_token=%gitlabToken%
+                sonar.gitlab.user_token=%gitlabSonarqubeToken%
                 sonar.gitlab.ping_user=true
               mode: '000600'
               owner: 'sonar'
@@ -380,30 +377,26 @@ Resources:
               group: 'root'
             '/root/sonarqube_configure_gitlab.sh':
               content: |
-                #!/bin/bash
+                #!/bin/bash -x
                 gitlabDNSName=$1
-                ldapPort=$2
-                rootDC=$3
-                managerDN="$4"
-                managerPassword=$5
+                gitlabRootPassword=$2
+                sonarqubeAdminEmail=$3
                 [ -z "$gitlabDNSName" ] && echo "Invalid gitlabDNSName" && exit 1
-                [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit 1
-                [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
-                [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1
-                [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
-                # First create a sonarqube in Gitlab
-                email=$1
-                password=$2
-                [ -z "$email" ] && echo "Invalid email" && exit 1
-                [ -z "$password" ] && echo "Invalid password" && exit 1
+                [ -z "$gitlabRootPassword" ] && echo "Invalid gitlabRootPassword" && exit 1
+                [ -z "$sonarqubeAdminEmail" ] && echo "Invalid sonarqubeAdminEmail" && exit 1
+                gitlabDNSName=${gitlabDNSName,,}
                 # Obtain a token
-                token=$(curl -s -F grant_type=password -F "username=$email" -F "password=$password" -X POST http://$gitlabDNSName/oauth/token | jq '.access_token' | tr -d '"')
+                token=$(curl -s -F grant_type=password -F "username=root" -F "password=$gitlabRootPassword" -X POST http://$gitlabDNSName/oauth/token | jq '.access_token' | tr -d '"')
+                [ "$token" == "null" ] && echo "Failed to get Gitlab token" && exit 1
+                # Let's create a user
+                gitlabSonarqubePassword=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
                 url="http://$gitlabDNSName/api/v4"
-                gitlabPassword=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-                echo "Creating sonarqube user in Gitlab @ $gitlabDNSName..."
-                userId=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users" -F "email=sonarqube@example.com" -F "password=$gitlabPassword" -F "username=sonarqube" -F "name=Sonarqube User" -F "admin=true" -F "skip_confirmation=true" | jq '.id')
-                gitlabToken=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users/$userId/impersonation_tokens" -F "name=SONARQUBE" -F "scopes[]=api" | jq '.id' | tr -d'"')
-                sed -ibckp -E "s/%gitlabDNSName%/$gitlabDNSName/;s/%gitlabToken%/$gitlabToken/" /opt/sonar/conf/sonar.properties
+                sonarqubeAdminEmail=sonarqube@${sonarqubeAdminEmail##*@}
+                echo "Creating sonarqube user in Gitlab @ $url ($sonarqubeAdminEmail)"
+                userId=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users" -F "email=$sonarqubeAdminEmail" -F "password=$gitlabSonarqubePassword" -F "username=sonarqube" -F "name=Sonarqube User" -F "admin=true" -F "skip_confirmation=true" | jq '.id')
+                gitlabSonarqubeToken=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users/$userId/impersonation_tokens" -F "name=SONARQUBE" -F "scopes[]=api" | jq '.token' | tr -d '"')
+                [ "$gitlabSonarqubeToken" == "null" ] && echo "Failed to get Gitlab for Sonarqube user" && exit 1        
+                sed -ibckp -E "s/%gitlabDNSName%/$gitlabDNSName/;s/%gitlabSonarqubeToken%/$gitlabSonarqubeToken/" /opt/sonar/conf/sonar.properties
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -512,10 +505,8 @@ Resources:
                 - ' '
                 - - 'sudo /root/sonarqube_configure_gitlab.sh'
                   - 'Fn::ImportValue': !Sub '${ParentGitlabStack}-DNSName'
-                  - 'Fn::ImportValue': !Sub '${ParentGitlabStack}-LDAPPort'
-                  - 'Fn::ImportValue': !Sub '${ParentGitlabStack}-RootDC'
-                  - 'Fn::ImportValue': !Sub '${ParentGitlabStack}-ManagerDN'
-                  - !Sub '${LDAPManagerPassword}'
+                  - !Sub '${GitlabRootPassword}'
+                  - !Sub '${SonarqubeAdminEmail}'
             '05_sonarqube_start':
               command: 'sudo service sonar start'
             '06_sonarqube_change_password':
@@ -588,9 +579,3 @@ Outputs:
     Value: !Sub '${LoadBalancerSonarqube.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
-  JenkinsUsername:
-    Description: 'The username Jenkins will use to start analysis'
-    Value: !Ref JenkinsUsername
-    Export:
-      Name: !Sub '${AWS::StackName}-JenkinsUsername'
-      

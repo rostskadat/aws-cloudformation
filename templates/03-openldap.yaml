@@ -13,6 +13,7 @@
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 # - Should provide alert when the platform is unhealthy
+# - Network Loadbalancer does not seem to work. Using a Classic Load Balancer instead
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -32,11 +33,12 @@ Metadata:
     - Label:
         default: 'LDAP Parameters'
       Parameters:
+      - LDAPAdminEmail
       - RootDC
       - ManagerPassword
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Stack where OpenLDAP will reside"
+    Description: "Enter the name of the VPC Parent Stack"
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the parent VPC stack (01-vpc.yaml)'
@@ -44,9 +46,13 @@ Parameters:
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
   InstanceType:
-    Description: 'The LDAP instance type'
+    Description: 'The Host Instance type'
     Type: 'String'
     Default: 't2.micro'    
+  LDAPAdminEmail:
+    Description: 'The LDAP Admin email'
+    Type: String
+    Default: 'ldap-admin@example.com'
   RootDC: 
     Description: 'The LDAP Root DC element'
     Type: String
@@ -65,26 +71,66 @@ Parameters:
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
-  #
-  # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
-  #   from the Internet. If you want to restrict the IP from which to accept traffic, do it here. you can have a look 
-  #   at the 01-vpc.yaml, and more specifically the SecurityGroupDMZ for an example.
-  #
-  LoadBalancerOpenLDAP:
+  TopicHealth: 
+    Type: 'AWS::SNS::Topic'
+    Properties: 
+      DisplayName: !Sub '${AWS::StackName} - Server health notification'
+      Subscription:
+        - Endpoint: !Ref LDAPAdminEmail
+          Protocol: 'email'
+  AutoScalingGroup: 
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: 1
+      MaxSize: 1
+      NotificationConfigurations:
+        - TopicARN: !Ref TopicHealth
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          PropagateAtLaunch: true
+    CreationPolicy: 
+      ResourceSignal: 
+        Timeout: PT15M
+        Count: 1
+    UpdatePolicy: 
+      AutoScalingRollingUpdate: 
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+  LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
-      Scheme: 'internal'
+      Scheme: internal
       Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
-      Type: 'network'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Type: network
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancerOpenLDAP'
-  TargetGroupOpenLDAP:
+          Value: !Sub '${AWS::StackName}-LoadBalancer'
+  TargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthyThresholdCount: 2
@@ -96,34 +142,25 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupOpenLDAP'
+          Value: !Sub '${AWS::StackName}-TargetGroup'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
-      Targets:
-        - Id: !Ref OpenLDAPHost
-    DependsOn: OpenLDAPHost
-  ListenerOpenLDAP:
+  Listener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupOpenLDAP
+      - TargetGroupArn: !Ref TargetGroup
         Type: forward
-      LoadBalancerArn: !Ref LoadBalancerOpenLDAP
+      LoadBalancerArn: !Ref LoadBalancer
       Port: 389
       Protocol: TCP
-  #
-  # Ok let's configure the main host then
-  #
-  OpenLDAPHost: 
-    Type: 'AWS::EC2::Instance'
+  LaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
       AWS::CloudFormation::Init:
-        #
-        # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
-        # , InstallOpenLDAP  
         configSets: 
           default: [ Bootstrap, InstallOpenLDAP ]
         Bootstrap:
@@ -133,6 +170,24 @@ Resources:
               awslogs: []
               yum-cron: []
           files:
+            '/etc/cfn/cfn-hup.conf':
+              content: !Sub |
+                [main]
+                stack=${AWS::StackName}
+                region=${AWS::Region}
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource LaunchConfiguration --region ${AWS::Region}
+                runas=root
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
             '/home/ec2-user/.bashrc':
               content: !Sub |
                 [ -f /etc/bashrc ] && . /etc/bashrc
@@ -170,6 +225,15 @@ Resources:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
+                files:
+                  - /etc/yum/yum-cron.conf
+                  - /etc/yum/yum-cron-hourly.conf
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files: 
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
         InstallOpenLDAP:
           packages:
             yum:
@@ -243,42 +307,46 @@ Resources:
                 enabled: true
                 ensureRunning: true
     Properties: 
-      DisableApiTermination: false
-      InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       ImageId:  'ami-c51e3eb6'
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
-      SecurityGroupIds: 
+      SecurityGroups:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-      Monitoring: false
+        - !Ref SecurityGroupHealthCheck
       UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
           yum update -y
           yum install -y aws-cfn-bootstrap
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource OpenLDAPHost --region ${AWS::Region}
+          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+  SecurityGroupHealthCheck:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group for the Health Check'
+      VpcId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp: '10.0.0.0/16'
+#          Fn::GetAtt: [ 'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc', CidrBlock ]
+        FromPort: 389
+        ToPort: 389
+        IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-OpenLDAPHost'
+          Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
 Outputs: 
-  InstanceId: 
-    Description: 'InstanceId of the newly created OpenLDAP instance'
-    Value: !Ref OpenLDAPHost
+  DNSName:
+    Description: 'Hostname to use when connecting'
+    Value: !Sub '${LoadBalancer.DNSName}'
     Export:
-      Name: !Sub '${AWS::StackName}-InstanceId'
-  LDAPHostname:
-    Description: 'LDAP hostname to use when connecting'
-    Value: !Sub '${OpenLDAPHost.PrivateDnsName}'
-    Export:
-      Name: !Sub '${AWS::StackName}-LDAPHostname'
+      Name: !Sub '${AWS::StackName}-DNSName'
   LDAPPort:
     Description: 'LDAP port to use when connecting'
     Value: 389

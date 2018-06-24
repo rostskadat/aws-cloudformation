@@ -38,8 +38,8 @@ Metadata:
     - Label:
         default: 'Gitlab Parameters'
       Parameters:
-      - GitlabAdminEmail
-      - GitlabAdminPassword
+      - GitlabRootEmail
+      - GitlabRootPassword
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Gitlab will reside"
@@ -63,12 +63,12 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 3
-  GitlabAdminEmail: 
-    Description: 'The Gitlab Admin email'
+  GitlabRootEmail: 
+    Description: 'The Gitlab Root email'
     Type: String
     Default: ''
-  GitlabAdminPassword: 
-    Description: 'The Gitlab Admin password'
+  GitlabRootPassword: 
+    Description: 'The Gitlab Root password'
     Type: String
     Default: ''
     NoEcho: true
@@ -374,9 +374,9 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
             '04_gitlab_change_password': 
-              command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabAdminEmail}" "${GitlabAdminPassword}"'
+              command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabRootEmail}" "${GitlabRootPassword}"'
             '05_gitlab_extra_config': 
-              command: !Sub 'sudo /root/gitlab_extra_config.sh "${GitlabAdminPassword}"'
+              command: !Sub 'sudo /root/gitlab_extra_config.sh "${GitlabRootPassword}"'
             '99_gitlab_restart': 
               command: 'sudo gitlab-ctl restart'
     Properties: 

@@ -1,12 +1,12 @@
 #
 # FILE: 02-bastion.yaml
 #
-# DESCRIPTION: This Stack create a Bastion Host in the DMZ of the Parent VPC stack. The Bastion Host is necessary in 
-#   order to access other instances within the VPC.
+# DESCRIPTION: This Stack create a Load Balanced Bastion Host in the Private Zone of the Parent VPC stack. 
+#   The Bastion Host is necessary in order to access other instances within the VPC.
 #
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
-# - Should provide alert when the platform is unhealthy
+# - Check how to limit connection from origins...
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -22,6 +22,10 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
+    - Label:
+        default: 'Bastion Parameters'
+      Parameters:
+      - BastionAdminEmail
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Parent Stack"
@@ -33,26 +37,135 @@ Parameters:
     Type: "AWS::EC2::KeyPair::KeyName"
     MinLength: 1
     ConstraintDescription: 'must be the name of an existing Key Pair to use to log to the EC2 Instance'
-Resources:
-  #
-  # In order to tag the Root volume of the EC2 instance the boot procedure uses a Instance Profile defined in the 
-  # VPC stack.
-  #
+  InstanceType:
+    Description: 'The Host Instance type'
+    Type: 'String'
+    Default: 't2.micro'    
+  BastionAdminEmail:
+    Description: 'The Bastion Admin email'
+    Type: String
+    Default: 'bastion-admin@example.com'
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+Resources: 
+  TopicHealth: 
+    Type: 'AWS::SNS::Topic'
+    Properties: 
+      DisplayName: !Sub '${AWS::StackName} - Server health notification'
+      Subscription:
+        - Endpoint: !Ref BastionAdminEmail
+          Protocol: 'email'
+  AutoScalingGroup: 
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: 1
+      MaxSize: 1
+      NotificationConfigurations:
+        - TopicARN: !Ref TopicHealth
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          PropagateAtLaunch: true
+    CreationPolicy: 
+      ResourceSignal: 
+        Timeout: PT15M
+        Count: 1
+    UpdatePolicy: 
+      AutoScalingRollingUpdate: 
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+  LoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Scheme: internet-facing
+      Subnets: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Type: network
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-LoadBalancer'
+  TargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Port: 22
+      Protocol: TCP
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TargetGroup'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      TargetGroupAttributes:
+        - Key: 'deregistration_delay.timeout_seconds'
+          Value: 30
+  Listener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref TargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 22
+      Protocol: TCP
   # Inspired from https://stackoverflow.com/questions/24026425/is-there-a-way-to-tag-a-root-volume-when-initializing-from-the-cloudformation-te
-  #
-  BastionHost: 
-    Type: 'AWS::EC2::Instance'
+  LaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
       AWS::CloudFormation::Init:
         configSets: 
-          default: [ Bootstrap ] 
-        Bootstrap: 
-          packages: 
-            yum: 
-              wget: []
+          default: [ Bootstrap ]
+        Bootstrap:
+          packages:
+            yum:
+              htop: []
               awslogs: []
               yum-cron: []
-          files: 
+          files:
+            '/etc/cfn/cfn-hup.conf':
+              content: !Sub |
+                [main]
+                stack=${AWS::StackName}
+                region=${AWS::Region}
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource LaunchConfiguration --region ${AWS::Region}
+                runas=root
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
             '/home/ec2-user/.bashrc':
               content: !Sub |
                 [ -f /etc/bashrc ] && . /etc/bashrc
@@ -90,47 +203,53 @@ Resources:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
+                files:
+                  - /etc/yum/yum-cron.conf
+                  - /etc/yum/yum-cron-hourly.conf
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files: 
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
     Properties: 
-      AvailabilityZone: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetDMZ'
-      DisableApiTermination: false
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
-      InstanceInitiatedShutdownBehavior: stop
-      ImageId: "ami-c51e3eb6"
-      InstanceType: "t2.micro"
-      KeyName: !Ref KeyName
-      SecurityGroupIds:
-        - Fn::ImportValue: !Sub '${ParentVpcStack}-SecurityGroupDMZ'
-      SubnetId: 
-        Fn::ImportValue: !Sub '${ParentVpcStack}-SubnetDMZ'
-      Monitoring: false
-      UserData:  
+      ImageId:  'ami-c51e3eb6'
+      InstanceType: !Ref InstanceType
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+      SecurityGroups:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupDMZ'
+        - !Ref SecurityGroupHealthCheck
+      UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
           yum update -y
           yum install -y aws-cfn-bootstrap
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource BastionHost --region ${AWS::Region}
+          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+  SecurityGroupHealthCheck:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group for the Health Check'
+      VpcId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp: '10.0.0.0/16'
+#          Fn::GetAtt: [ 'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc', CidrBlock ]
+        FromPort: 22
+        ToPort: 22
+        IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-BastionHost'
+          Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
 Outputs: 
-  InstanceId: 
-    Description: "InstanceId of the newly created Bastion instance"
-    Value: !Ref BastionHost
+  DNSName:
+    Description: 'Hostname to use when connecting'
+    Value: !Sub '${LoadBalancer.DNSName}'
     Export:
-      Name: !Sub '${AWS::StackName}-InstanceId'
-  PublicIP: 
-    Description: "Public IP address of the newly created Bastion instance"
-    Value: !GetAtt BastionHost.PublicIp
-    Export:
-      Name: !Sub '${AWS::StackName}-PublicIP'
-  PublicDnsName: 
-    Description: "Public DNS address of the newly created Bastion instance"
-    Value: !GetAtt BastionHost.PublicDnsName
-    Export:
-      Name: !Sub '${AWS::StackName}-PublicDnsName'
+      Name: !Sub '${AWS::StackName}-DNSName'

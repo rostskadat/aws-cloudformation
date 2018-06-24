@@ -7,7 +7,11 @@
 #   should extract the ami and the region name, and output everything in the YAML compatible format)
 # 
 # for region in $(aws ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text); do
-#   aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" --query 'Images[*].{ID:ImageId}'
+#   latest=$(aws --region $region ec2 describe-images --owners amazon \
+#     --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" \
+#               "Name=architecture,Values=x86_64" \
+#               "Name=root-device-type,Values=ebs" \
+#     --query 'Images[*].{ID:ImageLocation}' | jq '.[].ID' | sort -r | head -1 | tr -d '"')
 # done
 #
 # TODO: 
@@ -15,9 +19,10 @@
 # - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
 # - Should provide alert when the platform is unhealthy
 # - Allow cfn-auto-reload (cf example in jenkins2-ha.yaml)
-# - Add docker tool
 # - Add list of common SSH Site we want to connect to
 # - Configure SMTP server
+# - Configure Global Tool Configuration >> SonarQube Scanner
+# - Configure Global Tool Configuration >> Docker 
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -422,7 +427,7 @@ Resources:
                 groovyFile=$1
                 adminPassword=$2
                 [ -z "$groovyFile" ] && echo "Invalid groovyFile" && exit 1
-                [ -f "$groovyFile" ] && echo "Invalid groovyFile: no such file" && exit 1
+                [ ! -f "$groovyFile" ] && echo "Invalid groovyFile: no such file" && exit 1
                 [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
                 cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
                 url=http://localhost:8080
@@ -516,6 +521,7 @@ Resources:
                 [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1
                 [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
                 [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
+                ldapHostname=${ldapHostname,,}
                 sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%rootDC%/$rootDC/;s/%managerDN%/$managerDN/;s/%managerPassword%/$managerPassword/" /root/jenkins_configure_ldap.groovy
                 echo "Configuring LDAP..."
                 /root/jenkins_call_cli.sh /root/jenkins_configure_ldap.groovy "$adminPassword"
@@ -524,6 +530,7 @@ Resources:
               group: 'root'
             '/root/jenkins_configure_artifactory.groovy':
               content: |
+                import jenkins.model.Jenkins
                 import org.jfrog.hudson.*
                 artifactory = Jenkins.instance.getExtensionList('org.jfrog.hudson.ArtifactoryBuilder$DescriptorImpl')[0]
                 artifactory.useCredentialsPlugin = false;
@@ -540,6 +547,7 @@ Resources:
             '/root/jenkins_configure_artifactory.sh':
               content: |
                 #!/bin/bash
+                # NOTE: Should create a specific user for Jenkins, but the user API is only for Artifactory PRO
                 artifactoryDNSName="$1"
                 artifactoryAdminUsername="$2"
                 artifactoryAdminPassword="$3"
@@ -548,6 +556,7 @@ Resources:
                 [ -z "$artifactoryAdminUsername" ] && echo "Invalid artifactoryAdminUsername" && exit 1
                 [ -z "$artifactoryAdminPassword" ] && echo "Invalid artifactoryAdminPassword" && exit 1
                 [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
+                artifactoryDNSName=${artifactoryDNSName,,}
                 sed -ibckp -E "s/%artifactoryDNSName%/$artifactoryDNSName/;s/%artifactoryAdminUsername%/$artifactoryAdminUsername/;s/%artifactoryAdminPassword%/$artifactoryAdminPassword/" /root/jenkins_configure_artifactory.groovy
                 echo "Configuring ARTIFACTORY..."
                 /root/jenkins_call_cli.sh /root/jenkins_configure_artifactory.groovy "$adminPassword"
@@ -556,6 +565,7 @@ Resources:
               group: 'root'
             '/root/jenkins_configure_sonarqube.groovy':
               content: |
+                import jenkins.model.Jenkins
                 import hudson.plugins.sonar.*
                 sonarqube = Jenkins.instance.getExtensionList('hudson.plugins.sonar.SonarGlobalConfiguration')[0]
                 sonarqube.buildWrapperEnabled = false;
@@ -576,9 +586,11 @@ Resources:
                 [ -z "$sonarqubeAdminPassword" ] && echo "Invalid sonarqubeAdminPassword" && exit 1
                 [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
                 # First create a jenkins user 
+                sonarqubeDNSName=${sonarqubeDNSName,,}
                 apiUrl="http://$sonarqubeDNSName/api"
                 jenkinsPassword=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-                curl -s -u "admin:$sonarqubeAdminPassword" -X POST $apiUrl/users/create -F "email=jenkins@example.com" -F "local=true" -F "login=jenkins" -F "name=Jenkins User" -F "password=$jenkinsPassword"
+                jenkinsEmail=jenkins@${sonarqubeAdminEmail##*@}
+                curl -s -u "admin:$sonarqubeAdminPassword" -X POST $apiUrl/users/create -F "email=$jenkinsEmail" -F "local=true" -F "login=jenkins" -F "name=Jenkins User" -F "password=$jenkinsPassword"
                 sonarqubeToken=$(curl -s -u "admin:$sonarqubeAdminPassword" -X POST $apiUrl/user_tokens/generate -F "login=jenkins" -F "name=JENKINS_TOKEN" | jq ".token" | tr -d '"')
                 sed -ibckp -E "s/%sonarqubeDNSName%/$sonarqubeDNSName/;s/%sonarqubeToken%/$sonarqubeToken/" /root/jenkins_configure_sonarqube.groovy
                 echo "Configuring SONARQUBE..."
@@ -588,6 +600,7 @@ Resources:
               group: 'root'
             '/root/jenkins_configure_jdk.groovy':
               content: |
+                import jenkins.model.Jenkins
                 import hudson.model.JDK
                 jdk = new JDK('java-1.8.0', '/etc/alternatives/java_sdk');
                 Jenkins.instance.setJDKs([jdk])
@@ -597,7 +610,7 @@ Resources:
               group: 'root'
             '/root/jenkins_configure_jdk.sh':
               content: |
-                #!/bin/bash
+                #!/bin/bash -x
                 adminPassword="$1"
                 [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
                 echo "Configuring JDK..."
@@ -612,7 +625,27 @@ Resources:
               command: 'sudo service jenkins start'
             '03_jenkins_configure_plugins':
               command: !Sub 'sudo /root/jenkins_configure_plugins.sh ${JenkinsAdminPassword}'
-            '04_jenkins_configure_ldap':
+            '04_jenkins_configure_artifactory':
+              command: !Join
+                - ' '
+                - - 'sudo /root/jenkins_configure_artifactory.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-DNSName'
+                  - 'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-AdminUsername'
+                  - !Sub '${ArtifactoryAdminPassword}'
+                  - !Sub '${JenkinsAdminPassword}'
+            '05_jenkins_configure_sonarqube':
+              command: !Join
+                - ' '
+                - - 'sudo /root/jenkins_configure_sonarqube.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
+                  - !Sub '${SonarqubeAdminPassword}'
+                  - !Sub '${JenkinsAdminPassword}'
+            '06_jenkins_configure_jdk':
+              command: !Join
+                - ' '
+                - - 'sudo /root/jenkins_configure_jdk.sh'
+                  - !Sub '${JenkinsAdminPassword}'
+            '07_jenkins_configure_ldap':
               command: !Join
                 - ' '
                 - - 'sudo /root/jenkins_configure_ldap.sh'
@@ -621,26 +654,6 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
-                  - !Sub '${JenkinsAdminPassword}'
-            '05_jenkins_configure_artifactory':
-              command: !Join
-                - ' '
-                - - 'sudo /root/jenkins_configure_artifactory.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-DNSName'
-                  - 'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-AdminUsername'
-                  - !Sub '${ArtifactoryAdminPassword}'
-                  - !Sub '${JenkinsAdminPassword}'
-            '06_jenkins_configure_sonarqube':
-              command: !Join
-                - ' '
-                - - 'sudo /root/jenkins_configure_sonarqube.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
-                  - !Sub '${SonarqubeAdminPassword}'
-                  - !Sub '${JenkinsAdminPassword}'
-            '07_jenkins_configure_jdk':
-              command: !Join
-                - ' '
-                - - 'sudo /root/jenkins_configure_jdk.sh'
                   - !Sub '${JenkinsAdminPassword}'
             '99_jenkins_restart':
               command: 'sudo service jenkins restart'
