@@ -57,7 +57,7 @@ Parameters:
   InstanceType:
     Description: 'The Gitlab instance type'
     Type: String
-    Default: 'c4.large'    
+    Default: 'c5.large'    
   LDAPManagerPassword: 
     Description: 'The LDAP Manager password'
     Type: String
@@ -187,14 +187,33 @@ Resources:
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
         # InstallGitlab, InstallGitlabApps, StartGitlab 
         configSets: 
-          default: [ Bootstrap, BootstrapGitlab, InstallGitlab ]
+          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
         Bootstrap:
           packages:
             yum:
+              wget: []
               htop: []
               awslogs: []
               yum-cron: []
           files:
+            '/etc/cfn/cfn-hup.conf':
+              content: !Sub |
+                [main]
+                stack=${AWS::StackName}
+                region=${AWS::Region}
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+                runas=root
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
             '/home/ec2-user/.bashrc':
               content: !Sub |
                 [ -f /etc/bashrc ] && . /etc/bashrc
@@ -232,12 +251,22 @@ Resources:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
-        BootstrapGitlab:
+                files:
+                  - /etc/yum/yum-cron.conf
+                  - /etc/yum/yum-cron-hourly.conf
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files: 
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        BootstrapApplication:
           packages:
             yum: 
               jq: []
               postfix: []
               policycoreutils-python: []
+              amazon-efs-utils: []
           files: 
             '/root/add_gitlab_repo.sh':
               source: 'https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh'
@@ -247,11 +276,9 @@ Resources:
             '/root/create_fs.sh': 
               content: |
                 #!/bin/bash -x
-                mkfs -t ext4 /dev/xvdb
                 MNT=/mnt/gitlab
                 [ ! -d $MNT ] && mkdir $MNT
-                mount /dev/xvdb $MNT
-                echo "/dev/xvdb $MNT ext4 defaults,nofail 0 2" > /etc/fstab
+                mount -t efs -o tls ${FileSystem}:/ $MNT
                 [ ! -d $MNT/opt ] && mkdir $MNT/opt
                 [ ! -d /opt     ] && mkdir -p /opt; ln -s $MNT/opt /opt/gitlab
               mode: "000700"
@@ -267,7 +294,7 @@ Resources:
               postfix: 
                 enabled: true
                 ensureRunning: true
-        InstallGitlab: 
+        InstallApplication: 
           packages:
             yum:
               gitlab-ee: []
@@ -402,7 +429,8 @@ Resources:
           yum-config-manager --enable epel
           yum update -y
           yum install -y aws-cfn-bootstrap
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource GitlabHost --region ${AWS::Region}
+          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
       Tags: 
         - Key: PLATFORM
           Value: 

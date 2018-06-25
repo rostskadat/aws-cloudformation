@@ -83,7 +83,7 @@ Parameters:
   InstanceType:
     Description: 'The Sonarqube instance type'
     Type: String
-    Default: 'c4.large'    
+    Default: 'c5.large'    
   LDAPManagerPassword: 
     Description: 'The LDAP Manager password'
     Type: String
@@ -187,6 +187,51 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancerSonarqube
       Port: 80
       Protocol: HTTP
+  SecurityGroupEFS:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access Splunk EFS'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        FromPort: 2049
+        ToPort: 2049
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
+  FileSystem:
+    Type: 'AWS::EFS::FileSystem'
+    Properties: 
+      Encrypted: true
+      FileSystemTags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-FileSystem'
+      PerformanceMode: generalPurpose
+  MountTargetA:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+  MountTargetB:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
   #
   # Let's create the Sonarqube instance.
   # 
@@ -223,14 +268,33 @@ Resources:
         # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
         # , InstallSonarqube
         configSets: 
-          default: [ Bootstrap, BootstrapSonarqube, InstallSonarqube ]
+          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
         Bootstrap:
           packages:
             yum:
+              wget: []
               htop: []
               awslogs: []
               yum-cron: []
           files:
+            '/etc/cfn/cfn-hup.conf':
+              content: !Sub |
+                [main]
+                stack=${AWS::StackName}
+                region=${AWS::Region}
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+                runas=root
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
             '/home/ec2-user/.bashrc':
               content: !Sub |
                 [ -f /etc/bashrc ] && . /etc/bashrc
@@ -268,12 +332,22 @@ Resources:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
-        BootstrapSonarqube:
+                files:
+                  - /etc/yum/yum-cron.conf
+                  - /etc/yum/yum-cron-hourly.conf
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files: 
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        BootstrapApplication:
           packages:
             yum: 
               mysql56: []
               py-bcrypt: []
               java-1.8.0-openjdk: []
+              amazon-efs-utils: []
           files: 
             '/etc/yum.repos.d/sonar.repo':
               source: 'http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo'
@@ -283,11 +357,9 @@ Resources:
             '/root/create_fs.sh': 
               content: |
                 #!/bin/bash -x
-                mkfs -t ext4 /dev/xvdb
                 MNT=/mnt/sonar
                 [ ! -d $MNT ] && mkdir $MNT
-                mount /dev/xvdb $MNT
-                echo "/dev/xvdb $MNT ext4 defaults,nofail 0 2" > /etc/fstab
+                mount -t efs -o tls ${FileSystem}:/ $MNT
                 [ ! -d $MNT/opt ] && mkdir $MNT/opt
                 [ ! -d /opt     ] && mkdir -p /opt; ln -s $MNT/opt /opt/sonar
               mode: "000700"
@@ -302,7 +374,7 @@ Resources:
               command: 'sudo yum remove -y java-1.7.0-openjdk'
             '04_create_fs':
               command: 'sudo /root/create_fs.sh'              
-        InstallSonarqube: 
+        InstallApplication: 
           packages:
             yum:
               jq: []
@@ -337,7 +409,7 @@ Resources:
               mode: '000600'
               owner: 'sonar'
               group: 'sonar'
-            '/root/sonarqube_createdb.sh':
+            '/root/sonarqube_create_db.sh':
               content: |
                 #!/bin/bash
                 address=$1
@@ -354,6 +426,17 @@ Resources:
                 GRANT ALL on sonarqube.* TO 'sonarqube'@'%' IDENTIFIED BY 'sonarqube';
                 FLUSH PRIVILEGES;
                 EOF
+                touch /mnt/sonar/opt/.db_created
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/sonarqube_configure_db.sh':
+              content: |
+                #!/bin/bash
+                address=$1
+                port=$2
+                [ -z "$address" ] && echo "Invalid address" && exit 1
+                [ -z "$port" ] && echo "Invalid port" && exit 1
                 sed -ibckp -E "s/%address%/$address/;s/%port%/$port/" /opt/sonar/conf/sonar.properties
               mode: '000700'
               owner: 'root'
@@ -483,15 +566,24 @@ Resources:
           commands:
             '01_chown':
               command: 'sudo chown -R sonar.sonar /mnt/sonar'
-            '02_sonarqube_createdb':
+            '02_sonarqube_create_db':
               command: !Join
                 - ' '
-                - - 'sudo /root/sonarqube_createdb.sh'
+                - - 'sudo /root/sonarqube_create_db.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterUserPassword}'
-            '03_sonarqube_configure_ldap':
+              test: 'test ! -f /mnt/sonar/.db_created'
+            '03_sonarqube_configure_db':
+              command: !Join
+                - ' '
+                - - 'sudo /root/sonarqube_configure_db.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+                  - !Sub '${DBMasterUserPassword}'
+            '04_sonarqube_configure_ldap':
               command: !Join
                 - ' '
                 - - 'sudo /root/sonarqube_configure_ldap.sh'
@@ -500,16 +592,16 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
-            '04_sonarqube_configure_gitlab':
+            '05_sonarqube_configure_gitlab':
               command: !Join
                 - ' '
                 - - 'sudo /root/sonarqube_configure_gitlab.sh'
                   - 'Fn::ImportValue': !Sub '${ParentGitlabStack}-DNSName'
                   - !Sub '${GitlabRootPassword}'
                   - !Sub '${SonarqubeAdminEmail}'
-            '05_sonarqube_start':
+            '06_sonarqube_start':
               command: 'sudo service sonar start'
-            '06_sonarqube_change_password':
+            '07_sonarqube_change_password':
               command: !Join
                 - ' '
                 - - 'sudo /root/sonarqube_change_password.sh'
@@ -546,7 +638,8 @@ Resources:
           yum-config-manager --enable epel
           yum update -y
           yum install -y aws-cfn-bootstrap
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource SonarqubeHost --region ${AWS::Region}
+          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
       Tags: 
         - Key: PLATFORM
           Value: 

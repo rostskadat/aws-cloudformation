@@ -13,8 +13,8 @@
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 # - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
-# - Should provide alert when the platform is unhealthy
 # - Should create a Jenkins User (only available for Artifactory PRO :s)
+# - Do not recreate DB on subsequent instance sping up...
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -44,6 +44,7 @@ Metadata:
     - Label:
         default: 'Artifactory Parameters'
       Parameters:
+      - ArtifactoryAdminEmail
       - ArtifactoryAdminPassword
 Parameters: 
   ParentVpcStack: 
@@ -64,7 +65,7 @@ Parameters:
   InstanceType:
     Description: 'The Artifactory instance type'
     Type: String
-    Default: 'c4.large'    
+    Default: 'c5.large'    
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
@@ -78,6 +79,10 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 3
+  ArtifactoryAdminEmail:
+    Description: 'The LDAP Admin email'
+    Type: String
+    Default: 'artifactory-admin@example.com'
   ArtifactoryAdminPassword: 
     Description: 'The Artifactory Admin password'
     Type: String
@@ -86,11 +91,54 @@ Parameters:
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
-  #
-  # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
-  #   from the Internet. If you want to restrict the IP from which to accept traffic, do it here. you can have a look 
-  #   at the 01-vpc.yaml, and more specifically the SecurityGroupDMZ for an example.
-  #
+  TopicHealth: 
+    Type: 'AWS::SNS::Topic'
+    Properties: 
+      DisplayName: !Sub '${AWS::StackName} - Server health notification'
+      Subscription:
+        - Endpoint: !Ref ArtifactoryAdminEmail
+          Protocol: 'email'
+  AutoScalingGroup: 
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: 1
+      MaxSize: 1
+      NotificationConfigurations:
+        - TopicARN: !Ref TopicHealth
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          PropagateAtLaunch: true
+    CreationPolicy: 
+      ResourceSignal: 
+        Timeout: PT15M
+        Count: 1
+    UpdatePolicy: 
+      AutoScalingRollingUpdate: 
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+    DependsOn:
+      - MountTargetA
+      - MountTargetB
   SecurityGroupELB:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -112,10 +160,10 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupELB'
-  LoadBalancerArtifactory:
+  LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
-      Scheme: 'internet-facing'
+      Scheme: internet-facing
       SecurityGroups:
       - !Ref SecurityGroupELB
       Subnets: 
@@ -126,12 +174,12 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancerArtifactory'
-  TargetGroupArtifactory:
+          Value: !Sub '${AWS::StackName}-LoadBalancer'
+  TargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
-      HealthCheckPath: '/artifactory/webapp/#/home'
+      HealthCheckPath: '/artifactory/webapp/'
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
@@ -144,68 +192,98 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupArtifactory'
+          Value: !Sub '${AWS::StackName}-TargetGroup'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
-      Targets:
-        - Id: !Ref ArtifactoryHost
-    DependsOn: ArtifactoryHost
-  ListenerArtifactory:
+  Listener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupArtifactory
+      - TargetGroupArn: !Ref TargetGroup
         Type: forward
-      LoadBalancerArn: !Ref LoadBalancerArtifactory
+      LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
-  #
-  # Let's create the Artifactory instance.
-  # 
-  # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
-  #   Artifactory port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
-  #   communications with a host presenting a self-signed certificate.
-  #
-  SecurityGroupArtifactory:
+  SecurityGroupEFS:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access the Artifactory instance'
+      GroupDescription: 'Security Group to access Splunk EFS'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
       - SourceSecurityGroupId: 
-          !Ref 'SecurityGroupELB'
-        FromPort: 8081
-        ToPort: 8081
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        FromPort: 2049
+        ToPort: 2049
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupArtifactory'
-  #
-  # Ok let's configure the main host then
-  #
-  ArtifactoryHost: 
-    Type: 'AWS::EC2::Instance'
+          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
+  FileSystem:
+    Type: 'AWS::EFS::FileSystem'
+    Properties: 
+      Encrypted: true
+      FileSystemTags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-FileSystem'
+      PerformanceMode: generalPurpose
+  MountTargetA:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+  MountTargetB:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+  LaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
       AWS::CloudFormation::Init:
-        #
-        # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
-        # InstallArtifactory, InstallArtifactoryApps, StartArtifactory 
         configSets: 
-          default: [ Bootstrap, BootstrapArtifactory, InstallArtifactory ]
+          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
         Bootstrap:
           packages:
             yum:
+              wget: []
               htop: []
               awslogs: []
               yum-cron: []
           files:
+            '/etc/cfn/cfn-hup.conf':
+              content: !Sub |
+                [main]
+                stack=${AWS::StackName}
+                region=${AWS::Region}
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+                runas=root
+              mode: '000400' 
+              owner: 'root'
+              group: 'root'
             '/home/ec2-user/.bashrc':
               content: !Sub |
                 [ -f /etc/bashrc ] && . /etc/bashrc
@@ -243,12 +321,22 @@ Resources:
               yum-cron: 
                 enabled: true
                 ensureRunning: true
-        BootstrapArtifactory:
+                files:
+                  - /etc/yum/yum-cron.conf
+                  - /etc/yum/yum-cron-hourly.conf
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files: 
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        BootstrapApplication:
           packages:
             yum: 
               mysql56: []
               java-1.8.0-openjdk: []
               mysql-connector-java: []
+              amazon-efs-utils: []
           files: 
             '/etc/yum.repos.d/bintray-jfrog-artifactory-rpms.repo':
               source: 'https://bintray.com/jfrog/artifactory-rpms/rpm'
@@ -256,19 +344,12 @@ Resources:
               owner: "root"
               group: "root"
             '/root/create_fs.sh': 
-              content: |
+              content: !Sub |
                 #!/bin/bash -x
-                mkfs -t ext4 /dev/xvdb
                 MNT=/mnt/artifactory
-                [ ! -d $MNT ] && mkdir $MNT
-                mount /dev/xvdb $MNT
-                echo "/dev/xvdb $MNT ext4 defaults,nofail 0 2" > /etc/fstab
-                [ ! -d $MNT/etc ] && mkdir $MNT/etc
-                [ ! -d $MNT/opt ] && mkdir $MNT/opt
-                [ ! -d $MNT/var ] && mkdir $MNT/var
-                [ ! -d /etc/opt ] && mkdir -p /etc/opt; ln -s $MNT/etc /etc/opt/jfrog
-                [ ! -d /opt     ] && mkdir -p /opt;     ln -s $MNT/opt /opt/jfrog
-                [ ! -d /var/opt ] && mkdir -p /var/opt; ln -s $MNT/var /var/opt/jfrog
+                [ -d $MNT ] || mkdir $MNT
+                mount -t efs -o tls ${FileSystem}:/ $MNT
+                [ -d $MNT/data ] || mkdir -p $MNT/data
               mode: "000700"
               owner: "root"
               group: "root"
@@ -279,11 +360,25 @@ Resources:
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
             '03_create_fs':
               command: 'sudo /root/create_fs.sh'              
-        InstallArtifactory: 
+        InstallApplication: 
           packages:
             yum:
               jfrog-artifactory-oss: []
           files:
+            '/etc/opt/jfrog/artifactory/binarystore.xml':
+              content: |
+                <?xml version="1.0" encoding="UTF-8"?>
+                <config version="1">
+                  <chain template="file-system"/>
+                  <provider id="file-system" type="file-system">
+                    <baseDataDir>/mnt/artifactory/data</baseDataDir>
+                    <fileStoreDir>filestore</fileStoreDir>  
+                    <tempDir>temp</tempDir>
+                  </provider>                  
+                </config>
+              mode: '000744'
+              owner: 'artifactory'
+              group: 'artifactory'
             '/etc/opt/jfrog/artifactory/db.properties':
               content: |
                 type=mysql
@@ -291,10 +386,10 @@ Resources:
                 url=jdbc:mysql://%address%:%port%/artifactory?characterEncoding=UTF-8&elideSetAutoCommits=true
                 username=artifactory
                 password=artifactory
-              mode: '000740'
+              mode: '000744'
               owner: 'artifactory'
               group: 'artifactory'
-            '/root/artifactory_createdb.sh':
+            '/root/artifactory_create_db.sh':
               content: !Sub |
                 #!/bin/bash
                 address=$1
@@ -311,6 +406,16 @@ Resources:
                 GRANT ALL on artifactory.* TO 'artifactory'@'%' IDENTIFIED BY 'artifactory';
                 FLUSH PRIVILEGES;
                 EOF
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/artifactory_configure_db.sh':
+              content: !Sub |
+                #!/bin/bash
+                address=$1
+                port=$2
+                [ -z "$address" ] && echo "Invalid address" && exit 1
+                [ -z "$port" ] && echo "Invalid port" && exit 1
                 sed -ibckp -E "s/%address%/$address/;s/%port%/$port/" /etc/opt/jfrog/artifactory/db.properties
               mode: '000700'
               owner: 'root'
@@ -326,7 +431,7 @@ Resources:
                 header="Content-type: application/json"
                 data='{ "userName":"admin", "oldPassword":"'"$oldPassword"'", "newPassword1":"'"$newPassword"'", "newPassword2":"'"$newPassword"'"}'
                 url="$API_URL/security/users/authorization/changePassword"
-                echo -n "Changing default password for user admin"
+                echo -n "Changing default admin password"
                 while (true); do
                         result=$(curl -s --user "admin:$oldPassword" -H "$header" -d "$data" -X POST "$url")
                         [ $(echo -n "$result" | grep -c "Password has been successfully changed") -gt 0 ] && break
@@ -383,33 +488,68 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
+            '/root/artifactory_start_and_configure_master_key.sh':
+              content: |
+                #!/bin/bash
+                MASTER_KEY_TARGET=/etc/opt/jfrog/artifactory/security/master.key
+                MASTER_KEY_BACKUP=/mnt/artifactory/data/master.key
+                if [ -f '/mnt/artifactory/data/.first_time' ]; then
+                  echo "This is not the first install. Restoring $MASTER_KEY_TARGET from $MASTER_KEY_BACKUP"
+                  [ -d $(dirname $MASTER_KEY_TARGET) ] ||  mkdir -p $(dirname $MASTER_KEY_TARGET)
+                  cp $MASTER_KEY_BACKUP $MASTER_KEY_TARGET
+                  chown -R artifactory.artifactory /etc/opt/jfrog/artifactory
+                  service artifactory start
+                else
+                  service artifactory start
+                  echo -n "Waiting for master.key to be available"
+                  while [ ! -f $MASTER_KEY_TARGET ]; do 
+                    sleep 1 
+                    echo -n "."
+                  done
+                  cp $MASTER_KEY_TARGET $MASTER_KEY_BACKUP
+                fi
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_create_symlink_for_mysql':
               command: 'sudo ln -s /usr/share/java/mysql-connector-java.jar /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
-            '02_artifactory_createdb':
+              test: 'test ! -e /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
+            '02_artifactory_create_db':
               command: !Join
                 - ' '
-                - - 'sudo /root/artifactory_createdb.sh'
+                - - 'sudo /root/artifactory_create_db.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterUserPassword}'
-            '03_chown':
-              command: 'sudo chown -R artifactory.artifactory /mnt/artifactory'
-            '04_artifactory_start':
-              command: 'sudo service artifactory start'
-            '05_artifactory_change_password': 
-              command: !Sub 'sudo /root/artifactory_change_password.sh password ${ArtifactoryAdminPassword}'
-            '06_artifactory_configure_ldap': 
+              test: 'sudo test ! -e /mnt/artifactory/data/.first_time'
+            '03_artifactory_configure_db':
               command: !Join
                 - ' '
-                - - 'sudo /root/artifactory_configure_ldap.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPHostname'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-                  - !Sub '${LDAPManagerPassword}'
-                  - !Sub '${ArtifactoryAdminPassword}'
+                - - 'sudo /root/artifactory_configure_db.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+            '04_chown':
+              command: 'sudo chown -R artifactory.artifactory /mnt/artifactory'
+            '05_artifactory_start_and_configure_master_key':
+              command: 'sudo /root/artifactory_start_and_configure_master_key.sh'
+            '06_artifactory_change_password': 
+              command: !Sub 'sudo /root/artifactory_change_password.sh password ${ArtifactoryAdminPassword}'
+              test: 'sudo test ! -e /mnt/artifactory/data/.first_time'
+#            '07_artifactory_configure_ldap': 
+#              command: !Join
+#                - ' '
+#                - - 'sudo /root/artifactory_configure_ldap.sh'
+#                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
+#                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+#                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+#                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+#                  - !Sub '${LDAPManagerPassword}'
+#                  - !Sub '${ArtifactoryAdminPassword}'
+#              test: 'sudo test ! -e /mnt/artifactory/data/.ldap_configured'
+            '08_setup_done':
+              command: 'sudo touch /mnt/artifactory/data/.first_time'
             '99_artifactory_restart': 
               command: 'sudo service artifactory restart'
           services: 
@@ -418,64 +558,45 @@ Resources:
                 enabled: true
                 ensureRunning: true
     Properties: 
-      DisableApiTermination: false
-      InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       ImageId: 'ami-c51e3eb6'
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
-      SecurityGroupIds: 
+      SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        - !Ref SecurityGroupArtifactory
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-      Volumes: 
-        - VolumeId: !Ref VolumeData
-          Device: '/dev/xvdb'
-      Monitoring: false
+        - !Ref SecurityGroupHealthCheck
       UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
           yum update -y
           yum install -y aws-cfn-bootstrap
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource ArtifactoryHost --region ${AWS::Region}
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-ArtifactoryHost'
-    DependsOn: VolumeData
-  VolumeData:
-    Type: 'AWS::EC2::Volume'
+          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+  SecurityGroupHealthCheck:
+    Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      Size: 500
-      Encrypted: true
-      VolumeType: gp2
-      AvailabilityZone: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
+      GroupDescription: 'Security Group for the Health Check'
+      VpcId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp: '10.0.0.0/16'
+#          Fn::GetAtt: [ 'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc', CidrBlock ]
+        FromPort: 8081
+        ToPort: 8081
+        IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-VolumeData'
+          Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
+
 Outputs: 
-  InstanceId: 
-    Description: 'InstanceId of the newly created Artifactory instance'
-    Value: !Ref ArtifactoryHost
-    Export:
-      Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
     Description: 'Public DNS address of the internet facing ELB'
-    Value: !Sub '${LoadBalancerArtifactory.DNSName}'
+    Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
-  AdminUsername: 
-    Description: 'The name of the administrative user'
-    Value: 'admin'
-    Export:
-      Name: !Sub '${AWS::StackName}-AdminUsername'
       

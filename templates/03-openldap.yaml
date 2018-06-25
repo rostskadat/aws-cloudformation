@@ -12,8 +12,6 @@
 #
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
-# - Should provide alert when the platform is unhealthy
-# - Network Loadbalancer does not seem to work. Using a Classic Load Balancer instead
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
