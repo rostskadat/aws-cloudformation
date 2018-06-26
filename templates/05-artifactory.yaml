@@ -142,7 +142,7 @@ Resources:
   SecurityGroupELB:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access Artifactory ELB'
+      GroupDescription: 'Security Group to access the LoadBalancer'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
@@ -468,7 +468,7 @@ Resources:
                 #!/bin/bash
                 MASTER_KEY_TARGET=/etc/opt/jfrog/artifactory/security/master.key
                 MASTER_KEY_BACKUP=/mnt/artifactory/data/master.key
-                if [ -f '/mnt/artifactory/data/.artifactory_configured' ]; then
+                if [ -f '/mnt/artifactory/data/.application_configured' ]; then
                   echo "This is not the first install. Restoring $MASTER_KEY_TARGET from $MASTER_KEY_BACKUP"
                   [ -d $(dirname $MASTER_KEY_TARGET) ] ||  mkdir -p $(dirname $MASTER_KEY_TARGET)
                   cp $MASTER_KEY_BACKUP $MASTER_KEY_TARGET
@@ -523,7 +523,7 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterUserPassword}'
-              test: 'sudo test ! -e /mnt/artifactory/data/.artifactory_configured'
+              test: 'sudo test ! -e /mnt/artifactory/data/.application_configured'
             '03_artifactory_configure_db':
               command: !Join
                 - ' '
@@ -536,7 +536,7 @@ Resources:
               command: 'sudo /root/artifactory_start_and_configure_master_key.sh'
             '06_artifactory_change_password': 
               command: !Sub 'sudo /root/artifactory_change_password.sh password ${ArtifactoryAdminPassword}'
-              test: 'sudo test ! -e /mnt/artifactory/data/.artifactory_configured'
+              test: 'sudo test ! -e /mnt/artifactory/data/.application_configured'
             '07_artifactory_configure_ldap': 
               command: !Join
                 - ' '
@@ -547,9 +547,9 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
                   - !Sub '${ArtifactoryAdminPassword}'
-              test: 'sudo test ! -e /mnt/artifactory/data/.artifactory_configured'
+              test: 'sudo test ! -e /mnt/artifactory/data/.application_configured'
             '08_setup_done':
-              command: 'sudo touch /mnt/artifactory/data/.artifactory_configured'
+              command: 'sudo touch /mnt/artifactory/data/.application_configured'
             '99_artifactory_restart': 
               command: 'sudo service artifactory restart'
           services: 
