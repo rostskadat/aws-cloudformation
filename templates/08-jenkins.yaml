@@ -148,15 +148,58 @@ Mappings:
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
-  #
-  # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
-  #   from the Internet. If you want to restrict the IP from which to accept traffic, do it here. you can have a look 
-  #   at the 01-vpc.yaml, and more specifically the SecurityGroupDMZ for an example.
-  #
+  TopicHealth: 
+    Type: 'AWS::SNS::Topic'
+    Properties: 
+      DisplayName: !Sub '${AWS::StackName} - Server health notification'
+      Subscription:
+        - Endpoint: !Ref JenkinsAdminEmail
+          Protocol: 'email'
+  AutoScalingGroup: 
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: 1
+      MaxSize: 1
+      NotificationConfigurations:
+        - TopicARN: !Ref TopicHealth
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          PropagateAtLaunch: true
+    CreationPolicy: 
+      ResourceSignal: 
+        Timeout: PT15M
+        Count: 1
+    UpdatePolicy: 
+      AutoScalingRollingUpdate: 
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+    DependsOn:
+      - MountTargetA
+      - MountTargetB
   SecurityGroupELB:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access Jenkins ELB'
+      GroupDescription: 'Security Group to access the LoadBalancer'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
@@ -174,10 +217,10 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupELB'
-  LoadBalancerJenkins:
+  LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
-      Scheme: 'internet-facing'
+      Scheme: internet-facing
       SecurityGroups:
       - !Ref SecurityGroupELB
       Subnets: 
@@ -188,8 +231,8 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancerJenkins'
-  TargetGroupJenkins:
+          Value: !Sub '${AWS::StackName}-LoadBalancer'
+  TargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
@@ -206,59 +249,70 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupJenkins'
+          Value: !Sub '${AWS::StackName}-TargetGroup'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
-      Targets:
-        - Id: !Ref JenkinsHost
-    DependsOn: JenkinsHost
-  ListenerJenkins:
+  Listener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupJenkins
+      - TargetGroupArn: !Ref TargetGroup
         Type: forward
-      LoadBalancerArn: !Ref LoadBalancerJenkins
+      LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
-  #
-  # Let's create the Jenkins instance.
-  # 
-  # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
-  #   Jenkins port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
-  #   communications with a host presenting a self-signed certificate.
-  #
-  SecurityGroupJenkins:
+  SecurityGroupEFS:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access the Jenkins instance'
+      GroupDescription: 'Security Group to access Splunk EFS'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
       - SourceSecurityGroupId: 
-          !Ref 'SecurityGroupELB'
-        FromPort: 8080
-        ToPort: 8080
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        FromPort: 2049
+        ToPort: 2049
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupJenkins'
-  #
-  # Ok let's configure the main host then
-  #
-  JenkinsHost: 
-    Type: 'AWS::EC2::Instance'
+          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
+  FileSystem:
+    Type: 'AWS::EFS::FileSystem'
+    Properties: 
+      Encrypted: true
+      FileSystemTags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-FileSystem'
+      PerformanceMode: generalPurpose
+  MountTargetA:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+  MountTargetB:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+  LaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
       AWS::CloudFormation::Init:
-        #
-        # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
-        # , InstallJenkins
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
         Bootstrap:
@@ -715,6 +769,8 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
                   - !Sub '${JenkinsAdminPassword}'
+            '98_application_configured':
+              command: 'sudo touch /mnt/jenkins/.application_configured'
             '99_jenkins_restart':
               command: 'sudo service jenkins restart'
           services: 
@@ -723,22 +779,14 @@ Resources:
                 enabled: true
                 ensureRunning: true
     Properties: 
-      DisableApiTermination: false
-      InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
-      SecurityGroupIds: 
+      SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        - !Ref SecurityGroupJenkins
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-      Volumes: 
-        - VolumeId: !Ref VolumeData
-          Device: '/dev/xvdb'
-      Monitoring: false
+        - !Ref SecurityGroupHealthCheck
       UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash
@@ -747,36 +795,29 @@ Resources:
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
           /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-JenkinsHost'
-    DependsOn: VolumeData
-  VolumeData:
-    Type: 'AWS::EC2::Volume'
+  SecurityGroupHealthCheck:
+    Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      Size: 500
-      Encrypted: true
-      VolumeType: gp2
-      AvailabilityZone: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPrivateAZA'
+      GroupDescription: 'Security Group for the Health Check'
+      VpcId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp: '10.0.0.0/16'
+#          Fn::GetAtt: [ 'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc', CidrBlock ]
+        FromPort: 9000
+        ToPort: 9000
+        IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-VolumeData'
+          Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
+
 Outputs: 
-  InstanceId: 
-    Description: "InstanceId of the newly created Jenkins instance"
-    Value: !Ref JenkinsHost
-    Export:
-      Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
-    Description: "Public DNS address of the internet facing ELB"
-    Value: !Sub '${LoadBalancerJenkins.DNSName}'
+    Description: 'Public DNS address of the internet facing ELB'
+    Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
       
