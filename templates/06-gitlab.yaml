@@ -587,7 +587,7 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterUserPassword}'
-              test: 'sudo test ! -e /mnt/artifactory/.application_configured'
+              test: 'sudo test ! -e /mnt/gitlab/.application_configured'
             '04_gitlab_configure_db': 
               command: !Join
                 - ' '
@@ -598,10 +598,10 @@ Resources:
                   - !Sub '${DBMasterUserPassword}'
             '05_gitlab_change_password': 
               command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabRootEmail}" "${GitlabRootPassword}"'
-              test: 'sudo test ! -e /mnt/artifactory/.application_configured' 
+              test: 'sudo test ! -e /mnt/gitlab/.application_configured' 
             '06_gitlab_extra_config': 
               command: !Sub 'sudo /root/gitlab_extra_config.sh "${GitlabRootPassword}"'
-              test: 'sudo test ! -e /mnt/artifactory/.application_configured'
+              test: 'sudo test ! -e /mnt/gitlab/.application_configured'
             '98_application_configured':
               command: 'sudo touch /mnt/gitlab/.application_configured'
             '99_gitlab_restart': 
