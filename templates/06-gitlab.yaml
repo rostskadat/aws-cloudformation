@@ -130,47 +130,47 @@ Resources:
       Subscription:
         - Endpoint: !Ref GitlabRootEmail
           Protocol: 'email'
-#  AutoScalingGroup: 
-#    Type: 'AWS::AutoScaling::AutoScalingGroup'
-#    Properties:
-#      HealthCheckGracePeriod: 300
-#      HealthCheckType: ELB
-#      LaunchConfigurationName: !Ref LaunchConfiguration
-#      MinSize: 1
-#      MaxSize: 1
-#      NotificationConfigurations:
-#        - TopicARN: !Ref TopicHealth
-#          NotificationTypes:
-#            - 'autoscaling:EC2_INSTANCE_LAUNCH'
-#            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
-#            - 'autoscaling:EC2_INSTANCE_TERMINATE'
-#            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
-#      TargetGroupARNs:
-#        - !Ref TargetGroup
-#      VPCZoneIdentifier: 
-#        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-#        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
-#      Tags: 
-#        - Key: PLATFORM
-#          Value: 
-#            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-#          PropagateAtLaunch: true
-#        - Key: Name
-#          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
-#          PropagateAtLaunch: true
-#    CreationPolicy: 
-#      ResourceSignal: 
-#        Timeout: PT15M
-#        Count: 1
-#    UpdatePolicy: 
-#      AutoScalingRollingUpdate: 
-#        MinInstancesInService: 1
-#        MaxBatchSize: 1
-#        PauseTime: PT15M
-#        WaitOnResourceSignals: true
-#    DependsOn:
-#      - MountTargetA
-#      - MountTargetB
+  AutoScalingGroup: 
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: 1
+      MaxSize: 1
+      NotificationConfigurations:
+        - TopicARN: !Ref TopicHealth
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          PropagateAtLaunch: true
+    CreationPolicy: 
+      ResourceSignal: 
+        Timeout: PT15M
+        Count: 1
+    UpdatePolicy: 
+      AutoScalingRollingUpdate: 
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+    DependsOn:
+      - MountTargetA
+      - MountTargetB
   SecurityGroupELB:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -529,7 +529,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab_change_password.sh':
+            '/root/gitlab_configure.sh':
               content: |
                 #!/bin/bash
                 email=$1
@@ -596,9 +596,8 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterUserPassword}'
-            '05_gitlab_change_password': 
-              command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabRootEmail}" "${GitlabRootPassword}"'
-              test: 'sudo test ! -e /mnt/gitlab/.application_configured' 
+            '05_gitlab_configure': 
+              command: !Sub 'sudo /root/gitlab_configure.sh "${GitlabRootEmail}" "${GitlabRootPassword}"'
             '06_gitlab_extra_config': 
               command: !Sub 'sudo /root/gitlab_extra_config.sh "${GitlabRootPassword}"'
               test: 'sudo test ! -e /mnt/gitlab/.application_configured'
