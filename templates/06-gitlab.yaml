@@ -26,6 +26,7 @@ Metadata:
       Parameters:
       - ParentVpcStack
       - ParentLDAPStack
+      - ParentDBStack
     - Label:
         default: 'EC2 Parameters'
       Parameters:
@@ -35,6 +36,10 @@ Metadata:
         default: 'LDAP Parameter'
       Parameters:
       - LDAPManagerPassword
+    - Label:
+        default: 'PostgreSQL DB Parameters'
+      Parameters:
+      - DBMasterUserPassword
     - Label:
         default: 'Gitlab Parameters'
       Parameters:
@@ -51,6 +56,11 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the LDAP stack'
+  ParentDBStack:
+    Description: 'Enter the name of the DB Stack'
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the DB stack'
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
@@ -59,6 +69,11 @@ Parameters:
     Type: String
     Default: 'c5.large'    
   LDAPManagerPassword: 
+    Description: 'The LDAP Manager password'
+    Type: String
+    NoEcho: true
+    MinLength: 3
+  DBMasterUserPassword:
     Description: 'The LDAP Manager password'
     Type: String
     NoEcho: true
@@ -72,18 +87,94 @@ Parameters:
     Type: String
     Default: ''
     NoEcho: true
+Mappings:
+  # cf 01-mappings.yaml
+  RegionMap:
+    ap-northeast-1:
+      AMI: ami-92df37ed
+    ap-northeast-2:
+      AMI: ami-c10fa6af
+    ap-south-1:
+      AMI: ami-76d6f519
+    ap-southeast-1:
+      AMI: ami-de90a5a2
+    ap-southeast-2:
+      AMI: ami-423bec20
+    ca-central-1:
+      AMI: ami-338a0a57
+    eu-central-1:
+      AMI: ami-9a91b371
+    eu-west-1:
+      AMI: ami-ca0135b3
+    eu-west-2:
+      AMI: ami-a36f8dc4
+    eu-west-3:
+      AMI: ami-969c2deb
+    sa-east-1:
+      AMI: ami-3885d854
+    us-east-1:
+      AMI: ami-14c5486b
+    us-east-2:
+      AMI: ami-922914f7
+    us-west-1:
+      AMI: ami-25110f45
+    us-west-2:
+      AMI: ami-e251209a
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
-  #
-  # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
-  #   from the Internet. If you want to restrict the IP from which to accept traffic, do it here. you can have a look 
-  #   at the 01-vpc.yaml, and more specifically the SecurityGroupDMZ for an example.
-  #
+  TopicHealth: 
+    Type: 'AWS::SNS::Topic'
+    Properties: 
+      DisplayName: !Sub '${AWS::StackName} - Server health notification'
+      Subscription:
+        - Endpoint: !Ref GitlabRootEmail
+          Protocol: 'email'
+#  AutoScalingGroup: 
+#    Type: 'AWS::AutoScaling::AutoScalingGroup'
+#    Properties:
+#      HealthCheckGracePeriod: 300
+#      HealthCheckType: ELB
+#      LaunchConfigurationName: !Ref LaunchConfiguration
+#      MinSize: 1
+#      MaxSize: 1
+#      NotificationConfigurations:
+#        - TopicARN: !Ref TopicHealth
+#          NotificationTypes:
+#            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+#            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+#            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+#            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+#      TargetGroupARNs:
+#        - !Ref TargetGroup
+#      VPCZoneIdentifier: 
+#        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+#        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+#      Tags: 
+#        - Key: PLATFORM
+#          Value: 
+#            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+#          PropagateAtLaunch: true
+#        - Key: Name
+#          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+#          PropagateAtLaunch: true
+#    CreationPolicy: 
+#      ResourceSignal: 
+#        Timeout: PT15M
+#        Count: 1
+#    UpdatePolicy: 
+#      AutoScalingRollingUpdate: 
+#        MinInstancesInService: 1
+#        MaxBatchSize: 1
+#        PauseTime: PT15M
+#        WaitOnResourceSignals: true
+#    DependsOn:
+#      - MountTargetA
+#      - MountTargetB
   SecurityGroupELB:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access Gitlab ELB'
+      GroupDescription: 'Security Group to access the LoadBalancer'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
@@ -101,10 +192,10 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupELB'
-  LoadBalancerGitlab:
+  LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
-      Scheme: 'internet-facing'
+      Scheme: internet-facing
       SecurityGroups:
       - !Ref SecurityGroupELB
       Subnets: 
@@ -115,8 +206,8 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancerGitlab'
-  TargetGroupGitlab:
+          Value: !Sub '${AWS::StackName}-LoadBalancer'
+  TargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
@@ -133,59 +224,70 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupGitlab'
+          Value: !Sub '${AWS::StackName}-TargetGroup'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
-      Targets:
-        - Id: !Ref GitlabHost
-    DependsOn: GitlabHost
-  ListenerGitlab:
+  Listener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupGitlab
+      - TargetGroupArn: !Ref TargetGroup
         Type: forward
-      LoadBalancerArn: !Ref LoadBalancerGitlab
+      LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
-  #
-  # Let's create the Gitlab instance.
-  # 
-  # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
-  #   Gitlab port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
-  #   communications with a host presenting a self-signed certificate.
-  #
-  SecurityGroupGitlab:
+  SecurityGroupEFS:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: 'Security Group to access the Gitlab instance'
+      GroupDescription: 'Security Group to access Splunk EFS'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
       - SourceSecurityGroupId: 
-          !Ref 'SecurityGroupELB'
-        FromPort: 80
-        ToPort: 80
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        FromPort: 2049
+        ToPort: 2049
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupGitlab'
-  #
-  # Ok let's configure the main host then
-  #
-  GitlabHost: 
-    Type: 'AWS::EC2::Instance'
+          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
+  FileSystem:
+    Type: 'AWS::EFS::FileSystem'
+    Properties: 
+      Encrypted: true
+      FileSystemTags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-FileSystem'
+      PerformanceMode: generalPurpose
+  MountTargetA:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+  MountTargetB:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+  LaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
       AWS::CloudFormation::Init:
-        #
-        # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
-        # InstallGitlab, InstallGitlabApps, StartGitlab 
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
         Bootstrap:
@@ -267,6 +369,9 @@ Resources:
               postfix: []
               policycoreutils-python: []
               amazon-efs-utils: []
+              postgresql96-contrib: []
+              patch: []
+              expect: []
           files: 
             '/root/add_gitlab_repo.sh':
               source: 'https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh'
@@ -274,13 +379,12 @@ Resources:
               owner: 'root'
               group: 'root'
             '/root/create_fs.sh': 
-              content: |
+              content: !Sub |
                 #!/bin/bash -x
                 MNT=/mnt/gitlab
-                [ ! -d $MNT ] && mkdir $MNT
+                [ -d $MNT ] || mkdir $MNT
                 mount -t efs -o tls ${FileSystem}:/ $MNT
-                [ ! -d $MNT/opt ] && mkdir $MNT/opt
-                [ ! -d /opt     ] && mkdir -p /opt; ln -s $MNT/opt /opt/gitlab
+                [ -d $MNT/git-data ] || mkdir -p $MNT/git-data
               mode: "000700"
               owner: "root"
               group: "root"
@@ -302,6 +406,20 @@ Resources:
             '/etc/gitlab/gitlab.rb':
               content: |
                 external_url 'http://%external_url%'
+                git_data_dirs({
+                  'default': {
+                    'path': '/mnt/gitlab/git-data'
+                  }
+                })
+                
+                postgresql['enable'] = false
+                gitlab_rails['db_adapter'] = 'postgresql'
+                gitlab_rails['db_encoding'] = 'utf8'
+                gitlab_rails['db_host'] = '%endpointAddress%'
+                gitlab_rails['db_port'] = %endpointPort%
+                gitlab_rails['db_username'] = '%masterUsername%'
+                gitlab_rails['db_password'] = '%masterUserPassword%'
+                
                 gitlab_rails['ldap_enabled'] = true
                 gitlab_rails['ldap_servers'] = {
                   'main' => { 
@@ -321,6 +439,9 @@ Resources:
                     'user_filter' => '(objectclass=person)'
                   }
                 }
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
             '/root/gitlab_configure_url.sh':
               content: |
                 #!/bin/bash -x
@@ -345,6 +466,66 @@ Resources:
                 [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1
                 [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
                 sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%rootDC%/$rootDC/;s/%managerDN%/$managerDN/;s/%managerPassword%/$managerPassword/" /etc/gitlab/gitlab.rb
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/patch_config.rb':
+              content: !Sub |
+                --- /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb      2018-06-26 14:53:20.531134934 +0000
+                +++ /root/config.rb     2018-06-26 14:53:02.519089466 +0000
+                @@ -12,10 +12,10 @@
+                               enabled? && ::License.feature_available?(:ldap_group_sync)
+                             end
+                
+                -            override :_available_servers
+                -            def _available_servers
+                -              ::License.feature_available?(:multiple_ldap_servers) ? servers : super
+                -            end
+                +#            override :_available_servers
+                +#            def _available_servers
+                +#              ::License.feature_available?(:multiple_ldap_servers) ? servers : super
+                +#            end
+                           end
+                         end
+                       end
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/gitlab_create_db.sh':
+              content: |
+                #!/bin/bash
+                endpointAddress="$1"
+                endpointPort="$2"
+                masterUsername="$3"
+                masterUserPassword="$4"
+                [ -z "$endpointAddress" ] && echo "Invalid endpointAddress" && exit 1
+                [ -z "$endpointPort" ] && echo "Invalid endpointPort" && exit 1
+                [ -z "$masterUsername" ] && echo "Invalid masterUsername" && exit 1
+                [ -z "$masterUserPassword" ] && echo "Invalid masterUserPassword" && exit 1
+                
+                echo "Patching config.rb..."
+                patch /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb /root/patch_config.rb
+                expect - <<EOF
+                spawn /usr/bin/createdb --host=$endpointAddress --port=$endpointPort --username=$masterUsername --encoding=UTF8 gitlabhq_production
+                expect "Password:"
+                send "$masterUserPassword\r"
+                expect eof
+                EOF
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/gitlab_configure_db.sh':
+              content: |
+                #!/bin/bash
+                endpointAddress="$1"
+                endpointPort="$2"
+                masterUsername="$3"
+                masterUserPassword="$4"
+                [ -z "$masterUsername" ] && echo "Invalid masterUsername" && exit 1
+                [ -z "$masterUserPassword" ] && echo "Invalid masterUserPassword" && exit 1
+                [ -z "$endpointAddress" ] && echo "Invalid endpointAddress" && exit 1
+                [ -z "$endpointPort" ] && echo "Invalid endpointPort" && exit 1
+                sed -ibckp -E "s/%endpointAddress%/$endpointAddress/;s/%endpointPort%/$endpointPort/;s/%masterUsername%/$masterUsername/;s/%masterUserPassword%/$masterUserPassword/" /etc/gitlab/gitlab.rb
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -383,46 +564,57 @@ Resources:
                 change_settings help_page_hide_commercial_content true
                 change_settings html_emails_enabled               true
                 curl -s --request POST -H "Authorization: Bearer $token" -F token=$token http://localhost:80/oauth/revoke > /dev/null
-                
-                cp lib/support/init.d/gitlab /etc/init.d/gitlab
               mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
             '01_gitlab_configure_url': 
-              command: !Sub 'sudo /root/gitlab_configure_url.sh ${LoadBalancerGitlab.DNSName}'
+              command: !Sub 'sudo /root/gitlab_configure_url.sh ${LoadBalancer.DNSName}'
             '02_gitlab_configure_ldap': 
               command: !Join
                 - ' '
                 - - 'sudo /root/gitlab_configure_ldap.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPHostname'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
-            '04_gitlab_change_password': 
+            '03_gitlab_create_db':
+              command: !Join
+                - ' '
+                - - 'sudo /root/gitlab_create_db.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+                  - !Sub '${DBMasterUserPassword}'
+              test: 'sudo test ! -e /mnt/artifactory/data/.application_configured'
+            '04_gitlab_configure_db': 
+              command: !Join
+                - ' '
+                - - 'sudo /root/gitlab_configure_db.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+                  - !Sub '${DBMasterUserPassword}'
+            '05_gitlab_change_password': 
               command: !Sub 'sudo /root/gitlab_change_password.sh "${GitlabRootEmail}" "${GitlabRootPassword}"'
-            '05_gitlab_extra_config': 
+              test: 'sudo test ! -e /mnt/artifactory/.application_configured' 
+            '06_gitlab_extra_config': 
               command: !Sub 'sudo /root/gitlab_extra_config.sh "${GitlabRootPassword}"'
+              test: 'sudo test ! -e /mnt/artifactory/.application_configured'
+            '98_application_configured':
+              command: 'sudo touch /mnt/gitlab/.application_configured'
             '99_gitlab_restart': 
               command: 'sudo gitlab-ctl restart'
     Properties: 
-      DisableApiTermination: false
-      InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
-      ImageId: 'ami-c51e3eb6'
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
-      SecurityGroupIds: 
+      SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        - !Ref SecurityGroupGitlab
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-      Volumes: 
-        - VolumeId: !Ref VolumeData
-          Device: '/dev/xvdb'
-      Monitoring: false
+        - !Ref SecurityGroupHealthCheck
       UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash
@@ -431,36 +623,29 @@ Resources:
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
           /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-GitlabHost'
-    DependsOn: VolumeData
-  VolumeData:
-    Type: 'AWS::EC2::Volume'
+  SecurityGroupHealthCheck:
+    Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      Size: 500
-      Encrypted: true
-      VolumeType: gp2
-      AvailabilityZone: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPublicAZA'
+      GroupDescription: 'Security Group for the Health Check'
+      VpcId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp: '10.0.0.0/16'
+#          Fn::GetAtt: [ 'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc', CidrBlock ]
+        FromPort: 80
+        ToPort: 80
+        IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-VolumeData'
+          Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
+
 Outputs: 
-  InstanceId: 
-    Description: "InstanceId of the newly created Gitlab instance"
-    Value: !Ref GitlabHost
-    Export:
-      Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
-    Description: "Public DNS address of the internet facing ELB"
-    Value: !GetAtt LoadBalancerGitlab.DNSName
+    Description: 'Public DNS address of the internet facing ELB'
+    Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
       

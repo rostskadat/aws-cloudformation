@@ -1,5 +1,5 @@
 #
-# FILE: 04-mysql.yaml
+# FILE: 04-postgresql.yaml
 #
 # DESCRIPTION: This Stack create an RDS instance.
 #
@@ -48,8 +48,8 @@ Resources:
       SecurityGroupIngress:
       - SourceSecurityGroupId:
           'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        FromPort: 3306
-        ToPort: 3306
+        FromPort: 5432
+        ToPort: 5432
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
@@ -75,10 +75,10 @@ Resources:
     Type: 'AWS::RDS::DBParameterGroup'
     Properties: 
       Description: 'Parameters necessary for DB'
-      Family: 'mysql5.6'
+      Family: 'postgres10'
       # https://docs.sonarqube.org/display/SONAR/Installing+the+Server#InstallingtheServer-installingDatabaseInstallingtheDatabase
-      # https://www.jfrog.com/confluence/display/RTF/MySQL
-      Parameters: { "max_allowed_packet": 8388608, "tmp_table_size": 536870912, "max_heap_table_size": 536870912, "innodb_log_file_size": 268435456, "query_cache_size" : 15728640 }
+      # https://www.jfrog.com/confluence/display/RTF/PostgreSQL
+      Parameters: { }
       Tags:
         - Key: PLATFORM
           Value: 
@@ -97,8 +97,8 @@ Resources:
       DBInstanceClass: !Ref DBInstanceClass
       DBParameterGroupName: !Ref DBParameterGroupDB
       DBSubnetGroupName: !Ref DBSubnetGroupDB
-      Engine: mysql
-      EngineVersion: '5.6.39'
+      Engine: postgres
+      EngineVersion: '10.3'
       MasterUsername: !Ref MasterUsername
       MasterUserPassword: !Ref MasterUserPassword
       PreferredBackupWindow: "01:00-03:00"

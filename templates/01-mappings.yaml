@@ -1,0 +1,53 @@
+#
+# FILE: 01-mappings.yaml
+#
+# DESCRIPTION: This stack contains all the mappings used through out the different stacks
+#
+# To create the AMI mappings:
+# 
+# ?> echo "  RegionMap: "
+#    for region in $(aws --region eu-west-1 ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text|sort -u); do 
+#       latest_ami_name=$(aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" --query 'Images[*].Name'|sort -r|head -1|tr -d '"'|xargs|sed -e 's/,//g')
+#       echo "    $region: "
+#       echo -n "      AMI: "; aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=$latest_ami_name" --query 'Images[*].ImageId' --output text
+#    done
+#
+#
+#
+#
+#
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This stack contains all the mappings used through out the different stacks
+Mappings:
+  RegionMap:
+    ap-northeast-1:
+      AMI: ami-92df37ed
+    ap-northeast-2:
+      AMI: ami-c10fa6af
+    ap-south-1:
+      AMI: ami-76d6f519
+    ap-southeast-1:
+      AMI: ami-de90a5a2
+    ap-southeast-2:
+      AMI: ami-423bec20
+    ca-central-1:
+      AMI: ami-338a0a57
+    eu-central-1:
+      AMI: ami-9a91b371
+    eu-west-1:
+      AMI: ami-ca0135b3
+    eu-west-2:
+      AMI: ami-a36f8dc4
+    eu-west-3:
+      AMI: ami-969c2deb
+    sa-east-1:
+      AMI: ami-3885d854
+    us-east-1:
+      AMI: ami-14c5486b
+    us-east-2:
+      AMI: ami-922914f7
+    us-west-1:
+      AMI: ami-25110f45
+    us-west-2:
+      AMI: ami-e251209a

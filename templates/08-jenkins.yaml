@@ -112,6 +112,39 @@ Parameters:
     Type: String
     MinLength: 1
     NoEcho: true
+Mappings:
+  # cf 01-mappings.yaml
+  RegionMap:
+    ap-northeast-1:
+      AMI: ami-92df37ed
+    ap-northeast-2:
+      AMI: ami-c10fa6af
+    ap-south-1:
+      AMI: ami-76d6f519
+    ap-southeast-1:
+      AMI: ami-de90a5a2
+    ap-southeast-2:
+      AMI: ami-423bec20
+    ca-central-1:
+      AMI: ami-338a0a57
+    eu-central-1:
+      AMI: ami-9a91b371
+    eu-west-1:
+      AMI: ami-ca0135b3
+    eu-west-2:
+      AMI: ami-a36f8dc4
+    eu-west-3:
+      AMI: ami-969c2deb
+    sa-east-1:
+      AMI: ami-3885d854
+    us-east-1:
+      AMI: ami-14c5486b
+    us-east-2:
+      AMI: ami-922914f7
+    us-west-1:
+      AMI: ami-25110f45
+    us-west-2:
+      AMI: ami-e251209a
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
@@ -694,7 +727,7 @@ Resources:
       InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
-      ImageId: 'ami-c51e3eb6'
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroupIds: 
