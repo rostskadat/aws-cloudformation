@@ -587,7 +587,7 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterUserPassword}'
-              test: 'sudo test ! -e /mnt/artifactory/data/.application_configured'
+              test: 'sudo test ! -e /mnt/artifactory/.application_configured'
             '04_gitlab_configure_db': 
               command: !Join
                 - ' '
