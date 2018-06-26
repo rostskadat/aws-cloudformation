@@ -433,7 +433,6 @@ Resources:
                 [ -z "$username" ] && echo "Invalid username" && exit 1
                 [ -z "$password" ] && echo "Invalid password" && exit 1
                 mysql -h $address -P $port --user=$username --password=$password <<EOF
-                DROP DATABASE IF EXISTS artifactory;
                 CREATE DATABASE artifactory CHARACTER SET utf8 COLLATE utf8_bin;
                 GRANT ALL on artifactory.* TO 'artifactory'@'%' IDENTIFIED BY 'artifactory';
                 FLUSH PRIVILEGES;
