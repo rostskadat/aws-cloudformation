@@ -118,7 +118,7 @@ Resources:
       HealthCheckType: ELB
       LaunchConfigurationName: !Ref LaunchConfiguration
       MinSize: 1
-      MaxSize: 2
+      MaxSize: 1
       NotificationConfigurations:
         - TopicARN: !Ref TopicHealth
           NotificationTypes:
@@ -145,7 +145,7 @@ Resources:
         Count: 1
     UpdatePolicy: 
       AutoScalingRollingUpdate: 
-        MinInstancesInService: 1
+        MinInstancesInService: 0
         MaxBatchSize: 1
         PauseTime: PT15M
         WaitOnResourceSignals: true
