@@ -4,9 +4,9 @@
 # DESCRIPTION: This Stack create the AWS Inspector element to be able to assess the different stack security 
 #
 # TODO: 
-# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
-# - Should provide alert when the platform is unhealthy
-#
+# - Should update list of packages rules with:
+# ?> aws inspector list-rules-packages
+# - Let the creator of the User of the stack choose the rules package to use.
 ---
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "This stack creates the AWS Inspector elements"
@@ -17,28 +17,20 @@ Metadata:
         default: 'Parent VPC Stack'
       Parameters:
       - ParentVpcStack
-    - Label:
-        default: 'EC2 Parameters'
-      Parameters:
-      - KeyName
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Parent Stack"
+    Description: 'Enter the name of the VPC stack containing all the instance you want to scan for vulnerability' 
     Type: String
     MinLength: 1
-    ConstraintDescription: 'must be the name of the parent VPC stack (01-vpc.yaml)'
-  KeyName: 
-    Description: "Enter the name of the Key Pair for your instances"
-    Type: "AWS::EC2::KeyPair::KeyName"
-    MinLength: 1
-    ConstraintDescription: 'must be the name of an existing Key Pair to use to log to the EC2 Instance'
+    ConstraintDescription: 'must be the name of the parent VPC stack'
 Resources:
   ResourceGroup: 
     Type: 'AWS::Inspector::ResourceGroup'
     Properties:
       ResourceGroupTags: 
         - Key: PLATFORM
-          Value: XXX 
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
   AssessmentTarget: 
     Type: 'AWS::Inspector::AssessmentTarget'
     Properties:
