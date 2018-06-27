@@ -353,8 +353,8 @@ Resources:
                 PATH=/sbin:/bin:/usr/sbin:/usr/bin
                 MAILTO=root
                 HOME=/
-                * * * * * root /root/update_users.sh ${LDAPUsersLdif}
-              mode: '000744'
+                */5 * * * * root /root/update_users.sh ${LDAPUsersLdif}
+              mode: '000644'
               owner: 'root'
               group: 'root'
             '/root/update_users.sh':
