@@ -185,13 +185,13 @@ Resources:
           PropagateAtLaunch: true
     CreationPolicy: 
       ResourceSignal: 
-        Timeout: PT30M
+        Timeout: PT15M
         Count: 1
     UpdatePolicy: 
       AutoScalingRollingUpdate: 
-        MinInstancesInService: 1
+        MinInstancesInService: 0
         MaxBatchSize: 1
-        PauseTime: PT30M
+        PauseTime: PT15M
         WaitOnResourceSignals: true
     DependsOn:
       - MountTargetA
@@ -878,8 +878,8 @@ Resources:
       SecurityGroupIngress:
       - CidrIp: 
           'Fn::ImportValue': !Sub '${ParentVpcStack}-CidrBlock'
-        FromPort: 9000
-        ToPort: 9000
+        FromPort: 8080
+        ToPort: 8080
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
