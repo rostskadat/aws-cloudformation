@@ -22,7 +22,7 @@ Resources:
       EnableDnsHostnames: true
       Tags: 
         - Key: PLATFORM
-          Value: !Ref 'AWS::StackName'
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-Vpc'
   #
@@ -50,8 +50,10 @@ Resources:
             Statement: 
               - Effect: 'Allow'
                 Action:
+                  # I need to be able to tab volumes, create logs in CloudWatch and get an import.ldif
                   - 'ec2:Describe*'
                   - 'ec2:CreateTags'
+                  - 's3:GetObject'
                   - 'logs:PutLogEvents'
                   - 'logs:CreateLogGroup'
                   - 'logs:CreateLogStream'
@@ -73,7 +75,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SubnetDMZ'
   SubnetPublicAZA: 
@@ -85,7 +87,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SubnetPublicAZA'
   SubnetPublicAZB: 
@@ -97,7 +99,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SubnetPublicAZB'
   SubnetPrivateAZA: 
@@ -109,7 +111,7 @@ Resources:
       MapPublicIpOnLaunch: false
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SubnetPrivateAZA'
   SubnetPrivateAZB: 
@@ -121,7 +123,7 @@ Resources:
       MapPublicIpOnLaunch: false
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SubnetPrivateAZB'
   InternetGateway: 
@@ -129,7 +131,7 @@ Resources:
     Properties: 
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-InternetGateway'
   InternetGatewayAttachment: 
@@ -148,7 +150,7 @@ Resources:
       SubnetId: !Ref SubnetDMZ
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-NatGateway'
     DependsOn: NatGatewayEIP
@@ -160,7 +162,7 @@ Resources:
         - AmazonProvidedDNS
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-DHCPOptions'
   DHCPOptionsAssociation: 
@@ -174,7 +176,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-RouteTableDMZ'
   RouteTablePublic: 
@@ -183,7 +185,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-RouteTablePublic'
   RouteTablePrivate: 
@@ -192,7 +194,7 @@ Resources:
       VpcId: !Ref Vpc
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-RouteTablePrivate'
   SecurityGroupDMZ: 
@@ -223,7 +225,7 @@ Resources:
           ToPort: 22
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupDMZ'
   SecurityGroupPublic: 
@@ -242,7 +244,7 @@ Resources:
           IpProtocol: "-1"
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupPublic'
   SecurityGroupPrivate: 
@@ -256,7 +258,7 @@ Resources:
           IpProtocol: "-1"
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Sub '${AWS::StackName}'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupPrivate'
   SecurityGroupIngressPublic: 
@@ -361,7 +363,7 @@ Resources:
 Outputs: 
   StackName: 
     Description: "The name of the Stack"
-    Value: !Ref "AWS::StackName"
+    Value: !Sub '${AWS::StackName}'
     Export:
       Name: !Sub '${AWS::StackName}-StackName'
   Vpc: 
