@@ -185,13 +185,13 @@ Resources:
           PropagateAtLaunch: true
     CreationPolicy: 
       ResourceSignal: 
-        Timeout: PT15M
+        Timeout: PT30M
         Count: 1
     UpdatePolicy: 
       AutoScalingRollingUpdate: 
         MinInstancesInService: 1
         MaxBatchSize: 1
-        PauseTime: PT15M
+        PauseTime: PT30M
         WaitOnResourceSignals: true
     DependsOn:
       - MountTargetA
@@ -479,13 +479,14 @@ Resources:
               owner: "root"
               group: "root"
             '/root/create_fs.sh': 
-              content: |
+              content: !Sub |
                 #!/bin/bash -x
                 MNT=/mnt/jenkins
                 [ ! -d $MNT ] && mkdir $MNT
                 mount -t efs -o tls ${FileSystem}:/ $MNT
                 [ ! -d $MNT/var ] && mkdir $MNT/var
-                [ ! -d /var/lib ] && mkdir -p /var/lib; ln -s $MNT/var /var/lib/jenkins
+                [ ! -d /var/lib ] && mkdir -p /var/lib
+                [ ! -e /var/lib/jenkins ] && ln -s $MNT/var /var/lib/jenkins
               mode: "000700"
               owner: "root"
               group: "root"
@@ -603,7 +604,7 @@ Resources:
                 <?xml version='1.1' encoding='UTF-8'?>
                 <jenkins.model.JenkinsLocationConfiguration>
                   <adminAddress>${JenkinsAdminEmail}</adminAddress>
-                  <jenkinsUrl>http://${LoadBalancerJenkins.DNSName}/</jenkinsUrl>
+                  <jenkinsUrl>http://${LoadBalancer.DNSName}/</jenkinsUrl>
                 </jenkins.model.JenkinsLocationConfiguration>
               mode: '000644'
               owner: 'jenkins'
@@ -817,7 +818,7 @@ Resources:
                 - ' '
                 - - 'sudo /root/jenkins_configure_artifactory.sh'
                   - 'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-DNSName'
-                  - 'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-AdminUsername'
+                  - 'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-ArtifactoryAdminUsername'
                   - !Sub '${ArtifactoryAdminPassword}'
                   - !Sub '${JenkinsAdminPassword}'
             '05_jenkins_configure_sonarqube':
@@ -836,7 +837,7 @@ Resources:
               command: !Join
                 - ' '
                 - - 'sudo /root/jenkins_configure_ldap.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPHostname'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'

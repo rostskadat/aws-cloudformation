@@ -703,4 +703,8 @@ Outputs:
     Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
-      
+  ArtifactoryAdminUsername:      
+    Description: 'The Admin user name for the server'
+    Value: 'admin'
+    Export:
+      Name: !Sub '${AWS::StackName}-ArtifactoryAdminUsername'
