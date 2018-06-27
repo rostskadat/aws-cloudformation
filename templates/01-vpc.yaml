@@ -14,15 +14,15 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: This stack create a simple multi-tier VPC with a DMZ, and public/private subnet in 2 AZs
 Resources: 
   Vpc: 
-    Type: "AWS::EC2::VPC"
+    Type: 'AWS::EC2::VPC'
     Properties: 
-      CidrBlock: "10.0.0.0/16"
+      CidrBlock: '10.0.0.0/16'
       InstanceTenancy: default
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags: 
         - Key: PLATFORM
-          Value: !Ref "AWS::StackName"
+          Value: !Ref 'AWS::StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-Vpc'
   #
@@ -52,6 +52,9 @@ Resources:
                 Action:
                   - 'ec2:Describe*'
                   - 'ec2:CreateTags'
+                  - 'logs:PutLogEvents'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
                 Resource: '*'
   InstanceProfileTagEC2Instance:
     Type: 'AWS::IAM::InstanceProfile'
@@ -366,6 +369,11 @@ Outputs:
     Value: !Ref Vpc
     Export:
       Name: !Sub '${AWS::StackName}-Vpc'
+  CidrBlock:
+    Description: "The CidrBlock of the newly created VPC"
+    Value:  !GetAtt Vpc.CidrBlock
+    Export:
+      Name: !Sub '${AWS::StackName}-CidrBlock'
   InstanceProfileTagEC2Instance:
     Description: "The Instance Profile allowing to tag Root volume of each instances in this VPC"
     Value: !Ref InstanceProfileTagEC2Instance
