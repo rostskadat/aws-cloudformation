@@ -324,6 +324,7 @@ Resources:
                 alias c=clear
                 alias l='ls -l'
                 alias vi=vim
+                PS1='[\u@${AWS::StackName} \W]\$ '
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
@@ -435,8 +436,7 @@ Resources:
                 EOF
                 # Extracting GeoLite2-City DB
                 geodb=$(tar -tvf /tmp/GeoLite2-City.tar.gz | grep 'mmdb' | sed -E 's/.* ([^ ]+)$/\1/')
-                tar -xvzf /tmp/GeoLite2-City.tar.gz -C TARGET_DIR $geodb
-                
+                tar -xvzf /tmp/GeoLite2-City.tar.gz -C /tmp $geodb
               mode: '000700'
               owner: 'root'
               group: 'root'
