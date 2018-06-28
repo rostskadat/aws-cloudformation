@@ -15,72 +15,42 @@ Metadata:
         default: 'Parent Stack'
       Parameters:
       - ParentVpcStack
-      - ParentLDAPStack
-      - ParentArtifactoryStack
-      - ParentSonarqubeStack
     - Label: 
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
       - InstanceType
     - Label: 
-        default: 'LDAP Parameter'
+        default: 'ElasticSearch Parameters'
       Parameters:
-      - LDAPManagerPassword
-    - Label:
-        default: 'Artifactory Parameters'
-      Parameters:
-      - ArtifactoryAdminPassword
-    - Label:
-        default: 'Sonarqube Parameters'
-      Parameters:
-      - SonarqubeAdminPassword
-    - Label:
-        default: 'Jenkins Parameters'
-      Parameters:
-      - JenkinsAdminEmail
-      - JenkinsAdminPassword
+      - ElasticSearchDomainName
+      - ElasticSearchVolumeSize
+      - ElasticSearchInstanceType
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Jenkins will reside"
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the VPC stack'
-  ParentLDAPStack:
-    Description: "Enter the name of the LDAP Stack"
-    Type: String
-    MinLength: 1
-    ConstraintDescription: 'must be the name of the LDAP stack'
-  ParentArtifactoryStack:
-    Description: "Enter the name of the Artifactory Stack"
-    Type: String
-    MinLength: 1
-    ConstraintDescription: 'must be the name of the Artifactory stack'
-  ParentSonarqubeStack:
-    Description: "Enter the name of the Artifactory Stack"
-    Type: String
-    MinLength: 1
-    ConstraintDescription: 'must be the name of the Artifactory stack'
   KeyName: 
-    Description: "The Jenkins instance Key Pair"
+    Description: "The Instance Key Pair"
     Type: "AWS::EC2::KeyPair::KeyName"
-    ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
+    ConstraintDescription: "must be the name of an existing EC2 KeyPair."
   InstanceType:
     Description: 'The Jenkins instance type'
     Type: String
     Default: 'c5.large'    
-  LDAPManagerPassword: 
-    Description: 'The LDAP Admin password'
+  ElasticSearchAdminEmail:
+    Description: 'The ElasticSearch Admin email'
     Type: String
-    NoEcho: true
-    MinLength: 3
+    Default: 'es-admin@example.com'
   ElasticSearchDomainName:
     Description: 'The ElasticSearch Domain'
     Type: String
   ElasticSearchVolumeSize:
     Description: 'The size of the volume attach to your ES node'
     Type: Number
-    Default: 100
+    Default: 200
   ElasticSearchInstanceType:
     Description: 'The instance type of your ES node'
     Type: String
@@ -119,6 +89,7 @@ Mappings:
     us-west-2:
       AMI: ami-e251209a
 Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
   HasElasticSearchDomainName: !Not [!Equals [!Ref ElasticSearchDomainName, '']]
 Resources: 
   TopicHealth: 
@@ -126,7 +97,7 @@ Resources:
     Properties: 
       DisplayName: !Sub '${AWS::StackName} - Server health notification'
       Subscription:
-        - Endpoint: !Ref JenkinsAdminEmail
+        - Endpoint: !Ref ElasticSearchAdminEmail
           Protocol: 'email'
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
@@ -166,35 +137,13 @@ Resources:
         MaxBatchSize: 1
         PauseTime: PT15M
         WaitOnResourceSignals: true
-    DependsOn:
-      - MountTargetA
-      - MountTargetB
-  SecurityGroupELB:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access the LoadBalancer'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - CidrIp : "0.0.0.0/0"
-        FromPort: 22
-        ToPort: 22
-        IpProtocol: tcp
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupELB'
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
       Scheme: internet-facing
-      SecurityGroups:
-      - !Ref SecurityGroupELB
+      Type: network
       Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetDMZ'
       Tags: 
         - Key: PLATFORM
           Value: 
@@ -204,15 +153,10 @@ Resources:
   TargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
-      HealthCheckIntervalSeconds: 10
-      HealthCheckPath: '/login'
-      HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
-      Matcher:
-        HttpCode: '200-299'
-      Port: 8080
-      Protocol: HTTP
+      Port: 22
+      Protocol: TCP
       Tags:
         - Key: PLATFORM
           Value: 
@@ -231,53 +175,8 @@ Resources:
       - TargetGroupArn: !Ref TargetGroup
         Type: forward
       LoadBalancerArn: !Ref LoadBalancer
-      Port: 80
-      Protocol: HTTP
-  SecurityGroupEFS:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access Splunk EFS'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - SourceSecurityGroupId: 
-          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        FromPort: 2049
-        ToPort: 2049
-        IpProtocol: tcp
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
-  FileSystem:
-    Type: 'AWS::EFS::FileSystem'
-    Properties: 
-      Encrypted: true
-      FileSystemTags:
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-FileSystem'
-      PerformanceMode: generalPurpose
-  MountTargetA:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SecurityGroups:
-        - !Ref SecurityGroupEFS
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-  MountTargetB:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SecurityGroups:
-        - !Ref SecurityGroupEFS
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Port: 22
+      Protocol: TCP
   SecurityGroupDomain:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -286,8 +185,8 @@ Resources:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       SecurityGroupIngress:
       - CidrIp : "0.0.0.0/0"
-        FromPort: 22
-        ToPort: 22
+        FromPort: 443
+        ToPort: 443
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
@@ -298,7 +197,6 @@ Resources:
   Domain:
     Type: 'AWS::Elasticsearch::Domain'
     Properties: 
-      AccessPolicies: !Ref XXXX
       DomainName: !If [HasElasticSearchDomainName, !Ref ElasticSearchDomainName, !Ref 'AWS::NoValue']
       EBSOptions:
         EBSEnabled: true
@@ -308,6 +206,7 @@ Resources:
         InstanceCount: 2
         InstanceType: !Ref ElasticSearchInstanceType
         ZoneAwarenessEnabled: true
+      ElasticsearchVersion: '6.2'
       EncryptionAtRestOptions: 
         Enabled: true
       SnapshotOptions:
@@ -316,8 +215,8 @@ Resources:
         SecurityGroupIds: 
           - !Ref SecurityGroupDomain
         SubnetIds: 
-          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
       Tags:
         - Key: PLATFORM
           Value: 
@@ -334,11 +233,10 @@ Resources:
     Metadata:
       AWS::CloudFormation::Init:
         configSets: 
-          default: [ Bootstrap, InstallApplication ]
+          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
         Bootstrap:
           packages:
             yum:
-              wget: []
               htop: []
               awslogs: []
               yum-cron: []
@@ -492,31 +390,69 @@ Resources:
               group: "root"
           commands:
             '01_rpm_import': 
-              command: 'sudo rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch  '
+              command: 'sudo rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch'
         InstallApplication: 
           packages:
             yum:
               logstash: []
           files:
+            '/tmp/GeoLite2-City.tar.gz': 
+              source: 'http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz'
+              mode: "000644"
+              owner: "root"
+              group: "root"
+            '/etc/logstash/conf.d/02-elastic_output.conf': 
+              content: !Sub |
+                output {
+                  if "_grokparsefailure" in [tags] {
+                    file { "path" => "/var/log/logstash/grok_failures.txt" }
+                  } else {
+                    elasticsearch {
+                      hosts     => "https://${Domain.DomainEndpoint}:443"
+                      ssl       => true
+                      sniffing => false
+                      manage_template => false
+                      index => "%{[@metadata][index]}-%{+YYYY.MM.dd}"
+                      document_id => "%{[@metadata][fingerprint]}"
+                    }
+                  }
+                }
+              mode: "000644"
+              owner: "root"
+              group: "root"
             '/root/logstash_configure.sh':
               content: |
                 #!/bin/bash
                 echo "Configuring Logstash..."
+                # Forcing to create init.d file
+                /usr/share/logstash/bin/system-install /etc/logstash/startup.options sysv
+                # Adding logs to awslog
+                cat >> /etc/awslogs/awslogs.conf <<EOF
+                [/var/log/logstash/grok_failures.txt]
+                file = /var/log/logstash/grok_failures.txt
+                log_stream_name = {instance_id}/var/log/logstash/grok_failures.txt
+                log_group_name = ${LogGroup}
+                EOF
+                # Extracting GeoLite2-City DB
+                geodb=$(tar -tvf /tmp/GeoLite2-City.tar.gz | grep 'mmdb' | sed -E 's/.* ([^ ]+)$/\1/')
+                tar -xvzf /tmp/GeoLite2-City.tar.gz -C TARGET_DIR $geodb
+                
               mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
-            '01_jenkins_install_plugins':
+            '01_logstash_configure':
               command: !Sub 'sudo /root/logstash_configure.sh'
-            '98_application_configured':
-              command: 'sudo touch /mnt/efs/.application_configured'
-            '99_jenkins_restart':
-              command: 'sudo service logstash restart'
-          services: 
-            sysvinit: 
-              logstash: 
+            '99_logstash_restart':
+              command: 'sudo service logstash start'
+          services:
+            sysvinit:
+              logstash:
                 enabled: true
                 ensureRunning: true
+                packages:
+                  yum:
+                  - logstash
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      

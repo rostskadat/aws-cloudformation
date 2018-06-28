@@ -54,6 +54,7 @@ Resources:
                   - 'ec2:Describe*'
                   - 'ec2:CreateTags'
                   - 's3:GetObject'
+                  - 's3:ListBucket'
                   - 'logs:PutLogEvents'
                   - 'logs:CreateLogGroup'
                   - 'logs:CreateLogStream'

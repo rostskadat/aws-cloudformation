@@ -5,16 +5,17 @@
 #
 # To create the AMI mappings:
 # 
-# ?> echo "  RegionMap: "
-#    for region in $(aws --region eu-west-1 ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text|sort -u); do 
-#       latest_ami_name=$(aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" --query 'Images[*].Name'|sort -r|head -1|tr -d '"'|xargs|sed -e 's/,//g')
-#       echo "    $region: "
-#       echo -n "      AMI: "; aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=$latest_ami_name" --query 'Images[*].ImageId' --output text
-#    done
+#!/bin/bash
 #
-#
-#
-#
+#echo "  RegionMap: "
+#for region in $(aws --region eu-west-1 ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text|sort -u); do
+#   latest_ami_name=$(aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=amzn2-ami-hvm-*-gp2" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" "Name=description,Values=Amazon Linux 2 AMI*" --query 'Images[*].Name'|sort -r|head -1|tr -d '"'|xargs|sed -e 's/,//g')
+#   echo "    $region: "
+#   if [ ! -z "$latest_ami_name" ]; then
+#     echo -n "      AMI: ";
+#     aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=$latest_ami_name" --query 'Images[*].ImageId' --output text
+#   fi
+#done
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -22,32 +23,32 @@ Description: This stack contains all the mappings used through out the different
 Mappings:
   RegionMap:
     ap-northeast-1:
-      AMI: ami-92df37ed
+      AMI: ami-e99f4896
     ap-northeast-2:
-      AMI: ami-c10fa6af
+      AMI: ami-afd86dc1
     ap-south-1:
-      AMI: ami-76d6f519
+      AMI: ami-d783a9b8
     ap-southeast-1:
-      AMI: ami-de90a5a2
+      AMI: ami-05868579
     ap-southeast-2:
-      AMI: ami-423bec20
+      AMI: ami-39f8215b
     ca-central-1:
-      AMI: ami-338a0a57
+      AMI: ami-0ee86a6a
     eu-central-1:
-      AMI: ami-9a91b371
+      AMI: ami-7c4f7097
     eu-west-1:
-      AMI: ami-ca0135b3
+      AMI: ami-466768ac
     eu-west-2:
-      AMI: ami-a36f8dc4
+      AMI: ami-b8b45ddf
     eu-west-3:
-      AMI: ami-969c2deb
+      AMI: ami-2cf54551
     sa-east-1:
-      AMI: ami-3885d854
+      AMI: ami-6dca9001
     us-east-1:
-      AMI: ami-14c5486b
+      AMI: ami-b70554c8
     us-east-2:
-      AMI: ami-922914f7
+      AMI: ami-8c122be9
     us-west-1:
-      AMI: ami-25110f45
+      AMI: ami-e0ba5c83
     us-west-2:
-      AMI: ami-e251209a
+      AMI: ami-a9d09ed1
