@@ -386,6 +386,7 @@ Resources:
                 alias c=clear
                 alias l='ls -l'
                 alias vi=vim
+                PS1='[\u@${AWS::StackName} \W]\$ '
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
