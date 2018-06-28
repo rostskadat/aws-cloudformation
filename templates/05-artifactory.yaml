@@ -164,7 +164,7 @@ Resources:
         Count: 1
     UpdatePolicy: 
       AutoScalingRollingUpdate: 
-        MinInstancesInService: 1
+        MinInstancesInService: 0
         MaxBatchSize: 1
         PauseTime: PT15M
         WaitOnResourceSignals: true
@@ -295,14 +295,14 @@ Resources:
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
-        Bootstrap:
-          packages:
-            yum:
+        Bootstrap: 
+          packages: 
+            yum: 
               wget: []
               htop: []
               awslogs: []
               yum-cron: []
-          files:
+          files: 
             '/etc/awslogs/awscli.conf':
               content: !Sub |
                 [default]
@@ -670,7 +670,7 @@ Resources:
       SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
         - !Ref SecurityGroupHealthCheck
-      UserData:
+      UserData: 
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
