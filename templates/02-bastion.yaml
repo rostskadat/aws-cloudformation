@@ -98,8 +98,8 @@ Resources:
             - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
             - 'autoscaling:EC2_INSTANCE_TERMINATE'
             - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
-      TargetGroupARNs:
-        - !Ref TargetGroup
+      LoadBalancerNames:
+        - !Ref LoadBalancer
       VPCZoneIdentifier: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
@@ -122,46 +122,29 @@ Resources:
         PauseTime: PT15M
         WaitOnResourceSignals: true
   LoadBalancer:
-    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Type: 'AWS::ElasticLoadBalancing::LoadBalancer'
     Properties:
-      Scheme: internet-facing
-      Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
-      Type: network
+      SecurityGroups:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupDMZ'
+      Subnets:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetDMZ'
+      HealthCheck:
+        HealthyThreshold: 2
+        Interval: 30
+        Target: TCP:22
+        Timeout: 10
+        UnhealthyThreshold: 2        
+      Listeners:
+        - InstancePort: 22
+          InstanceProtocol: TCP
+          LoadBalancerPort: 22
+          Protocol: TCP
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-LoadBalancer'
-  TargetGroup:
-    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
-    Properties:
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 2
-      Port: 22
-      Protocol: TCP
-      Tags:
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroup'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      TargetGroupAttributes:
-        - Key: 'deregistration_delay.timeout_seconds'
-          Value: 30
-  Listener:
-    Type: 'AWS::ElasticLoadBalancingV2::Listener'
-    Properties:
-      DefaultActions:
-      - TargetGroupArn: !Ref TargetGroup
-        Type: forward
-      LoadBalancerArn: !Ref LoadBalancer
-      Port: 22
-      Protocol: TCP
   LogGroup:
     Type: 'AWS::Logs::LogGroup'
     Properties:
