@@ -480,6 +480,7 @@ Resources:
                 [ ! -d $MNT/opt   ] && mkdir $MNT/opt
                 [ ! -d /opt       ] && mkdir -p /opt
                 [ ! -e /opt/sonar ] && ln -s $MNT/opt /opt/sonar
+                [ -d $MNT/opt ] && echo "File system OK"
               mode: "000700"
               owner: "root"
               group: "root"
