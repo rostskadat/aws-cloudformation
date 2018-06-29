@@ -26,6 +26,11 @@ Metadata:
       - ElasticSearchDomainName
       - ElasticSearchVolumeSize
       - ElasticSearchInstanceType
+    - Label: 
+        default: 'Logstash Parameters'
+      Parameters:
+      - LogstashInputConfig
+      - S3ImportBucketName
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Jenkins will reside"
@@ -55,6 +60,14 @@ Parameters:
     Description: 'The instance type of your ES node'
     Type: String
     Default: 'm4.large.elasticsearch' 
+  LogstashInputConfig: 
+    Description: 'The Logstash initial input config'
+    Type: String
+    Default: 's3://mybucketname/input.config'
+  S3ImportBucketName: 
+    Description: 'The S3 bucket name where the log reside'
+    Type: String
+    Default: 'mybucketname'
 Mappings:
   # cf 01-mappings.yaml
   RegionMap:
@@ -137,13 +150,36 @@ Resources:
         MaxBatchSize: 1
         PauseTime: PT15M
         WaitOnResourceSignals: true
+  SecurityGroupELB:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access the LoadBalancer'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp : "0.0.0.0/0"
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
+      - CidrIp : "0.0.0.0/0"
+        FromPort: 80
+        ToPort: 80
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupELB'
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
       Scheme: internet-facing
-      Type: network
+      SecurityGroups:
+      - !Ref SecurityGroupELB
       Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetDMZ'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
       Tags: 
         - Key: PLATFORM
           Value: 
@@ -153,10 +189,15 @@ Resources:
   TargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: '/'
+      HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
-      Port: 22
-      Protocol: TCP
+      Matcher:
+        HttpCode: '200-299'
+      Port: 9600
+      Protocol: HTTP
       Tags:
         - Key: PLATFORM
           Value: 
@@ -175,8 +216,8 @@ Resources:
       - TargetGroupArn: !Ref TargetGroup
         Type: forward
       LoadBalancerArn: !Ref LoadBalancer
-      Port: 22
-      Protocol: TCP
+      Port: 9600
+      Protocol: HTTP
   SecurityGroupDomain:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -188,12 +229,20 @@ Resources:
         FromPort: 443
         ToPort: 443
         IpProtocol: tcp
+      - SourceSecurityGroupId : !Ref SecurityGroupELB
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
+      - SourceSecurityGroupId : !Ref SecurityGroupHealthCheck
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupELB'
+          Value: !Sub '${AWS::StackName}-SecurityGroupDomain'
   Domain:
     Type: 'AWS::Elasticsearch::Domain'
     Properties: 
@@ -375,6 +424,9 @@ Resources:
                   - /etc/yum/yum-cron.conf
                   - /etc/yum/yum-cron-hourly.conf
         BootstrapApplication:
+          packages:
+            yum:
+              java-1.8.0-openjdk: []
           files: 
             '/etc/yum.repos.d/logstash.repo':
               content: !Sub |
@@ -390,13 +442,27 @@ Resources:
               owner: "root"
               group: "root"
           commands:
-            '01_rpm_import': 
+            '01_alternatives_java':
+              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
+            '02_remove_jdk7':
+              command: 'sudo yum remove -y java-1.7.0-openjdk'
+            '03_rpm_import': 
               command: 'sudo rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch'
         InstallApplication: 
           packages:
             yum:
               logstash: []
           files:
+            '/etc/crontab': 
+              content: |
+                SHELL=/bin/bash
+                PATH=/sbin:/bin:/usr/sbin:/usr/bin
+                MAILTO=root
+                HOME=/
+                */15 * * * * root bash /root/logstash_s3_sync_logs.sh
+              mode: "000644"
+              owner: "root"
+              group: "root"
             '/tmp/GeoLite2-City.tar.gz': 
               source: 'http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz'
               mode: "000644"
@@ -421,7 +487,20 @@ Resources:
               mode: "000644"
               owner: "root"
               group: "root"
-            '/root/logstash_configure.sh':
+            '/root/logstash_s3_sync_logs.sh':  
+              content: !Sub |
+                #!/bin/bash
+                DST_DIR=/var/log/imported
+                [ -d $DST_DIR ] || mkdir -p $DST_DIR
+                chmod go+rx $DST_DIR
+                aws s3 sync s3://${S3ImportBucketName}/ $DST_DIR/ --exclude "*" --include "*SSL_access_$(date +"%Y-%m-%d")-00_00_00.log"
+                aws s3 sync s3://${S3ImportBucketName}/ $DST_DIR/ --exclude "*" --include "*ArcQueriesTrace.log"
+                aws s3 sync s3://${S3ImportBucketName}/ $DST_DIR/ --exclude "*" --include "*api-backend.log"
+                find $DST_DIR/ -name SSL_access_$(date --date="-1 day" +"%Y-%m-%d")-00_00_00.log -exec rm {} \;
+              mode: "000700"
+              owner: "root"
+              group: "root"
+            '/root/logstash_configure.sh': 
               content: !Sub |
                 #!/bin/bash
                 echo "Configuring Logstash..."
@@ -429,20 +508,26 @@ Resources:
                 /usr/share/logstash/bin/system-install /etc/logstash/startup.options sysv
                 # Adding logs to awslog
                 cat >> /etc/awslogs/awslogs.conf <<EOF
-                [/var/log/logstash/grok_failures.txt]
-                file = /var/log/logstash/grok_failures.txt
-                log_stream_name = {instance_id}/var/log/logstash/grok_failures.txt
-                log_group_name = ${LogGroup}
                 [/var/log/logstash-stdout.log]
                 file = /var/log/logstash-stdout.log
                 log_stream_name = {instance_id}/var/log/logstash-stdout.log
+                log_group_name = ${LogGroup}
+                [/var/log/logstash-stderr.log]
+                file = /var/log/logstash-stderr.log
+                log_stream_name = {instance_id}/var/log/logstash-stderr.log
+                log_group_name = ${LogGroup}
+                [/var/log/logstash/grok_failures.txt]
+                file = /var/log/logstash/grok_failures.txt
+                log_stream_name = {instance_id}/var/log/logstash/grok_failures.txt
                 log_group_name = ${LogGroup}
                 EOF
                 # Extracting GeoLite2-City DB
                 geodb=$(tar -tvf /tmp/GeoLite2-City.tar.gz | grep 'mmdb' | sed -E 's/.* ([^ ]+)$/\1/')
                 [ -d /usr/share/logstash/geolite ] || mkdir -p /usr/share/logstash/geolite
-                chown logstash.logstash /usr/share/logstash/geolite
                 tar -xvzf /tmp/GeoLite2-City.tar.gz -C /usr/share/logstash/geolite $geodb
+                mv /usr/share/logstash/geolite/$geodb /usr/share/logstash/geolite/. 
+                # Configuring input:
+                aws s3 cp ${LogstashInputConfig} /etc/logstash/conf.d/01-input.conf
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -485,8 +570,8 @@ Resources:
       SecurityGroupIngress:
       - CidrIp: 
           'Fn::ImportValue': !Sub '${ParentVpcStack}-CidrBlock'
-        FromPort: 22
-        ToPort: 22
+        FromPort: 9600
+        ToPort: 9600
         IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
@@ -495,9 +580,9 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
 Outputs: 
-  DNSName: 
+  Kibana: 
     Description: 'Public DNS address of the internet facing ELB'
-    Value: !Sub '${LoadBalancer.DNSName}'
+    Value: !Sub 'https://${Domain.DomainEndpoint}/_plugin/kibana/'
     Export:
-      Name: !Sub '${AWS::StackName}-DNSName'
-      
+      Name: !Sub '${AWS::StackName}-Kibana'
+  
