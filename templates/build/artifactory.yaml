@@ -456,6 +456,7 @@ Resources:
                 [ -d $MNT ] || mkdir $MNT
                 mount -t efs -o tls ${FileSystem}:/ $MNT
                 [ -d $MNT/data ] || mkdir -p $MNT/data
+                [ -d $MNT/data ] && echo "File system OK"
               mode: "000700"
               owner: "root"
               group: "root"
