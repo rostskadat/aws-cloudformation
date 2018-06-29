@@ -422,7 +422,7 @@ Resources:
               owner: "root"
               group: "root"
             '/root/logstash_configure.sh':
-              content: |
+              content: !Sub |
                 #!/bin/bash
                 echo "Configuring Logstash..."
                 # Forcing to create init.d file
@@ -433,10 +433,16 @@ Resources:
                 file = /var/log/logstash/grok_failures.txt
                 log_stream_name = {instance_id}/var/log/logstash/grok_failures.txt
                 log_group_name = ${LogGroup}
+                [/var/log/logstash-stdout.log]
+                file = /var/log/logstash-stdout.log
+                log_stream_name = {instance_id}/var/log/logstash-stdout.log
+                log_group_name = ${LogGroup}
                 EOF
                 # Extracting GeoLite2-City DB
                 geodb=$(tar -tvf /tmp/GeoLite2-City.tar.gz | grep 'mmdb' | sed -E 's/.* ([^ ]+)$/\1/')
-                tar -xvzf /tmp/GeoLite2-City.tar.gz -C /tmp $geodb
+                [ -d /usr/share/logstash/geolite ] || mkdir -p /usr/share/logstash/geolite
+                chown logstash.logstash /usr/share/logstash/geolite
+                tar -xvzf /tmp/GeoLite2-City.tar.gz -C /usr/share/logstash/geolite $geodb
               mode: '000700'
               owner: 'root'
               group: 'root'
