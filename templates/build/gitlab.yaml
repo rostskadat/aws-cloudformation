@@ -459,6 +459,7 @@ Resources:
                 [ -d $MNT ] || mkdir $MNT
                 mount -t efs -o tls ${FileSystem}:/ $MNT
                 [ -d $MNT/git-data ] || mkdir -p $MNT/git-data
+                [ -d $MNT/git-data ] && echo "File system OK"
               mode: "000700"
               owner: "root"
               group: "root"
@@ -620,7 +621,7 @@ Resources:
                 password=$1
                 [ -z "$password" ] && echo "Invalid password" && exit 1
                 # Obtain a token (https://github.com/doorkeeper-gem/doorkeeper/wiki/API-endpoint-descriptions-and-examples#curl-command-password-grant)
-                token=$(curl -s -F grant_type=password -F "username=root" -F "password=$password" -X POST http://localhost:80/oauth/token | jq '.access_token' | tr -d '"')
+                token=$(curl -s -F grant_type=password -F "username=root" -F "password=$password" -X POST http://localhost:80/oauth/token | jq -r '.access_token')
                 [ "$token" == "null" ] && echo "Failed to retrieve token" && exit 1 
                 url="http://localhost:80/api/v4/application/settings"
                 echo "Changing settings (token=$token)..."
