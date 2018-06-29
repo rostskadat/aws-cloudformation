@@ -35,6 +35,7 @@ Metadata:
       - LDAPAdminEmail
       - RootDC
       - ManagerPassword
+      - LDAPUsersLdif
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Parent Stack"
