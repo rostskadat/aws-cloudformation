@@ -632,10 +632,19 @@ Resources:
             '/root/jenkins_wait.sh':
               content: |
                 #!/bin/bash
+                optionalPassword="$1"
                 initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
                 cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
                 url=http://localhost:8080
                 # make sure that I re-read the initial password each time...
+                get_password()
+                {
+                  if [ -z "$optionalPassword" ]; then
+                    echo -n $(cat $initialPassword 2> /dev/null)
+                  else 
+                    echo -n $optionalPassword
+                  fi
+                }
                 echo -n "Waiting for Jenkins..."
                 i=0
                 while [ ! -f $initialPassword ] || [ ! -f $cli ]; do 
@@ -646,7 +655,7 @@ Resources:
                 i=0
                 echo " OK"
                 echo -n "Waiting for Jenkins API..."
-                until $(curl -s --max-time 60 -o /dev/null --head --fail --user "admin:$(cat $initialPassword 2> /dev/null)" $url/cli/); do
+                until $(curl -s --max-time 60 -o /dev/null --head --fail --user "admin:$(get_password)" $url/cli/); do
                   echo -n .; sleep 1
                   i=$((i+1))
                   [ $i -gt 120 ] && echo "Jenkins failed to start in 120 seconds. Bailing out!" && exit 1
@@ -660,13 +669,22 @@ Resources:
                 #!/bin/bash -x 
                 exec > >(tee -a "/var/log/InstallApplication.log") 2> >(tee -a "/var/log/InstallApplication.log")
                 groovyFile=$1
+                optionalPassword="$2"
                 [ -z "$groovyFile" ] && echo "Invalid groovyFile" && exit 1
                 [ ! -f "$groovyFile" ] && echo "Invalid groovyFile: no such file" && exit 1
+                get_password()
+                {
+                  if [ -z "$optionalPassword" ]; then
+                    echo -n $(cat $initialPassword 2> /dev/null)
+                  else 
+                    echo -n $optionalPassword
+                }
+                
                 initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
                 cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
                 url=http://localhost:8080
                 # --username admin --password "$(cat $initialPassword 2> /dev/null)"
-                java -jar $cli -s $url -auth "admin:$(cat $initialPassword 2> /dev/null)" groovy = < <(cat $groovyFile)
+                java -jar $cli -s $url -auth "admin:$(get_password)" groovy = < <(cat $groovyFile)
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -846,15 +864,17 @@ Resources:
                 rootDC="$3"
                 managerDN="$4"
                 managerPassword="$5"
+                adminPassword="$6"
                 [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit 1
                 [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit 1
                 [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
                 [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1
                 [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
+                [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
                 ldapHostname=${ldapHostname,,}
                 sed -i -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%rootDC%/$rootDC/;s/%managerDN%/$managerDN/;s/%managerPassword%/$managerPassword/" /root/jenkins_configure_ldap.groovy
-                /root/jenkins_wait.sh || (echo "Failed. Bailing out!" && exit 1)
-                /root/jenkins_call_cli.sh /root/jenkins_configure_ldap.groovy
+                /root/jenkins_wait.sh "$adminPassword" || (echo "Failed. Bailing out!" && exit 1)
+                /root/jenkins_call_cli.sh /root/jenkins_configure_ldap.groovy "$adminPassword"
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -891,15 +911,16 @@ Resources:
               command: !Sub 'sudo /root/jenkins_change_default_password.sh ${JenkinsAdminPassword}'              
             '41_jenkins_change_default_password': 
               command: 'sudo service jenkins restart'
-#            '42_jenkins_configure_ldap': 
-#              command: !Join
-#                - ' '
-#                - - 'sudo /root/jenkins_configure_ldap.sh'
-#                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
-#                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-#                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-#                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-#                  - !Sub '${LDAPManagerPassword}'
+            '42_jenkins_configure_ldap': 
+              command: !Join
+                - ' '
+                - - 'sudo /root/jenkins_configure_ldap.sh'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                  - !Sub '${LDAPManagerPassword}'
+                  - !Sub '${JenkinsAdminPassword}'
             '98_application_configured': 
               command: 'sudo touch /mnt/jenkins/.application_configured'
             '99_jenkins_restart':
