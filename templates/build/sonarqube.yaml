@@ -738,7 +738,7 @@ Resources:
                   - /opt/sonar/conf/sonar.properties
     Properties: 
       IamInstanceProfile: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']

@@ -678,6 +678,7 @@ Resources:
                     echo -n $(cat $initialPassword 2> /dev/null)
                   else 
                     echo -n $optionalPassword
+                  fi
                 }
                 
                 initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
@@ -932,7 +933,7 @@ Resources:
                 ensureRunning: true
     Properties: 
       IamInstanceProfile: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']

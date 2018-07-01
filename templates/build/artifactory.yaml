@@ -508,6 +508,7 @@ Resources:
                 [ -z "$username" ] && echo "Invalid username" && exit 1
                 [ -z "$password" ] && echo "Invalid password" && exit 1
                 mysql -h $address -P $port --user=$username --password=$password <<EOF
+                DROP DATABASE IF EXISTS artifactory;
                 CREATE DATABASE artifactory CHARACTER SET utf8 COLLATE utf8_bin;
                 GRANT ALL on artifactory.* TO 'artifactory'@'%' IDENTIFIED BY 'artifactory';
                 FLUSH PRIVILEGES;
@@ -566,6 +567,17 @@ Resources:
                       allowUserToAccessProfile: true
                       autoCreateUser: true
                       enabled: true
+                localRepositories: 
+                  'libs-releases-local':
+                    type: maven
+                    includesPattern: '**/*'
+                    handleReleases: true
+                    handleSnapshots: false
+                  'libs-snapshots-local':
+                    type: maven
+                    includesPattern: '**/*'
+                    handleReleases: false
+                    handleSnapshots: true
               mode: '000600'
               owner: 'root'
               group: 'root'
@@ -665,7 +677,7 @@ Resources:
                 ensureRunning: true
     Properties: 
       IamInstanceProfile: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']

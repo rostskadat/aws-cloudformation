@@ -299,7 +299,7 @@ Resources:
                   - /etc/yum/yum-cron-hourly.conf
     Properties: 
       IamInstanceProfile: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileTagEC2Instance'      
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
       InstanceType: "t2.micro"
       KeyName: !Ref KeyName

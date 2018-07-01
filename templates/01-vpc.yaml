@@ -30,7 +30,7 @@ Resources:
   # attach this role to each instance through an instance profile. Further more each instance must also during boot
   # manually tag the volume with the correct tags.
   #
-  RoleTagEC2Instance:
+  RoleEC2CreateTags:
     Type: 'AWS::IAM::Role'
     Properties: 
       AssumeRolePolicyDocument: 
@@ -50,20 +50,90 @@ Resources:
             Statement: 
               - Effect: 'Allow'
                 Action:
-                  # I need to be able to tab volumes, create logs in CloudWatch and get an import.ldif
                   - 'ec2:Describe*'
                   - 'ec2:CreateTags'
-                  - 's3:GetObject'
-                  - 's3:ListBucket'
+                Resource: '*'
+  RoleCloudWatchPutLogEvents:
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'ec2.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies: 
+        - PolicyName: 'RoleTagEC2Instance'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
                   - 'logs:PutLogEvents'
                   - 'logs:CreateLogGroup'
                   - 'logs:CreateLogStream'
                 Resource: '*'
-  InstanceProfileTagEC2Instance:
+  RoleS3GetObject:
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'ec2.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies: 
+        - PolicyName: 'RoleTagEC2Instance'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource: '*'
+  RoleEC2Instance:
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'ec2.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies: 
+        - PolicyName: 'RoleTagEC2Instance'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:DescribeVolumes'
+                  - 'ec2:CreateTags'
+                  - 'logs:PutLogEvents'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource: '*'
+  InstanceProfileEC2Instance:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:
       Path: '/'
-      Roles: [ !Ref RoleTagEC2Instance ]
+      Roles: [ !Ref RoleEC2Instance ]
   #
   # Ok let's create the different subnet
   #
@@ -377,12 +447,24 @@ Outputs:
     Value:  !GetAtt Vpc.CidrBlock
     Export:
       Name: !Sub '${AWS::StackName}-CidrBlock'
-  InstanceProfileTagEC2Instance:
+  InstanceProfileEC2Instance:
     Description: "The Instance Profile allowing to tag Root volume of each instances in this VPC"
-    Value: !Ref InstanceProfileTagEC2Instance
+    Value: !Ref InstanceProfileEC2Instance
     Export:
-      Name: !Sub '${AWS::StackName}-InstanceProfileTagEC2Instance'
-  SecurityGroupDMZ:
+      Name: !Sub '${AWS::StackName}-InstanceProfileEC2Instance'
+  RoleEC2CreateTags:
+    Value: !Ref RoleEC2CreateTags
+    Export:
+      Name: !Sub '${AWS::StackName}-RoleEC2CreateTags'
+  RoleCloudWatchPutLogEvents:
+    Value: !Ref RoleCloudWatchPutLogEvents
+    Export:
+      Name: !Sub '${AWS::StackName}-RoleCloudWatchPutLogEvents'
+  RoleS3GetObject: 
+    Value: !Ref RoleS3GetObject
+    Export:
+      Name: !Sub '${AWS::StackName}-RoleS3GetObject'
+  SecurityGroupDMZ: 
     Description: 'Security Group for the DMZ instances'
     Value: !Ref SecurityGroupDMZ
     Export:
