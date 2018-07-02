@@ -455,7 +455,7 @@ Resources:
             '/root/create_fs.sh': 
               content: !Sub |
                 #!/bin/bash -x
-                MNT=/mnt/gitlab
+                MNT=/mnt/application
                 [ -d $MNT ] || mkdir $MNT
                 mount -t efs -o tls ${FileSystem}:/ $MNT
                 [ -d $MNT/git-data ] || mkdir -p $MNT/git-data
@@ -483,7 +483,7 @@ Resources:
                 external_url 'http://%external_url%'
                 git_data_dirs({
                   'default': {
-                    'path': '/mnt/gitlab/git-data'
+                    'path': '/mnt/application/git-data'
                   }
                 })
                 
@@ -517,7 +517,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab_configure_url.sh':
+            '/root/gitlab/configure_url.sh':
               content: |
                 #!/bin/bash -x
                 external_url="$1"
@@ -527,7 +527,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab_configure_ldap.sh':
+            '/root/gitlab/configure_ldap.sh':
               content: |
                 #!/bin/bash
                 ldapHostname=$1
@@ -544,7 +544,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/patch_config.rb':
+            '/root/gitlab/patch_config.rb':
               content: !Sub |
                 --- /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb      2018-06-26 14:53:20.531134934 +0000
                 +++ /root/config.rb     2018-06-26 14:53:02.519089466 +0000
@@ -566,7 +566,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab_create_db.sh':
+            '/root/gitlab/create_db.sh':
               content: |
                 #!/bin/bash
                 endpointAddress="$1"
@@ -579,7 +579,7 @@ Resources:
                 [ -z "$masterUserPassword" ] && echo "Invalid masterUserPassword" && exit 1
                 
                 echo "Patching config.rb..."
-                patch /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb /root/patch_config.rb
+                patch /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb /root/gitlab/patch_config.rb
                 expect - <<EOF
                 spawn /usr/bin/createdb --host=$endpointAddress --port=$endpointPort --username=$masterUsername --encoding=UTF8 gitlabhq_production
                 expect "Password:"
@@ -589,7 +589,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab_configure_db.sh':
+            '/root/gitlab/configure_db.sh':
               content: |
                 #!/bin/bash
                 endpointAddress="$1"
@@ -604,7 +604,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab_configure.sh':
+            '/root/gitlab/configure.sh':
               content: |
                 #!/bin/bash
                 email=$1
@@ -615,7 +615,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab_extra_config.sh':
+            '/root/gitlab/configure_extra.sh':
               content: |
                 #!/bin/bash
                 password=$1
@@ -643,41 +643,41 @@ Resources:
               owner: 'root'
               group: 'root'
           commands:
-            '01_gitlab_configure_url': 
-              command: !Sub 'sudo /root/gitlab_configure_url.sh ${LoadBalancer.DNSName}'
-            '02_gitlab_configure_ldap': 
+            '01_configure_url': 
+              command: !Sub 'sudo /root/gitlab/configure_url.sh ${LoadBalancer.DNSName}'
+            '02_configure_ldap': 
               command: !Join
                 - ' '
-                - - 'sudo /root/gitlab_configure_ldap.sh'
+                - - 'sudo /root/gitlab/configure_ldap.sh'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
-            '03_gitlab_create_db':
+            '03_create_db':
               command: !Join
                 - ' '
-                - - 'sudo /root/gitlab_create_db.sh'
+                - - 'sudo /root/gitlab/create_db.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterUserPassword}'
-              test: 'sudo test ! -e /mnt/gitlab/.application_configured'
-            '04_gitlab_configure_db': 
+              test: 'sudo test ! -e /mnt/application/.application_configured'
+            '04_configure_db': 
               command: !Join
                 - ' '
-                - - 'sudo /root/gitlab_configure_db.sh'
+                - - 'sudo /root/gitlab/configure_db.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterUserPassword}'
-            '05_gitlab_configure': 
-              command: !Sub 'sudo /root/gitlab_configure.sh "${GitlabRootEmail}" "${GitlabRootPassword}"'
-            '06_gitlab_extra_config': 
-              command: !Sub 'sudo /root/gitlab_extra_config.sh "${GitlabRootPassword}"'
-              test: 'sudo test ! -e /mnt/gitlab/.application_configured'
+            '05_configure': 
+              command: !Sub 'sudo /root/gitlab/configure.sh "${GitlabRootEmail}" "${GitlabRootPassword}"'
+            '06_configure_extra': 
+              command: !Sub 'sudo /root/gitlab/configure_extra.sh "${GitlabRootPassword}"'
+              test: 'sudo test ! -e /mnt/application/.application_configured'
             '98_application_configured':
-              command: 'sudo touch /mnt/gitlab/.application_configured'
+              command: 'sudo touch /mnt/application/.application_configured'
             '99_gitlab_restart': 
               command: 'sudo gitlab-ctl restart'
     Properties: 
