@@ -192,33 +192,12 @@ Resources:
     DependsOn:
       - MountTargetA
       - MountTargetB
-  SecurityGroupELB:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access the LoadBalancer'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - CidrIp : "0.0.0.0/0"
-        FromPort: 443
-        ToPort: 443
-        IpProtocol: tcp
-      - CidrIp : "0.0.0.0/0"
-        FromPort: 80
-        ToPort: 80
-        IpProtocol: tcp
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupELB'
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
       Scheme: internet-facing
       SecurityGroups:
-      - !Ref SecurityGroupELB
+      - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
       Subnets: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
