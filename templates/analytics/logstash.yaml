@@ -29,8 +29,9 @@ Metadata:
     - Label: 
         default: 'Logstash Parameters'
       Parameters:
-      - S3ImportBucketName
-      - BaseConfigUrl
+      - LogstashInputConfig
+      - S3LogsBucketName
+      - S3LogsIncludeFilters
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Jenkins will reside"
@@ -60,14 +61,18 @@ Parameters:
     Description: 'The instance type of your ES node'
     Type: String
     Default: 'm4.large.elasticsearch' 
-  S3ImportBucketName: 
-    Description: 'The S3 bucket name where the log reside'
+  LogstashInputConfig: 
+    Description: 'The Logstash initial input config'
+    Type: String
+    Default: 's3://mybucketname/input.config'
+  S3LogsBucketName: 
+    Description: 'The S3 bucket name where the logs reside'
     Type: String
     Default: 'mybucketname'
-  BaseConfigUrl: 
-    Description: 'The S3 bucket name where the log reside'
+  S3LogsIncludeFilters:    
+    Description: 'A comma separated list of include patterns'
     Type: String
-    Default: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/files'
+    Default: '*SSL_access_$(date +"%Y-%m-%d")-00_00_00.log,*ArcQueriesTrace.log,*api-backend.log'
 Mappings:
   # cf 01-mappings.yaml
   RegionMap:
@@ -118,7 +123,7 @@ Resources:
       HealthCheckGracePeriod: 300
       HealthCheckType: ELB
       LaunchConfigurationName: !Ref LaunchConfiguration
-      MinSize: 0
+      MinSize: 1
       MaxSize: 1
       NotificationConfigurations:
         - TopicARN: !Ref TopicHealth
@@ -150,33 +155,15 @@ Resources:
         MaxBatchSize: 1
         PauseTime: PT15M
         WaitOnResourceSignals: true
-  SecurityGroupELB:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access the LoadBalancer'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - CidrIp : "0.0.0.0/0"
-        FromPort: 443
-        ToPort: 443
-        IpProtocol: tcp
-      - CidrIp : "0.0.0.0/0"
-        FromPort: 80
-        ToPort: 80
-        IpProtocol: tcp
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupELB'
+    DependsOn:
+      - MountTargetA
+      - MountTargetB
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
       Scheme: internet-facing
       SecurityGroups:
-      - !Ref SecurityGroupELB
+      - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
       Subnets: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
@@ -218,60 +205,138 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: 9600
       Protocol: HTTP
-#  SecurityGroupDomain:
-#    Type: 'AWS::EC2::SecurityGroup'
+  SecurityGroupEFS:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access Splunk EFS'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        FromPort: 2049
+        ToPort: 2049
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
+  FileSystem:
+    Type: 'AWS::EFS::FileSystem'
+    Properties: 
+      Encrypted: true
+      FileSystemTags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-FileSystem'
+      PerformanceMode: generalPurpose
+  MountTargetA:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+  MountTargetB:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+#  UserPool:
+#    Type: 'AWS::Cognito::UserPool'
 #    Properties:
-#      GroupDescription: 'Security Group to access the Domain'
-#      VpcId:
-#        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-#      SecurityGroupIngress:
-#      - CidrIp : "0.0.0.0/0"
-#        FromPort: 443
-#        ToPort: 443
-#        IpProtocol: tcp
-#      - SourceSecurityGroupId : !Ref SecurityGroupELB
-#        FromPort: 443
-#        ToPort: 443
-#        IpProtocol: tcp
-#      - SourceSecurityGroupId : !Ref SecurityGroupHealthCheck
-#        FromPort: 443
-#        ToPort: 443
-#        IpProtocol: tcp
-#      Tags: 
-#        - Key: PLATFORM
-#          Value: 
+#      AdminCreateUserConfig: 
+#        AdminCreateUserConfig
+#      AliasAttributes: 
+#        - String
+#      AutoVerifiedAttributes: 
+#        - String
+#      DeviceConfiguration: 
+#        DeviceConfiguration
+#      EmailConfiguration: 
+#        EmailConfiguration
+#      EmailVerificationMessage: String
+#      EmailVerificationSubject: String
+#      LambdaConfig: 
+#        LambdaConfig
+#      MfaConfiguration: String
+#      Policies: 
+#        Policies
+#      UserPoolName: String
+#      Schema: 
+#        - SchemaAttribute
+#      SmsAuthenticationMessage: String
+#      SmsConfiguration: 
+#        SmsConfiguration
+#      SmsVerificationMessage: String
+#      UserPoolTags: 
+#        - PLATFORM:
 #            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-#        - Key: Name
-#          Value: !Sub '${AWS::StackName}-SecurityGroupDomain'
-#  Domain:
-#    Type: 'AWS::Elasticsearch::Domain'
-#    Properties: 
-#      DomainName: !If [HasElasticSearchDomainName, !Ref ElasticSearchDomainName, !Ref 'AWS::NoValue']
-#      EBSOptions:
-#        EBSEnabled: true
-#        VolumeSize: !Ref ElasticSearchVolumeSize
-#        VolumeType: gp2
-#      ElasticsearchClusterConfig:
-#        InstanceCount: 2
-#        InstanceType: !Ref ElasticSearchInstanceType
-#        ZoneAwarenessEnabled: true
-#      ElasticsearchVersion: '6.2'
-#      EncryptionAtRestOptions: 
-#        Enabled: true
-#      SnapshotOptions:
-#        AutomatedSnapshotStartHour: 0
-#      VPCOptions: 
-#        SecurityGroupIds: 
-#          - !Ref SecurityGroupDomain
-#        SubnetIds: 
-#          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-#          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
-#      Tags:
-#        - Key: PLATFORM
-#          Value: 
-#            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-#        - Key: Name
-#          Value: !Sub '${AWS::StackName}-Domain'
+#        - Name: !Sub '${AWS::StackName}-UserPool'
+
+  SecurityGroupDomain: 
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access the Domain'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp: !Join 
+          - '/'
+          - - 'Fn::ImportValue': !Sub '${ParentVpcStack}-NATPublicIp'
+            - '32'
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
+      - SourceSecurityGroupId: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupDomain'
+  Domain:
+    Type: 'AWS::Elasticsearch::Domain'
+    Properties: 
+      DomainName: !If [HasElasticSearchDomainName, !Ref ElasticSearchDomainName, !Ref 'AWS::NoValue']
+      EBSOptions:
+        EBSEnabled: true
+        VolumeSize: !Ref ElasticSearchVolumeSize
+        VolumeType: gp2
+      ElasticsearchClusterConfig:
+        InstanceCount: 2
+        InstanceType: !Ref ElasticSearchInstanceType
+        ZoneAwarenessEnabled: true
+      ElasticsearchVersion: '6.2'
+      EncryptionAtRestOptions: 
+        Enabled: true
+      SnapshotOptions:
+        AutomatedSnapshotStartHour: 0
+      VPCOptions: 
+        SecurityGroupIds: 
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
+          - !Ref SecurityGroupDomain
+        SubnetIds: 
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Domain'
   LogGroup:
     Type: 'AWS::Logs::LogGroup'
     Properties:
@@ -280,13 +345,6 @@ Resources:
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
-      AWS::CloudFormation::Authentication:
-        S3AccessCreds: 
-          type: s3
-          buckets: 
-            - 'cloudformation-eu-west-1-791682668801'
-          roleName: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleS3GetObject'
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
@@ -298,47 +356,106 @@ Resources:
               yum-cron: []
           files:
             '/etc/awslogs/awscli.conf':
-              source: !Sub '${BaseConfigUrl}/etc/awslogs/awscli.conf'
+              content: !Sub |
+                [default]
+                region = ${AWS::Region}
+                [plugins]
+                cwlogs = cwlogs
               mode: '000644'
               owner: root
               group: root
-              context:
-                Region: ${AWS::Region}
             '/etc/awslogs/awslogs.conf':
-              source: !Sub '${BaseConfigUrl}/etc/awslogs/awslogs.conf'
+              content: !Sub |
+                [general]
+                state_file = /var/lib/awslogs/agent-state
+                [/var/log/messages]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/messages
+                log_stream_name = {instance_id}/var/log/messages
+                log_group_name = ${LogGroup}
+                [/var/log/secure]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/secure
+                log_stream_name = {instance_id}/var/log/secure
+                log_group_name = ${LogGroup}
+                [/var/log/cron]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/cron
+                log_stream_name = {instance_id}/var/log/cron
+                log_group_name = ${LogGroup}
+                [/var/log/cloud-init.log]
+                datetime_format = %b %d %H:%M:%S
+                file = /var/log/cloud-init.log
+                log_stream_name = {instance_id}/var/log/cloud-init.log
+                log_group_name = ${LogGroup}
+                [/var/log/cfn-init.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-init.log
+                log_stream_name = {instance_id}/var/log/cfn-init.log
+                log_group_name = ${LogGroup}
+                [/var/log/cfn-hup.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-hup.log
+                log_stream_name = {instance_id}/var/log/cfn-hup.log
+                log_group_name = ${LogGroup}
+                [/var/log/cfn-init-cmd.log]
+                datetime_format = %Y-%m-%d %H:%M:%S
+                file = /var/log/cfn-init-cmd.log
+                log_stream_name = {instance_id}/var/log/cfn-init-cmd.log
+                log_group_name = ${LogGroup}
+                [/var/log/cloud-init-output.log]
+                file = /var/log/cloud-init-output.log
+                log_stream_name = {instance_id}/var/log/cloud-init-output.log
+                log_group_name = ${LogGroup}
+                [/var/log/dmesg]
+                file = /var/log/dmesg
+                log_stream_name = {instance_id}/var/log/dmesg
+                log_group_name = ${LogGroup}
               mode: '000644'
               owner: root
               group: root
-              context:
-                LogGroup: ${LogGroup}
             '/etc/cfn/cfn-hup.conf':
-              source: !Sub '${BaseConfigUrl}/etc/cfn/cfn-hup.conf'
+              content: !Sub |
+                [main]
+                stack=${AWS::StackName}
+                region=${AWS::Region}
               mode: '000400' 
-              owner: root
-              group: root
-              context:
-                Region: ${AWS::Region}
-                StackName: ${AWS::StackName}
+              owner: 'root'
+              group: 'root'
             '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
-              source: !Sub '${BaseConfigUrl}/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+                runas=root
               mode: '000400' 
-              owner: root
-              group: root
-              context:
-                Region: ${AWS::Region}
-                StackName: ${AWS::StackName}
+              owner: 'root'
+              group: 'root'
             '/home/ec2-user/.bashrc':
-              source: !Sub '${BaseConfigUrl}/home/ec2-user/bashrc'
+              content: !Sub |
+                [ -f /etc/bashrc ] && . /etc/bashrc
+                alias c=clear
+                alias l='ls -l'
+                alias vi=vim
+                PS1='[\u@${AWS::StackName} \W]\$ '
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
-              context:
-                StackName: ${AWS::StackName}
             '/root/tag_root_volume.sh':
-              source: !Sub '${BaseConfigUrl}/root/tag_root_volume.sh'
-              mode: '000744' 
-              owner: root
-              group: root
+              content: !Sub |
+                #!/bin/bash
+                STACK_NAME=${AWS::StackName}
+                REGION=${AWS::Region}
+                echo "Tagging Root volume..."
+                INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+                VOLUME_ID=$(aws --region $REGION ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/xvda" --query "Volumes[0].VolumeId" --output text)
+                PLATFORM=$(aws --region $REGION ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].Tags" --output table | grep PLATFORM | cut -d '|' -f 3 | sed -e 's/ //g')
+                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=Name,Value=$STACK_NAME-VolumeRoot"
+                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=PLATFORM,Value=$PLATFORM"
+              mode: '000744'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_install_aws_inspector': 
               command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
@@ -347,7 +464,7 @@ Resources:
             '03_yum_cron.conf':
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
-              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}' 
+              command: "sudo /root/tag_root_volume.sh"
           services:
             sysvinit:
               awslogs:
@@ -377,10 +494,29 @@ Resources:
               java-1.8.0-openjdk: []
           files: 
             '/etc/yum.repos.d/logstash.repo':
-              source: !Sub '${BaseConfigUrl}/etc/yum.repos.d/logstash.repo'
+              content: !Sub |
+                [logstash-6.x]
+                name=Elastic repository for 6.x packages
+                baseurl=https://artifacts.elastic.co/packages/6.x/yum
+                gpgcheck=1
+                gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+                enabled=1
+                autorefresh=1
+                type=rpm-md
               mode: '000644'
-              owner: root
-              group: root
+              owner: 'root'
+              group: 'root'
+            '/root/create_fs.sh': 
+              content: !Sub |
+                #!/bin/bash
+                MNT=/mnt/application
+                [ -d $MNT ] || mkdir $MNT
+                mount -t efs -o tls ${FileSystem}:/ $MNT
+                [ -d $MNT/data ] || mkdir -p $MNT/data
+                [ -d $MNT/data ] && echo "File system OK"
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_alternatives_java':
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
@@ -388,52 +524,102 @@ Resources:
               command: 'sudo yum remove -y java-1.7.0-openjdk'
             '03_rpm_import': 
               command: 'sudo rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch'
+            '04_create_fs':
+              command: 'sudo /root/create_fs.sh'              
         InstallApplication: 
           packages:
             yum:
               logstash: []
           files:
             '/etc/crontab': 
-              content: !Sub |
+              content: |
                 SHELL=/bin/bash
                 PATH=/sbin:/bin:/usr/sbin:/usr/bin
                 MAILTO=root
                 HOME=/
-                */15 * * * * root bash /root/logstash/s3_sync_logs.sh ${S3ImportBucketName}
+                */15 * * * * root bash /root/logstash/s3_sync_logs.sh
               mode: '000644'
-              owner: root
-              group: root
+              owner: 'root'
+              group: 'root'
             '/tmp/GeoLite2-City.tar.gz': 
               source: 'http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz'
               mode: '000644'
-              owner: root
-              group: root
-            '/etc/logstash/conf.d/01-input.conf': 
-              source: !Sub '${BaseConfigUrl}/etc/logstash/conf.d/01-input.conf'
-              mode: '000644'
-              owner: root
-              group: root
+              owner: 'root'
+              group: 'root'
             '/etc/logstash/conf.d/02-elastic_output.conf': 
-              source: !Sub '${BaseConfigUrl}/etc/logstash/conf.d/02-elastic_output.conf'
+              content: !Sub |
+                output {
+                  if "_grokparsefailure" in [tags] {
+                    file { "path" => "/var/log/logstash/grok_failures.txt" }
+                  } else {
+                    elasticsearch {
+                      hosts     => "https://${Domain.DomainEndpoint}:443"
+                      ssl       => true
+                      sniffing => false
+                      manage_template => false
+                      index => "%{[@metadata][index]}-%{+YYYY.MM.dd}"
+                      document_id => "%{[@metadata][fingerprint]}"
+                    }
+                  }
+                }
               mode: '000644'
-              owner: root
-              group: root
-              context:
-                DomainEndpoint: ${AWS::Region}
-                DomainPort: 443
-            '/root/logstash/s3_sync_logs.sh': 
-              source: !Sub '${BaseConfigUrl}/root/logstash/s3_sync_logs.sh'
+              owner: 'root'
+              group: 'root'
+            '/root/logstash/s3_sync_logs.sh':  
+              content: !Sub |
+                #!/bin/bash
+                DST_DIR=/var/log/imported
+                [ -d $DST_DIR ] || mkdir -p $DST_DIR
+                chmod go+rx $DST_DIR
+                
+                include_filters="${S3LogsIncludeFilters}"
+                IFS=','
+                for include_filter in $(echo -n "$include_filters"); do
+                  aws s3 sync s3://${S3LogsBucketName}/ $DST_DIR/ --exclude "*" --include "$include_filter"
+                done
+                #aws s3 sync s3://${S3LogsBucketName}/ $DST_DIR/ --exclude "*" --include "*SSL_access_$(date +"%Y-%m-%d")-00_00_00.log"
+                #aws s3 sync s3://${S3LogsBucketName}/ $DST_DIR/ --exclude "*" --include "*ArcQueriesTrace.log"
+                #aws s3 sync s3://${S3LogsBucketName}/ $DST_DIR/ --exclude "*" --include "*api-backend.log"
+                find $DST_DIR/ -name SSL_access_$(date --date="-1 day" +"%Y-%m-%d")-00_00_00.log -exec rm {} \;
               mode: '000700'
-              owner: root
-              group: root
-            '/root/logstash/configure.sh': 
-              source: !Sub '${BaseConfigUrl}/root/logstash/configure.sh'
+              owner: 'root'
+              group: 'root'
+            '/root/logstash_configure.sh': 
+              content: !Sub |
+                #!/bin/bash
+                echo "Configuring Logstash..."
+                # Forcing to create init.d file
+                #
+                chown -R logstash.logstash /mnt/application
+                /usr/share/logstash/bin/system-install /etc/logstash/startup.options sysv
+                # Adding logs to awslog
+                cat >> /etc/awslogs/awslogs.conf <<EOF
+                [/var/log/logstash-stdout.log]
+                file = /var/log/logstash-stdout.log
+                log_stream_name = {instance_id}/var/log/logstash-stdout.log
+                log_group_name = ${LogGroup}
+                [/var/log/logstash-stderr.log]
+                file = /var/log/logstash-stderr.log
+                log_stream_name = {instance_id}/var/log/logstash-stderr.log
+                log_group_name = ${LogGroup}
+                [/var/log/logstash/grok_failures.txt]
+                file = /var/log/logstash/grok_failures.txt
+                log_stream_name = {instance_id}/var/log/logstash/grok_failures.txt
+                log_group_name = ${LogGroup}
+                EOF
+                # Extracting GeoLite2-City DB
+                geodb=$(tar -tvf /tmp/GeoLite2-City.tar.gz | grep 'mmdb' | sed -E 's/.* ([^ ]+)$/\1/')
+                [ -d /usr/share/logstash/geolite ] || mkdir -p /usr/share/logstash/geolite
+                tar -xvzf /tmp/GeoLite2-City.tar.gz -C /usr/share/logstash/geolite $geodb
+                mv /usr/share/logstash/geolite/$geodb /usr/share/logstash/geolite/. 
+                # Configuring input:
+                aws s3 cp ${LogstashInputConfig} /etc/logstash/conf.d/01-input.conf
               mode: '000700'
-              owner: root
-              group: root
+              owner: 'root'
+              group: 'root'
           commands:
             '01_logstash_configure':
-              command: !Sub 'sudo /root/logstash_configure.sh ${LogGroup}'
+              command: !Sub 'sudo /root/logstash_configure.sh'
             '99_logstash_restart':
               command: 'sudo service logstash start'
           services:
@@ -482,7 +668,7 @@ Resources:
 Outputs: 
   Kibana: 
     Description: 'Public DNS address of the internet facing ELB'
-    Value: !Sub 'https://$Domain.DomainEndpoint/_plugin/kibana/'
+    Value: !Sub 'https://${Domain.DomainEndpoint}/_plugin/kibana/'
     Export:
       Name: !Sub '${AWS::StackName}-Kibana'
   
