@@ -364,6 +364,21 @@ Resources:
       GroupId: !Ref SecurityGroupPrivate
       IpProtocol: "-1"
       SourceSecurityGroupId: !Ref SecurityGroupPrivate
+  SecurityGroupEFS:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security Group to access EFS'
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+      - SourceSecurityGroupId: !Ref SecurityGroupPrivate
+        FromPort: 2049
+        ToPort: 2049
+        IpProtocol: tcp
+      Tags: 
+        - Key: PLATFORM
+          Value: !Sub '${AWS::StackName}'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
   NetworkAcl: 
     Type: "AWS::EC2::NetworkAcl"
     Properties: 
@@ -504,6 +519,11 @@ Outputs:
     Value: !GetAtt SubnetDMZ.AvailabilityZone
     Export:
       Name: !Sub '${AWS::StackName}-AvailabilityZoneSubnetDMZ'
+  SecurityGroupEFS:
+    Description: 'Security Group to access EFS'
+    Value: !Ref SecurityGroupEFS
+    Export:
+      Name: !Sub '${AWS::StackName}-SecurityGroupEFS'
   SecurityGroupPublic:
     Description: 'Security Group for the Public instances'
     Value: !Ref SecurityGroupPublic

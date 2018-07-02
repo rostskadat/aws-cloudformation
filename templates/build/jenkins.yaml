@@ -244,24 +244,6 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
-  SecurityGroupEFS:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access Splunk EFS'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - SourceSecurityGroupId: 
-          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        FromPort: 2049
-        ToPort: 2049
-        IpProtocol: tcp
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
   FileSystem:
     Type: 'AWS::EFS::FileSystem'
     Properties: 
@@ -278,7 +260,7 @@ Resources:
     Properties:
       FileSystemId: !Ref FileSystem
       SecurityGroups:
-        - !Ref SecurityGroupEFS
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
   MountTargetB:
@@ -286,7 +268,7 @@ Resources:
     Properties:
       FileSystemId: !Ref FileSystem
       SecurityGroups:
-        - !Ref SecurityGroupEFS
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
   LogGroup:
