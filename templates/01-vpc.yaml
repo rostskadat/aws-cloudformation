@@ -305,7 +305,27 @@ Resources:
       GroupDescription: "Security group for instances for public facing instances"
       VpcId: !Ref Vpc
       SecurityGroupIngress: 
-        - Description: "Allow all inbound HTTPS traffic from the internet"
+        - Description: "Allow all inbound SSH traffic from our public address"
+          CidrIp: "195.149.215.221/32"
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - Description: "Allow all inbound SSH traffic from our public address"
+          CidrIp: "195.149.209.221/32"
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - Description: "Allow all inbound SSH traffic from our public address"
+          CidrIp: "193.127.200.51/32"
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - Description: "Allow all inbound SSH traffic from our public address"
+          CidrIp: "193.127.200.52/32"
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - Description: "Allow all inbound SSH traffic from our public address"
           CidrIp: "0.0.0.0/0"
           IpProtocol: tcp
           FromPort: 443
@@ -447,6 +467,11 @@ Outputs:
     Value:  !GetAtt Vpc.CidrBlock
     Export:
       Name: !Sub '${AWS::StackName}-CidrBlock'
+  NATPublicIp:
+    Description: 'The Public IP of the NATGateway'
+    Value:  !Ref NatGatewayEIP
+    Export:
+      Name: !Sub '${AWS::StackName}-NATPublicIp'
   InstanceProfileEC2Instance:
     Description: "The Instance Profile allowing to tag Root volume of each instances in this VPC"
     Value: !Ref InstanceProfileEC2Instance
