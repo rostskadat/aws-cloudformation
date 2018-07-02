@@ -452,7 +452,7 @@ Resources:
             '/root/create_fs.sh': 
               content: !Sub |
                 #!/bin/bash -x
-                MNT=/mnt/artifactory
+                MNT=/mnt/application
                 [ -d $MNT ] || mkdir $MNT
                 mount -t efs -o tls ${FileSystem}:/ $MNT
                 [ -d $MNT/data ] || mkdir -p $MNT/data
@@ -478,7 +478,7 @@ Resources:
                 <config version="1">
                   <chain template="file-system"/>
                   <provider id="file-system" type="file-system">
-                    <baseDataDir>/mnt/artifactory/data</baseDataDir>
+                    <baseDataDir>/mnt/application/data</baseDataDir>
                     <fileStoreDir>filestore</fileStoreDir>  
                     <tempDir>temp</tempDir>
                   </provider>                  
@@ -496,7 +496,7 @@ Resources:
               mode: '000744'
               owner: 'artifactory'
               group: 'artifactory'
-            '/root/artifactory_create_db.sh':
+            '/root/artifactory/create_db.sh':
               content: !Sub |
                 #!/bin/bash
                 address=$1
@@ -516,7 +516,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/artifactory_configure_db.sh':
+            '/root/artifactory/configure_db.sh':
               content: !Sub |
                 #!/bin/bash
                 address=$1
@@ -527,7 +527,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/artifactory_change_password.sh':
+            '/root/artifactory/change_password.sh':
               content: |
                 #!/bin/bash
                 oldPassword="$1"
@@ -548,7 +548,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/ldap_settings.yaml': 
+            '/root/artifactory/ldap_settings.yaml': 
               content: |
                 security:
                   anonAccessEnabled: false
@@ -581,12 +581,12 @@ Resources:
               mode: '000600'
               owner: 'root'
               group: 'root'
-            '/root/artifactory_start_and_configure_master_key.sh':
+            '/root/artifactory/start_and_configure_master_key.sh':
               content: |
                 #!/bin/bash
                 MASTER_KEY_TARGET=/etc/opt/jfrog/artifactory/security/master.key
-                MASTER_KEY_BACKUP=/mnt/artifactory/data/master.key
-                if [ -f '/mnt/artifactory/data/.application_configured' ]; then
+                MASTER_KEY_BACKUP=/mnt/application/data/master.key
+                if [ -f '/mnt/application/.application_configured' ]; then
                   echo "This is not the first install. Restoring $MASTER_KEY_TARGET from $MASTER_KEY_BACKUP"
                   [ -d $(dirname $MASTER_KEY_TARGET) ] ||  mkdir -p $(dirname $MASTER_KEY_TARGET)
                   cp $MASTER_KEY_BACKUP $MASTER_KEY_TARGET
@@ -604,7 +604,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/artifactory_configure_ldap.sh':
+            '/root/artifactory/configure_ldap.sh':
               content: |
                 #!/bin/bash
                 ldapHostname=$1
@@ -624,8 +624,8 @@ Resources:
                 header="Content-Type: application/yaml"
                 url="$API_URL/system/configuration"
                 echo "Configuring LDAP ($ldapHostname:$ldapPort w/ $rootDC) ..."
-                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%managerDN%/$managerDN/;s/%rootDC%/$rootDC/;s/%managerPassword%/$managerPassword/;" /root/ldap_settings.yaml
-                curl -s --user "admin:$adminPassword" -H "$header" -T /root/ldap_settings.yaml -X PATCH "$url"
+                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%managerDN%/$managerDN/;s/%rootDC%/$rootDC/;s/%managerPassword%/$managerPassword/;" /root/artifactory/ldap_settings.yaml
+                curl -s --user "admin:$adminPassword" -H "$header" -T /root/artifactory/ldap_settings.yaml -X PATCH "$url"
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -633,41 +633,41 @@ Resources:
             '01_create_symlink_for_mysql':
               command: 'sudo ln -s /usr/share/java/mysql-connector-java.jar /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
               test: 'test ! -e /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
-            '02_artifactory_create_db':
+            '02_create_db':
               command: !Join
                 - ' '
-                - - 'sudo /root/artifactory_create_db.sh'
+                - - 'sudo /root/artifactory/create_db.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterUserPassword}'
-              test: 'sudo test ! -e /mnt/artifactory/data/.application_configured'
-            '03_artifactory_configure_db':
+              test: 'sudo test ! -e /mnt/application/.application_configured'
+            '03_configure_db':
               command: !Join
                 - ' '
-                - - 'sudo /root/artifactory_configure_db.sh'
+                - - 'sudo /root/artifactory/configure_db.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
             '04_chown':
-              command: 'sudo chown -R artifactory.artifactory /mnt/artifactory'
-            '05_artifactory_start_and_configure_master_key':
-              command: 'sudo /root/artifactory_start_and_configure_master_key.sh'
-            '06_artifactory_change_password': 
-              command: !Sub 'sudo /root/artifactory_change_password.sh password ${ArtifactoryAdminPassword}'
-              test: 'sudo test ! -e /mnt/artifactory/data/.application_configured'
-            '07_artifactory_configure_ldap': 
+              command: 'sudo chown -R artifactory.artifactory /mnt/application'
+            '05_start_and_configure_master_key':
+              command: 'sudo /root/artifactory/start_and_configure_master_key.sh'
+            '06_change_password': 
+              command: !Sub 'sudo /root/artifactory/change_password.sh password ${ArtifactoryAdminPassword}'
+              test: 'sudo test ! -e /mnt/application/.application_configured'
+            '07_configure_ldap': 
               command: !Join
                 - ' '
-                - - 'sudo /root/artifactory_configure_ldap.sh'
+                - - 'sudo /root/artifactory/configure_ldap.sh'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                   - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                   - !Sub '${LDAPManagerPassword}'
                   - !Sub '${ArtifactoryAdminPassword}'
-              test: 'sudo test ! -e /mnt/artifactory/data/.application_configured'
+              test: 'sudo test ! -e /mnt/application/.application_configured'
             '98_application_configured':
-              command: 'sudo touch /mnt/artifactory/data/.application_configured'
+              command: 'sudo touch /mnt/application/.application_configured'
             '99_artifactory_restart': 
               command: 'sudo service artifactory restart'
           services: 
