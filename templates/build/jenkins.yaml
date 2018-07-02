@@ -666,7 +666,7 @@ Resources:
               group: 'root'
             '/root/jenkins_call_cli.sh':
               content: |
-                #!/bin/bash -x 
+                #!/bin/bash 
                 exec > >(tee -a "/var/log/InstallApplication.log") 2> >(tee -a "/var/log/InstallApplication.log")
                 groovyFile=$1
                 optionalPassword="$2"
