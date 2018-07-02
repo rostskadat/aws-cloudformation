@@ -205,24 +205,6 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: 9600
       Protocol: HTTP
-  SecurityGroupEFS:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access Splunk EFS'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - SourceSecurityGroupId: 
-          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        FromPort: 2049
-        ToPort: 2049
-        IpProtocol: tcp
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupEFS'
   FileSystem:
     Type: 'AWS::EFS::FileSystem'
     Properties: 
@@ -239,7 +221,7 @@ Resources:
     Properties:
       FileSystemId: !Ref FileSystem
       SecurityGroups:
-        - !Ref SecurityGroupEFS
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
   MountTargetB:
@@ -247,66 +229,9 @@ Resources:
     Properties:
       FileSystemId: !Ref FileSystem
       SecurityGroups:
-        - !Ref SecurityGroupEFS
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
-#  UserPool:
-#    Type: 'AWS::Cognito::UserPool'
-#    Properties:
-#      AdminCreateUserConfig: 
-#        AdminCreateUserConfig
-#      AliasAttributes: 
-#        - String
-#      AutoVerifiedAttributes: 
-#        - String
-#      DeviceConfiguration: 
-#        DeviceConfiguration
-#      EmailConfiguration: 
-#        EmailConfiguration
-#      EmailVerificationMessage: String
-#      EmailVerificationSubject: String
-#      LambdaConfig: 
-#        LambdaConfig
-#      MfaConfiguration: String
-#      Policies: 
-#        Policies
-#      UserPoolName: String
-#      Schema: 
-#        - SchemaAttribute
-#      SmsAuthenticationMessage: String
-#      SmsConfiguration: 
-#        SmsConfiguration
-#      SmsVerificationMessage: String
-#      UserPoolTags: 
-#        - PLATFORM:
-#            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-#        - Name: !Sub '${AWS::StackName}-UserPool'
-
-  SecurityGroupDomain: 
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access the Domain'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - CidrIp: !Join 
-          - '/'
-          - - 'Fn::ImportValue': !Sub '${ParentVpcStack}-NATPublicIp'
-            - '32'
-        FromPort: 443
-        ToPort: 443
-        IpProtocol: tcp
-      - SourceSecurityGroupId: 
-          'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        FromPort: 443
-        ToPort: 443
-        IpProtocol: tcp
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupDomain'
   Domain:
     Type: 'AWS::Elasticsearch::Domain'
     Properties: 
@@ -327,7 +252,6 @@ Resources:
       VPCOptions: 
         SecurityGroupIds: 
           - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
-          - !Ref SecurityGroupDomain
         SubnetIds: 
           - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
           - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
