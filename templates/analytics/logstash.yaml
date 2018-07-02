@@ -416,6 +416,7 @@ Resources:
           packages:
             yum:
               java-1.8.0-openjdk: []
+              amazon-efs-utils: []
           files: 
             '/etc/yum.repos.d/logstash.repo':
               content: !Sub |
@@ -508,7 +509,7 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/logstash_configure.sh': 
+            '/root/logstash/configure.sh': 
               content: !Sub |
                 #!/bin/bash
                 echo "Configuring Logstash..."
@@ -538,13 +539,36 @@ Resources:
                 mv /usr/share/logstash/geolite/$geodb /usr/share/logstash/geolite/. 
                 # Configuring input:
                 aws s3 cp ${LogstashInputConfig} /etc/logstash/conf.d/01-input.conf
+                
+                #
+                # Adding IPV4 for logstash
+                #
+                echo "-Djava.net.preferIPv4Stack=true" >> /etc/logstash/jvm.options
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
+            '/root/logstash/wait.sh': 
+              content: |
+                #!/bin/bash
+                i=0
+                i=0
+                echo -n "Waiting for logstash to stop"
+                while (true); do
+                  echo -n .; sleep 1
+                  i=$((i+1))
+                  [ $i -gt 30 ] && exit
+                done
               mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
             '01_logstash_configure':
-              command: !Sub 'sudo /root/logstash_configure.sh'
-            '99_logstash_restart':
+              command: 'sudo /root/logstash/configure.sh'
+            '97_logstash_stop':
+              command: 'sudo service logstash stop'
+            '98_wait':
+              command: 'sudo /root/logstash/wait.sh'
+            '99_logstash_start':
               command: 'sudo service logstash start'
           services:
             sysvinit:
