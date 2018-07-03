@@ -544,6 +544,7 @@ Resources:
                 # Adding IPV4 for logstash
                 #
                 echo "-Djava.net.preferIPv4Stack=true" >> /etc/logstash/jvm.options
+                sed -ibckp -E "s/.*http.host.*/http.host: '0.0.0.0'/" /etc/logstash/logstash.yml
               mode: '000700'
               owner: 'root'
               group: 'root'
