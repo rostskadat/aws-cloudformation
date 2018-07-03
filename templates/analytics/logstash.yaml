@@ -23,7 +23,6 @@ Metadata:
     - Label: 
         default: 'ElasticSearch Parameters'
       Parameters:
-      - ElasticSearchDomainName
       - ElasticSearchVolumeSize
       - ElasticSearchInstanceType
     - Label: 
@@ -50,9 +49,6 @@ Parameters:
     Description: 'The ElasticSearch Admin email'
     Type: String
     Default: 'es-admin@example.com'
-  ElasticSearchDomainName:
-    Description: 'The ElasticSearch Domain'
-    Type: String
   ElasticSearchVolumeSize:
     Description: 'The size of the volume attach to your ES node'
     Type: Number
@@ -108,7 +104,6 @@ Mappings:
       AMI: ami-e251209a
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
-  HasElasticSearchDomainName: !Not [!Equals [!Ref ElasticSearchDomainName, '']]
 Resources: 
   TopicHealth: 
     Type: 'AWS::SNS::Topic'
@@ -235,7 +230,6 @@ Resources:
   Domain:
     Type: 'AWS::Elasticsearch::Domain'
     Properties: 
-      DomainName: !If [HasElasticSearchDomainName, !Ref ElasticSearchDomainName, !Ref 'AWS::NoValue']
       EBSOptions:
         EBSEnabled: true
         VolumeSize: !Ref ElasticSearchVolumeSize
@@ -251,10 +245,10 @@ Resources:
         AutomatedSnapshotStartHour: 0
       VPCOptions: 
         SecurityGroupIds: 
-          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
         SubnetIds: 
-          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
       Tags:
         - Key: PLATFORM
           Value: 
