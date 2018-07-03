@@ -30,7 +30,7 @@ Resources:
   # attach this role to each instance through an instance profile. Further more each instance must also during boot
   # manually tag the volume with the correct tags.
   #
-  RoleEC2CreateTags:
+  RoleEC2Instance: 
     Type: 'AWS::IAM::Role'
     Properties: 
       AssumeRolePolicyDocument: 
@@ -44,7 +44,26 @@ Resources:
               - 'sts:AssumeRole'
       Path: '/'
       Policies: 
-        - PolicyName: 'RoleTagEC2Instance'
+        - PolicyName: 'AllowS3GetObject'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource: '*'
+        - PolicyName: 'AllowCloudWatchPutLogEvents'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 'logs:PutLogEvents'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                Resource: '*'
+        - PolicyName: 'AllowEC2CreateTags'
           PolicyDocument: 
             Version: '2012-10-17'
             Statement: 
@@ -53,82 +72,7 @@ Resources:
                   - 'ec2:Describe*'
                   - 'ec2:CreateTags'
                 Resource: '*'
-  RoleCloudWatchPutLogEvents:
-    Type: 'AWS::IAM::Role'
-    Properties: 
-      AssumeRolePolicyDocument: 
-        Version: '2012-10-17'
-        Statement: 
-          - Effect: 'Allow'
-            Principal: 
-              Service: 
-                - 'ec2.amazonaws.com'
-            Action: 
-              - 'sts:AssumeRole'
-      Path: '/'
-      Policies: 
-        - PolicyName: 'RoleTagEC2Instance'
-          PolicyDocument: 
-            Version: '2012-10-17'
-            Statement: 
-              - Effect: 'Allow'
-                Action:
-                  - 'logs:PutLogEvents'
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                Resource: '*'
-  RoleS3GetObject:
-    Type: 'AWS::IAM::Role'
-    Properties: 
-      AssumeRolePolicyDocument: 
-        Version: '2012-10-17'
-        Statement: 
-          - Effect: 'Allow'
-            Principal: 
-              Service: 
-                - 'ec2.amazonaws.com'
-            Action: 
-              - 'sts:AssumeRole'
-      Path: '/'
-      Policies: 
-        - PolicyName: 'RoleTagEC2Instance'
-          PolicyDocument: 
-            Version: '2012-10-17'
-            Statement: 
-              - Effect: 'Allow'
-                Action:
-                  - 's3:GetObject'
-                  - 's3:ListBucket'
-                Resource: '*'
-  RoleEC2Instance:
-    Type: 'AWS::IAM::Role'
-    Properties: 
-      AssumeRolePolicyDocument: 
-        Version: '2012-10-17'
-        Statement: 
-          - Effect: 'Allow'
-            Principal: 
-              Service: 
-                - 'ec2.amazonaws.com'
-            Action: 
-              - 'sts:AssumeRole'
-      Path: '/'
-      Policies: 
-        - PolicyName: 'RoleTagEC2Instance'
-          PolicyDocument: 
-            Version: '2012-10-17'
-            Statement: 
-              - Effect: 'Allow'
-                Action:
-                  - 'ec2:DescribeInstances'
-                  - 'ec2:DescribeVolumes'
-                  - 'ec2:CreateTags'
-                  - 'logs:PutLogEvents'
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 's3:GetObject'
-                  - 's3:ListBucket'
-                Resource: '*'
+
   InstanceProfileEC2Instance:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:
@@ -492,18 +436,10 @@ Outputs:
     Value: !Ref InstanceProfileEC2Instance
     Export:
       Name: !Sub '${AWS::StackName}-InstanceProfileEC2Instance'
-  RoleEC2CreateTags:
-    Value: !Ref RoleEC2CreateTags
+  RoleEC2Instance:
+    Value: !Ref RoleEC2Instance
     Export:
-      Name: !Sub '${AWS::StackName}-RoleEC2CreateTags'
-  RoleCloudWatchPutLogEvents:
-    Value: !Ref RoleCloudWatchPutLogEvents
-    Export:
-      Name: !Sub '${AWS::StackName}-RoleCloudWatchPutLogEvents'
-  RoleS3GetObject: 
-    Value: !Ref RoleS3GetObject
-    Export:
-      Name: !Sub '${AWS::StackName}-RoleS3GetObject'
+      Name: !Sub '${AWS::StackName}-RoleEC2Instance'
   SecurityGroupDMZ: 
     Description: 'Security Group for the DMZ instances'
     Value: !Ref SecurityGroupDMZ
