@@ -34,95 +34,119 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-      - SplunkInstanceType
+      - InstanceType
     - Label:
         default: 'Splunk Parameters'
       Parameters:
       - SplunkAdminPassword
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Stack where Splunk will reside"
+    Description: "Enter the name of the VPC Stack where Artifactory will reside"
     Type: String
-    Default: ''
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the VPC stack'
+  InstanceType:
+    Description: 'The Artifactory instance type'
+    Type: String
+    Default: 'c5.large'    
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
-  SplunkInstanceType:
-    Description: 'The instance type of the Jenkins master.'
-    Type: String
-    Default: 'c4.large'    
   SplunkAdminPassword: 
     Description: "Enter the default Admin password for Splunk"
     Type: String
-    Default: ''
     NoEcho: true
+    MinLength: 3
 Mappings:
+  # cf 01-mappings.yaml
   RegionMap:
-    'ap-south-1':
-      AMI: 'ami-76d6f519'
-    'eu-west-3':
-      AMI: 'ami-969c2deb'
-    'eu-west-2':
-      AMI: 'ami-a36f8dc4'
-    'eu-west-1':
-      AMI: 'ami-ca0135b3'
-    'ap-northeast-2':
-      AMI: 'ami-c10fa6af'
-    'ap-northeast-1':
-      AMI: 'ami-92df37ed'
-    'sa-east-1':
-      AMI: 'ami-3885d854'
-    'ca-central-1':
-      AMI: 'ami-338a0a57'
-    'ap-southeast-1':
-      AMI: 'ami-de90a5a2'
-    'ap-southeast-2':
-      AMI: 'ami-423bec20'
-    'eu-central-1':
-      AMI: 'ami-9a91b371'
-    'us-east-1':
-      AMI: 'ami-14c5486b'
-    'us-east-2':
-      AMI: 'ami-922914f7'
-    'us-west-1':
-      AMI: 'ami-25110f45'
-    'us-west-2':
-      AMI: 'ami-e251209a'    
+    ap-northeast-1:
+      AMI: ami-92df37ed
+    ap-northeast-2:
+      AMI: ami-c10fa6af
+    ap-south-1:
+      AMI: ami-76d6f519
+    ap-southeast-1:
+      AMI: ami-de90a5a2
+    ap-southeast-2:
+      AMI: ami-423bec20
+    ca-central-1:
+      AMI: ami-338a0a57
+    eu-central-1:
+      AMI: ami-9a91b371
+    eu-west-1:
+      AMI: ami-ca0135b3
+    eu-west-2:
+      AMI: ami-a36f8dc4
+    eu-west-3:
+      AMI: ami-969c2deb
+    sa-east-1:
+      AMI: ami-3885d854
+    us-east-1:
+      AMI: ami-14c5486b
+    us-east-2:
+      AMI: ami-922914f7
+    us-west-1:
+      AMI: ami-25110f45
+    us-west-2:
+      AMI: ami-e251209a
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
-  #
-  # Let's create the SecurityGroup for the ELB LoadBalancer. Basically it should only allow traffic on the HTTP/S port
-  #   from the Internet. If you want to restrict the IP from which to accept traffic, do it here. you can have a look 
-  #   at the 01-vpc.yaml, and more specifically the SecurityGroupDMZ for an example.
-  #
-  SecurityGroupELB:
-    Type: 'AWS::EC2::SecurityGroup'
+  TopicHealth: 
+    Type: 'AWS::SNS::Topic'
+    Properties: 
+      DisplayName: !Sub '${AWS::StackName} - Server health notification'
+      Subscription:
+        - Endpoint: !Ref ArtifactoryAdminEmail
+          Protocol: 'email'
+  AutoScalingGroup: 
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
-      GroupDescription: 'Security Group to access Splunk ELB'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - CidrIp : "0.0.0.0/0"
-        FromPort: 443
-        ToPort: 443
-        IpProtocol: tcp
-      - CidrIp : "0.0.0.0/0"
-        FromPort: 80
-        ToPort: 80
-        IpProtocol: tcp
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: 1
+      MaxSize: 1
+      NotificationConfigurations:
+        - TopicARN: !Ref TopicHealth
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+          PropagateAtLaunch: true
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupELB'
-  LoadBalancerSplunk:
+          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          PropagateAtLaunch: true
+    CreationPolicy: 
+      ResourceSignal: 
+        Timeout: PT15M
+        Count: 1
+    UpdatePolicy: 
+      AutoScalingRollingUpdate: 
+        MinInstancesInService: 0
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+    DependsOn:
+      - MountTargetA
+      - MountTargetB
+  LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
-      Scheme: 'internet-facing'
+      Scheme: internet-facing
       SecurityGroups:
-      - !Ref SecurityGroupELB
+      - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
       Subnets: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
@@ -131,8 +155,8 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancerSplunk'
-  TargetGroupSplunk:
+          Value: !Sub '${AWS::StackName}-LoadBalancer'
+  TargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 10
@@ -149,66 +173,62 @@ Resources:
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupSplunk'
+          Value: !Sub '${AWS::StackName}-TargetGroup'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
-      Targets:
-        - Id: !Ref SplunkHost
-    DependsOn: SplunkHost
-  ListenerSplunk:
+  Listener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupSplunk
+      - TargetGroupArn: !Ref TargetGroup
         Type: forward
-      LoadBalancerArn: !Ref LoadBalancerSplunk
+      LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
-  #
-  # Let's create the Splunk instance.
-  # 
-  # TODO: Should have a specific SecurityGroup for the instance in order to only allow traffic on port 8000 (default
-  #   Splunk port). Further more I should enable SSL traffic, but beware that the load balancer might not allow 
-  #   communications with a host presenting a self-signed certificate.
-  #
-  SecurityGroupSplunk:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'Security Group to access the Splunk instance'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      SecurityGroupIngress:
-      - SourceSecurityGroupId: 
-          !Ref 'SecurityGroupELB'
-        FromPort: 8000
-        ToPort: 8000
-        IpProtocol: tcp
-      Tags: 
+  FileSystem:
+    Type: 'AWS::EFS::FileSystem'
+    Properties: 
+      Encrypted: true
+      FileSystemTags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-SecurityGroupSplunk'
+          Value: !Sub '${AWS::StackName}-FileSystem'
+      PerformanceMode: generalPurpose
+  MountTargetA:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+  MountTargetB:
+    Type: 'AWS::EFS::MountTarget'
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SecurityGroups:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
+      SubnetId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
   LogGroup:
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
-  SplunkHost: 
-    Type: 'AWS::EC2::Instance'
+  LaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
       AWS::CloudFormation::Init:
-        #
-        # The logs for the cfn-init command are available in the instance in /var/log/cfn-init-cmd.log 
-        #
         configSets: 
-          default: [ Bootstrap, InstallSplunk, InstallSplunkApps, StartSplunk ]
-        Bootstrap:
-          packages:
-            yum:
+          default: [ Bootstrap, BootstrapApplication, InstallApplication, StartSplunk ]
+        Bootstrap: 
+          packages: 
+            yum: 
               wget: []
               htop: []
               awslogs: []
@@ -286,7 +306,7 @@ Resources:
                 [cfn-auto-reloader-hook]
                 triggers=post.update
                 path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
-                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource SplunkHost
+                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
                 runas=root
               mode: '000400' 
               owner: 'root'
@@ -297,6 +317,7 @@ Resources:
                 alias c=clear
                 alias l='ls -l'
                 alias vi=vim
+                PS1='[\u@${AWS::StackName} \W]\$ '
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
@@ -380,59 +401,45 @@ Resources:
             "01_splunk_start":
               command: 'sudo /opt/splunk/bin/splunk start'
     Properties: 
-      DisableApiTermination: false
-      InstanceInitiatedShutdownBehavior: stop
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
       ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
-      InstanceType: !Ref SplunkInstanceType
+      InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
-      SecurityGroupIds: 
+      SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        - !Ref SecurityGroupSplunk
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-      Volumes : 
-        - VolumeId: !Ref VolumeData
-          Device: '/dev/xvdb'
-      Monitoring: false
-      UserData:
+        - !Ref SecurityGroupHealthCheck
+      UserData: 
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
           yum update -y
           yum install -y aws-cfn-bootstrap
-          /opt/aws/bin/cfn-init --verbose --stack ${AWS::StackName} --resource BastionHost --region ${AWS::Region}
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-SplunkHost'
-    DependsOn: VolumeData
-  VolumeData:
-    Type: 'AWS::EC2::Volume'
+          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
+          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+  SecurityGroupHealthCheck:
+    Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      Size: 500
-      Encrypted: true
-      VolumeType: gp2
-      AvailabilityZone: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-AvailabilityZoneSubnetPublicAZA'
+      GroupDescription: 'Security Group for the Health Check'
+      VpcId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      SecurityGroupIngress:
+      - CidrIp: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-CidrBlock'
+        FromPort: 8000
+        ToPort: 8000
+        IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-VolumeData'
+          Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
+
 Outputs: 
-  InstanceId: 
-    Description: "InstanceId of the newly created Splunk instance"
-    Value: !Ref SplunkHost
-    Export:
-      Name: !Sub '${AWS::StackName}-InstanceId'
   DNSName: 
-    Description: "Public DNS address of the internet facing ELB"
-    Value: !GetAtt LoadBalancerSplunk.DNSName
+    Description: 'Public DNS address of the internet facing ELB'
+    Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
       
