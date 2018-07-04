@@ -20,6 +20,7 @@
 # - Configure Jenkins CI: sonar.links.ci
 # - Configure Gitlab SCM: sonar.links.scm
 # - Confiure server base URL: sonar.core.serverBaseURL
+# - Should install plugins through API: POST  /web_api/api/plugins -F key=sonar-findbugs
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
