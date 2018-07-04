@@ -1,0 +1,17 @@
+--- /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb      2018-06-26 14:53:20.531134934 +0000
++++ /root/config.rb     2018-06-26 14:53:02.519089466 +0000
+@@ -12,10 +12,10 @@
+               enabled? && ::License.feature_available?(:ldap_group_sync)
+             end
+
+-            override :_available_servers
+-            def _available_servers
+-              ::License.feature_available?(:multiple_ldap_servers) ? servers : super
+-            end
++#            override :_available_servers
++#            def _available_servers
++#              ::License.feature_available?(:multiple_ldap_servers) ? servers : super
++#            end
+           end
+         end
+       end
