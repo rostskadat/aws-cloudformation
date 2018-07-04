@@ -511,7 +511,7 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterPassword}'
-              test: 'sudo test ! -e /mnt/sonar/.application_configured'
+              test: 'sudo test ! -e /mnt/application/.application_configured'
             '03_sonarqube_configure_gitlab':
               command: !Join
                 - ' '
@@ -519,7 +519,7 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentGitlabStack}-DNSName'
                   - !Sub '${GitlabRootPassword}'
                   - !Sub '${SonarqubeAdminEmail}'
-              test: 'sudo test ! -e /mnt/sonar/.application_configured'
+              test: 'sudo test ! -e /mnt/application/.application_configured'
               ignoreErrors: true
             '04_sonarqube_start':
               command: 'sudo service sonar start'
@@ -530,9 +530,9 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - !Sub '${SonarqubeAdminPassword}'
-              test: 'sudo test ! -e /mnt/sonar/.application_configured'
+              test: 'sudo test ! -e /mnt/application/.application_configured'
             '98_application_configured':
-              command: 'sudo touch /mnt/sonar/.application_configured'
+              command: 'sudo touch /mnt/application/.application_configured'
             '99_sonarqube_start':
               command: 'sudo service sonar restart'
           services: 
