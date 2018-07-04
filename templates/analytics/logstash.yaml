@@ -377,6 +377,11 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
+            '/root/monitor_log.sh': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_alternatives_java':
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
@@ -416,6 +421,11 @@ Resources:
               group: 'root'
               context: 
                 S3LogsIncludeFilters: !Sub '${S3LogsIncludeFilters}'
+            '/root/logstash/monitor_logs.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/monitor_logs.sh'
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
             '/root/logstash/configure.sh': 
               source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/configure.sh'
               mode: '000700'
@@ -427,8 +437,10 @@ Resources:
               owner: 'root'
               group: 'root'
           commands:
-            '01_logstash_configure':
-              command: !Sub 'sudo /root/logstash/configure.sh "${LogGroup}" "${LogstashInputConfig}"'
+            '01_monitor_logs':
+              command: !Sub 'sudo /root/logstash/monitor_logs.sh ${LogGroup}'
+            '02_logstash_configure':
+              command: !Sub 'sudo /root/logstash/configure.sh "${LogstashInputConfig}"'
             '97_logstash_stop':
               command: 'sudo service logstash stop'
             '98_wait':

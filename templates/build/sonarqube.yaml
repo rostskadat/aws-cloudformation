@@ -391,6 +391,11 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
+            '/root/monitor_log.sh': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_alternatives_java':
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
@@ -427,6 +432,11 @@ Resources:
                   !Sub '${LDAPManagerPassword}'
                 GitlabDNSName: 
                   'Fn::ImportValue': !Sub '${ParentGitlabStack}-DNSName'
+            '/root/sonarqube/monitor_logs.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/sonarqube/monitor_logs.sh'
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
             '/root/sonarqube/create_db.sh':
               source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/sonarqube/create_db.sh'
               mode: '000700'
@@ -442,6 +452,11 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
+            '/opt/sonar/extensions/plugins/sonar-java-plugin-5.5.0.14655.jar':
+              source: 'https://sonarsource.bintray.com/Distribution/sonar-java-plugin/sonar-java-plugin-5.5.0.14655.jar'
+              mode: '000644'
+              owner: 'sonar'
+              group: 'sonar'
             '/opt/sonar/extensions/plugins/sonar-ldap-plugin-2.2.0.608.jar':
               source: 'https://sonarsource.bintray.com/Distribution/sonar-ldap-plugin/sonar-ldap-plugin-2.2.0.608.jar'
               mode: '000644'
@@ -503,7 +518,9 @@ Resources:
           commands:
             '01_chown':
               command: 'sudo chown -R sonar.sonar /mnt/application'
-            '02_sonarqube_create_db':
+            '02_monitor_logs':
+              command: !Sub 'sudo /root/sonarqube/monitor_logs.sh ${LogGroup}'
+            '03_sonarqube_create_db':
               command: !Join
                 - ' '
                 - - 'sudo /root/sonarqube/create_db.sh'
@@ -512,16 +529,16 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterPassword}'
               test: 'sudo test ! -e /mnt/application/.application_configured'
-            '03_sonarqube_add_user_to_gitlab':
+            '04sonarqube_add_user_to_gitlab':
               command: !Join
                 - ' '
                 - - 'sudo /root/sonarqube/add_user_to_gitlab.sh'
                   - 'Fn::ImportValue': !Sub '${ParentGitlabStack}-DNSName'
                   - !Sub '${GitlabRootPassword}'
                   - !Sub '${SonarqubeAdminEmail}'
-            '04_sonarqube_start':
+            '05_sonarqube_restart':
               command: 'sudo service sonar restart'
-            '05_sonarqube_change_password':
+            '06_sonarqube_change_password':
               command: !Join
                 - ' '
                 - - 'sudo /root/sonarqube/change_password.sh'

@@ -4,26 +4,8 @@
 #
 # DESCRIPTION: This script will 
 #
-LogGroup="$1"
-LogstashInputConfig="$2"
-[ -z "${LogGroup}" ] && echo "Invalid LogGroup" && exit 1
+LogstashInputConfig="$1"
 [ -z "${LogstashInputConfig}" ] && echo "Invalid LogstashInputConfig" && exit 1
-
-# Adding logs to awslog
-cat >> /etc/awslogs/awslogs.conf <<EOF
-[/var/log/logstash-stdout.log]
-file = /var/log/logstash-stdout.log
-log_stream_name = {instance_id}/var/log/logstash-stdout.log
-log_group_name = ${LogGroup}
-[/var/log/logstash-stderr.log]
-file = /var/log/logstash-stderr.log
-log_stream_name = {instance_id}/var/log/logstash-stderr.log
-log_group_name = ${LogGroup}
-[/var/log/logstash/grok_failures.txt]
-file = /var/log/logstash/grok_failures.txt
-log_stream_name = {instance_id}/var/log/logstash/grok_failures.txt
-log_group_name = ${LogGroup}
-EOF
 
 echo "Configuring Logstash init script..."
 /usr/share/logstash/bin/system-install /etc/logstash/startup.options sysv

@@ -400,6 +400,11 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
+            '/root/monitor_log.sh': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_alternatives_java':
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
@@ -420,8 +425,8 @@ Resources:
               jenkins: []
               apache-maven: []
           files:
-            '/root/jenkins/configure_logs.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_logs.sh'
+            '/root/jenkins/monitor_logs.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/monitor_logs.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -525,8 +530,8 @@ Resources:
           commands: 
             '01_alternatives_java':
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
-            '02_jenkins_configure_logs':
-              command: !Sub 'sudo /root/jenkins/configure_logs.sh ${LogGroup}'
+            '02_monitor_logs':
+              command: !Sub 'sudo /root/jenkins/monitor_logs.sh ${LogGroup}'
             '03_jenkins_configure_jobs_directory': 
               command: 'sudo rm -rf /var/lib/jenkins/jobs && sudo ln -s /mnt/application/jobs /var/lib/jenkins/jobs'
             '04_jenkins_chown_jenkins': 
