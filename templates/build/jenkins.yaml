@@ -408,7 +408,7 @@ Resources:
             '03_rpm_import':
               command: 'sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key'
             '04_create_fs':
-              command: 'sudo /root/create_fs.sh ${FileSystem}'              
+              command: !Sub 'sudo /root/create_fs.sh ${FileSystem}'              
             '05_fix_repo':
               command: 'sudo sed -i s/\$releasever/7/g /etc/yum.repos.d/epel-apache-maven.repo'              
         InstallApplication: 
