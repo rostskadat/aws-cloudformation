@@ -560,7 +560,7 @@ Resources:
             '43_jenkins_configure_ldap': 
               command: !Sub 'sudo /root/jenkins/call_cli.sh /root/jenkins/configure_ldap.groovy "${JenkinsAdminPassword}"'
             '98_application_configured': 
-              command: 'sudo touch /mnt/jenkins/.application_configured'
+              command: 'sudo touch /mnt/application/.application_configured'
             '99_jenkins_restart':
               command: 'sudo service jenkins restart'
           services: 
