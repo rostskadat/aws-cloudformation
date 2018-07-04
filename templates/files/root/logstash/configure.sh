@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# FILE: configure.sh
+#
+# DESCRIPTION: This script will 
+#
 logGroup="$1"
 [ -z "$logGroup" ] && echo "Invalid logGroup" && exit 1
 

@@ -38,6 +38,7 @@ Metadata:
       - ParentLDAPStack
       - ParentArtifactoryStack
       - ParentSonarqubeStack
+      - S3ConfigBucketName
     - Label: 
         default: 'EC2 Parameters'
       Parameters:
@@ -81,16 +82,21 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the Artifactory stack'
+  S3ConfigBucketName:
+    Description: "Enter the name of the S3 bucket name where to find the configuration files"
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the S3 bucket name where to find the configuration files'
   KeyName: 
-    Description: "The Jenkins instance Key Pair"
+    Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
   InstanceType:
-    Description: 'The Jenkins instance type'
+    Description: 'The instance type'
     Type: String
     Default: 'c5.large'    
   LDAPManagerPassword: 
-    Description: 'The LDAP Admin password'
+    Description: 'The LDAP Manager password'
     Type: String
     NoEcho: true
     MinLength: 3
@@ -182,7 +188,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
           PropagateAtLaunch: true
         - Key: Name
-          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          Value: !Sub '${AWS::StackName}-Main'
           PropagateAtLaunch: true
     CreationPolicy: 
       ResourceSignal: 
@@ -271,7 +277,7 @@ Resources:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
-  LogGroup:
+  LogGroup: 
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Sub '${AWS::StackName}'
@@ -279,116 +285,64 @@ Resources:
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCredentials:
+          type: s3
+          roleName: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
+          buckets: 
+            - !Ref S3ConfigBucketName
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
-        Bootstrap:
-          packages:
-            yum:
+        Bootstrap: 
+          packages: 
+            yum: 
               wget: []
               htop: []
               awslogs: []
               yum-cron: []
-          files:
-            '/etc/awslogs/awscli.conf':
-              content: !Sub |
-                [default]
-                region = ${AWS::Region}
-                [plugins]
-                cwlogs = cwlogs
+          files: 
+            '/etc/awslogs/awscli.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
               mode: '000644'
               owner: root
               group: root
-            '/etc/awslogs/awslogs.conf':
-              content: !Sub |
-                [general]
-                state_file = /var/lib/awslogs/agent-state
-                [/var/log/messages]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/messages
-                log_stream_name = {instance_id}/var/log/messages
-                log_group_name = ${LogGroup}
-                [/var/log/secure]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/secure
-                log_stream_name = {instance_id}/var/log/secure
-                log_group_name = ${LogGroup}
-                [/var/log/cron]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/cron
-                log_stream_name = {instance_id}/var/log/cron
-                log_group_name = ${LogGroup}
-                [/var/log/cloud-init.log]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/cloud-init.log
-                log_stream_name = {instance_id}/var/log/cloud-init.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-init.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-init.log
-                log_stream_name = {instance_id}/var/log/cfn-init.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-hup.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-hup.log
-                log_stream_name = {instance_id}/var/log/cfn-hup.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-init-cmd.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-init-cmd.log
-                log_stream_name = {instance_id}/var/log/cfn-init-cmd.log
-                log_group_name = ${LogGroup}
-                [/var/log/cloud-init-output.log]
-                file = /var/log/cloud-init-output.log
-                log_stream_name = {instance_id}/var/log/cloud-init-output.log
-                log_group_name = ${LogGroup}
-                [/var/log/dmesg]
-                file = /var/log/dmesg
-                log_stream_name = {instance_id}/var/log/dmesg
-                log_group_name = ${LogGroup}
+              context:
+                Region: !Sub ${AWS::Region}
+            '/etc/awslogs/awslogs.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
               mode: '000644'
               owner: root
               group: root
-            '/etc/cfn/cfn-hup.conf':
-              content: !Sub |
-                [main]
-                stack=${AWS::StackName}
-                region=${AWS::Region}
-              mode: '000400' 
+              context:
+                LogGroup: !Sub ${LogGroup}
+            '/etc/cfn/cfn-hup.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
+              mode: '000644' 
               owner: 'root'
               group: 'root'
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
-              content: !Sub |
-                [cfn-auto-reloader-hook]
-                triggers=post.update
-                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
-                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-                runas=root
-              mode: '000400' 
+              context:
+                Region: !Sub ${AWS::Region}
+                StackName: !Sub ${AWS::StackName}
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+              mode: '000644' 
               owner: 'root'
               group: 'root'
-            '/home/ec2-user/.bashrc':
-              content: !Sub |
-                [ -f /etc/bashrc ] && . /etc/bashrc
-                alias c=clear
-                alias l='ls -l'
-                alias vi=vim
-                PS1='[\u@${AWS::StackName} \W]\$ '
+              context:
+                Region: !Sub ${AWS::Region}
+                StackName: !Sub ${AWS::StackName}
+            '/home/ec2-user/bashrc': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
+              context:
+                StackName: !Sub ${AWS::StackName}
             '/root/tag_root_volume.sh':
-              content: !Sub |
-                #!/bin/bash
-                STACK_NAME=${AWS::StackName}
-                REGION=${AWS::Region}
-                echo "Tagging Root volume..."
-                INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-                VOLUME_ID=$(aws --region $REGION ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/xvda" --query "Volumes[0].VolumeId" --output text)
-                PLATFORM=$(aws --region $REGION ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].Tags" --output table | grep PLATFORM | cut -d '|' -f 3 | sed -e 's/ //g')
-                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=Name,Value=$STACK_NAME-VolumeRoot"
-                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=PLATFORM,Value=$PLATFORM"
-              mode: '000744'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
+              mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
@@ -399,7 +353,7 @@ Resources:
             '03_yum_cron.conf':
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
-              command: "sudo /root/tag_root_volume.sh"
+              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
           services:
             sysvinit:
               awslogs:
@@ -442,24 +396,10 @@ Resources:
               owner: "root"
               group: "root"
             '/root/create_fs.sh': 
-              content: !Sub |
-                #!/bin/bash
-                MNT=/mnt/jenkins
-                [ ! -d $MNT ] && mkdir $MNT
-                mount -t efs -o tls ${FileSystem}:/ $MNT
-                [ ! -d $MNT/jobs ] && mkdir $MNT/jobs
-                [ ! -d $MNT/secrets ] && mkdir $MNT/secrets
-                [ -d $MNT/secrets ] && [ -d $MNT/jobs ] && echo "File system OK" 
-              mode: "000700"
-              owner: "root"
-              group: "root"
-            '/root/fix_repo.sh': 
-              content: |
-                #!/bin/bash 
-                sed -i s/\$releasever/7/g /etc/yum.repos.d/epel-apache-maven.repo
-              mode: "000700"
-              owner: "root"
-              group: "root"
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_alternatives_java':
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
@@ -468,9 +408,9 @@ Resources:
             '03_rpm_import':
               command: 'sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key'
             '04_create_fs':
-              command: 'sudo /root/create_fs.sh'              
+              command: 'sudo /root/create_fs.sh ${FileSystem}'              
             '05_fix_repo':
-              command: 'sudo /root/fix_repo.sh'              
+              command: 'sudo sed -i s/\$releasever/7/g /etc/yum.repos.d/epel-apache-maven.repo'              
         InstallApplication: 
           packages:
             yum:
@@ -480,392 +420,129 @@ Resources:
               jenkins: []
               apache-maven: []
           files:
-            '/root/jenkins_configure_logs.sh':
-              content: !Sub |
-                #!/bin/bash
-                # Adding logs to awslog
-                cat >> /etc/awslogs/awslogs.conf <<EOF
-                [/var/log/jenkins/jenkins.log]
-                file = /var/log/jenkins/jenkins.log
-                log_stream_name = {instance_id}/var/log/jenkins/jenkins.log
-                log_group_name = ${LogGroup}
-                [/var/log/InstallApplication.log]
-                file = /var/log/InstallApplication.log
-                log_stream_name = {instance_id}/var/log/InstallApplication.log
-                log_group_name = ${LogGroup}
-                EOF
-                service awslogs restart
+            '/root/jenkins/configure_logs.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_logs.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/plugins.txt':
-              content: |
-                ace-editor
-                ant
-                antisamy-markup-formatter
-                artifactory
-                build-pipeline-plugin
-                build-timeout
-                checkstyle
-                categorized-view 
-                cloudbees-folder
-                cobertura
-                compact-columns 
-                conditional-buildstep
-                config-file-provider
-                configure-job-column-plugin 
-                copyartifact
-                downstream-buildview 
-                email-ext
-                emailext-template
-                embeddable-build-status
-                envinject 
-                extensible-choice-parameter 
-                git-parameter
-                gradle
-                greenballs 
-                groovy 
-                groovy-postbuild 
-                htmlpublisher
-                javadoc 
-                jira 
-                job-dsl 
-                jenkins-multijob-plugin
-                junit
-                ldap
-                mailer
-                matrix-auth
-                parameterized-trigger
-                pipeline-stage-view
-                publish-over-ssh
-                rebuild
-                sonar
-                ssh
-                ssh-agent
-                ssh-slaves
-                swarm 
-                timestamper
-                token-macro 
-                view-job-filters 
-                warnings
-                workflow-aggregator
-                ws-cleanup
+            '/root/jenkins/plugins.txt':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/plugins.txt'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/var/lib/jenkins/hudson.tasks.Ant.xml':
-              content: |
-                <?xml version='1.1' encoding='UTF-8'?>
-                <hudson.tasks.Ant_-DescriptorImpl>
-                  <installations><hudson.tasks.Ant_-AntInstallation><name>ant</name><home>/usr/share/ant</home><properties/></hudson.tasks.Ant_-AntInstallation></installations>
-                </hudson.tasks.Ant_-DescriptorImpl>
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/var/lib/jenkins/hudson.tasks.Ant.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
             '/var/lib/jenkins/hudson.tasks.Maven.xml':
-              content: |
-                <?xml version='1.1' encoding='UTF-8'?>
-                <hudson.tasks.Maven_-DescriptorImpl>
-                  <installations><hudson.tasks.Maven_-MavenInstallation><name>maven</name><home>/usr/share/apache-maven</home><properties/></hudson.tasks.Maven_-MavenInstallation></installations>
-                </hudson.tasks.Maven_-DescriptorImpl>
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/var/lib/jenkins/hudson.tasks.Maven.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
             '/var/lib/jenkins/hudson.plugins.git.GitTool.xml':
-              content: |
-                <?xml version='1.1' encoding='UTF-8'?>
-                <hudson.plugins.git.GitTool_-DescriptorImpl>
-                  <installations class="hudson.plugins.git.GitTool-array"><hudson.plugins.git.GitTool><name>Default</name><home>/usr/bin/git</home><properties/></hudson.plugins.git.GitTool></installations>
-                </hudson.plugins.git.GitTool_-DescriptorImpl>
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/var/lib/jenkins/hudson.plugins.git.GitTool.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
             '/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml': 
-              content: !Sub |
-                <?xml version='1.1' encoding='UTF-8'?>
-                <jenkins.model.JenkinsLocationConfiguration>
-                  <adminAddress>${JenkinsAdminEmail}</adminAddress>
-                  <jenkinsUrl>http://${LoadBalancer.DNSName}/</jenkinsUrl>
-                </jenkins.model.JenkinsLocationConfiguration>
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
-            '/root/jenkins_wait.sh':
-              content: |
-                #!/bin/bash
-                optionalPassword="$1"
-                initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
-                cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
-                url=http://localhost:8080
-                # make sure that I re-read the initial password each time...
-                get_password()
-                {
-                  if [ -z "$optionalPassword" ]; then
-                    echo -n $(cat $initialPassword 2> /dev/null)
-                  else 
-                    echo -n $optionalPassword
-                  fi
-                }
-                echo -n "Waiting for Jenkins..."
-                i=0
-                while [ ! -f $initialPassword ] || [ ! -f $cli ]; do 
-                  echo -n .; sleep 1
-                  i=$((i+1))
-                  [ $i -gt 120 ] && echo "Jenkins failed to start in 120 seconds. Bailing out!" && exit 1
-                done
-                i=0
-                echo " OK"
-                echo -n "Waiting for Jenkins API..."
-                until $(curl -s --max-time 60 -o /dev/null --head --fail --user "admin:$(get_password)" $url/cli/); do
-                  echo -n .; sleep 1
-                  i=$((i+1))
-                  [ $i -gt 120 ] && echo "Jenkins failed to start in 120 seconds. Bailing out!" && exit 1
-                done
-                echo " OK"
+              context: 
+                JenkinsAdminEmail: !Sub '${JenkinsAdminEmail}'
+                DNSName: !GetAtt LoadBalancer.DNSName
+            '/root/jenkins/wait.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/wait.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_call_cli.sh':
-              content: |
-                #!/bin/bash 
-                exec > >(tee -a "/var/log/InstallApplication.log") 2> >(tee -a "/var/log/InstallApplication.log")
-                groovyFile=$1
-                optionalPassword="$2"
-                [ -z "$groovyFile" ] && echo "Invalid groovyFile" && exit 1
-                [ ! -f "$groovyFile" ] && echo "Invalid groovyFile: no such file" && exit 1
-                get_password()
-                {
-                  if [ -z "$optionalPassword" ]; then
-                    echo -n $(cat $initialPassword 2> /dev/null)
-                  else 
-                    echo -n $optionalPassword
-                  fi
-                }
-                
-                initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
-                cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
-                url=http://localhost:8080
-                # --username admin --password "$(cat $initialPassword 2> /dev/null)"
-                java -jar $cli -s $url -auth "admin:$(get_password)" groovy = < <(cat $groovyFile)
+            '/root/jenkins/call_cli.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/call_cli.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_install_plugins.sh': 
-              content: |
-                #!/bin/bash
-                exec > >(tee -a "/var/log/InstallApplication.log") 2> >(tee -a "/var/log/InstallApplication.log")
-                initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
-                cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
-                url=http://localhost:8080
-                /root/jenkins_wait.sh || (echo "Failed. Bailing out!" && exit 1)
-                echo "Configuring slaveAgentPort..."
-                sed -i -e "s@<slaveAgentPort>.*</slaveAgentPort>@<slaveAgentPort>49817</slaveAgentPort>@" /var/lib/jenkins/config.xml
-                echo "Configuring label..."
-                sed -i -e "s@<label>.*</label>@<label>master</label>@" /var/lib/jenkins/config.xml
-                service jenkins restart
-                /root/jenkins_wait.sh || (echo "Failed. Bailing out!" && exit 1)
-                echo "Installing plugins..."
-                java -jar $cli -s $url -auth "admin:$(cat $initialPassword 2> /dev/null)" install-plugin $(cat /root/plugins.txt | tr "\n" " ")
-                service jenkins restart
-                /root/jenkins_wait.sh || (echo "Failed. Bailing out!" && exit 1)
+            '/root/jenkins/install_plugins.sh': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/install_plugins.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_configure_jdk.groovy': 
-              content: |
-                import jenkins.model.Jenkins
-                import hudson.model.JDK
-                jdk = new JDK('java-1.8.0', '/etc/alternatives/java_sdk');
-                Jenkins.instance.setJDKs([jdk])
-                println 'JDK configured...'              
+            '/root/jenkins/configure_jdk.groovy': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_jdk.groovy'
               mode: '000600'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_configure_artifactory.groovy':
-              content: |
-                import jenkins.model.Jenkins
-                import org.jfrog.hudson.*
-                artifactory = Jenkins.instance.getExtensionList('org.jfrog.hudson.ArtifactoryBuilder$DescriptorImpl')[0]
-                artifactory.useCredentialsPlugin = false;
-                artifactory.pushToBintrayEnabled = false;
-                artifactory.buildInfoProxyEnabled = false;
-                CredentialsConfig credentials = new CredentialsConfig('%artifactoryAdminUsername%', '%artifactoryAdminPassword%', 'ARTIFACTORY_CREDENTIALS')
-                ArtifactoryServer server = new ArtifactoryServer('ARTIFACTORY', 'http://%artifactoryDNSName%/artifactory', credentials, credentials, 300, true, 3);
-                artifactory.artifactoryServers = [ server ]
-                artifactory.save();
-                println 'Artifactory configured...' 
+            '/root/jenkins/configure_artifactory.groovy':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_artifactory.groovy'
               mode: '000600'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_configure_artifactory.sh':
-              content: |
-                #!/bin/bash
-                # NOTE: Should create a specific user for Jenkins, but the user API is only for Artifactory PRO
-                artifactoryDNSName="$1"
-                artifactoryAdminUsername="$2"
-                artifactoryAdminPassword="$3"
-                [ -z "$artifactoryDNSName" ] && echo "Invalid artifactoryDNSName" && exit 1
-                [ -z "$artifactoryAdminUsername" ] && echo "Invalid artifactoryAdminUsername" && exit 1
-                [ -z "$artifactoryAdminPassword" ] && echo "Invalid artifactoryAdminPassword" && exit 1
-                artifactoryDNSName=${artifactoryDNSName,,}
-                sed -i -E "s/%artifactoryDNSName%/$artifactoryDNSName/;s/%artifactoryAdminUsername%/$artifactoryAdminUsername/;s/%artifactoryAdminPassword%/$artifactoryAdminPassword/" /root/jenkins_configure_artifactory.groovy
-                /root/jenkins_call_cli.sh /root/jenkins_configure_artifactory.groovy
+              context:
+                ArtifactoryDNSName: 
+                  'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-DNSName'
+                ArtifactoryAdminUsername: 
+                  'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-ArtifactoryAdminUsername'
+                ArtifactoryAdminPassword: 
+                  !Sub '${ArtifactoryAdminPassword}'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_configure_sonarqube.groovy': 
-              content: |
-                import jenkins.model.Jenkins
-                import hudson.plugins.sonar.*
-                sonarqube = Jenkins.instance.getExtensionList('hudson.plugins.sonar.SonarGlobalConfiguration')[0]
-                sonarqube.buildWrapperEnabled = false;
-                SonarInstallation installation = new SonarInstallation('SONARQUBE', 'http://%sonarqubeDNSName%', '%sonarqubeToken%', null, null, null, null)
-                sonarqube.installations = [ installation ]
-                sonarqube.save();
-                println 'Sonarqube configured...' 
+            '/root/jenkins/configure_sonarqube.groovy': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_sonarqube.groovy'
               mode: '000600'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_configure_sonarqube.sh': 
-              content: |
-                #!/bin/bash
-                sonarqubeDNSName="$1"
-                sonarqubeAdminPassword="$2"
-                jenkinsAdminEmail="$3"
-                [ -z "$sonarqubeDNSName" ] && echo "Invalid sonarqubeDNSName" && exit 1
-                [ -z "$sonarqubeAdminPassword" ] && echo "Invalid sonarqubeAdminPassword" && exit 1
-                [ -z "$jenkinsAdminEmail" ] && echo "Invalid jenkinsAdminEmail" && exit 1
-                # First create a user 
-                sonarqubeDNSName=${sonarqubeDNSName,,}
-                apiUrl="http://$sonarqubeDNSName/api"
-                jenkinsPassword=$(echo -n "$jenkinsAdminEmail" | md5sum | cut -d ' ' -f 1)
-                sonarqubeUserEmail=jenkins@${jenkinsAdminEmail##*@}
-                
-                exists=$(curl -s -u "admin:$sonarqubeAdminPassword" -X GET $apiUrl/users/search | jq -r '.users[].login' | grep -c jenkins)
-                if [ $exists -eq 0 ]; then
-                  curl -s -u "admin:$sonarqubeAdminPassword" -X POST $apiUrl/users/create \
-                    -F "local=true" \
-                    -F "login=jenkins" \
-                    -F "name=Jenkins User" \
-                    -F "password=$jenkinsPassword" \
-                    -F "email=$sonarqubeUserEmail"
-                else
-                  echo "Jenkins User exists in Sonarqube. Not creating."
-                fi
-                
-                exists=$(curl -s -u "admin:$sonarqubeAdminPassword" -X GET $apiUrl/user_tokens/search?login=jenkins | jq -r '.userTokens[].name' | grep -c JENKINS_TOKEN)
-                if [ $exists -ne 0 ]; then
-                  echo "JENKINS_TOKEN exists in Sonarqube. Revoking."
-                  curl -s -u "admin:$sonarqubeAdminPassword" -X POST $apiUrl/user_tokens/revoke \
-                    -F "login=jenkins" \
-                    -F "name=JENKINS_TOKEN"
-                fi
-                sonarqubeToken=$(curl -s -u "admin:$sonarqubeAdminPassword" -X POST $apiUrl/user_tokens/generate -F "login=jenkins" -F "name=JENKINS_TOKEN" | jq -r ".token")
-
-                sed -i -E "s/%sonarqubeDNSName%/$sonarqubeDNSName/;s/%sonarqubeToken%/$sonarqubeToken/" /root/jenkins_configure_sonarqube.groovy
-                /root/jenkins_call_cli.sh /root/jenkins_configure_sonarqube.groovy
+              context: 
+                SonarqubeDNSName:
+                  'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
+            '/root/jenkins/configure_sonarqube.sh': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_sonarqube.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_change_default_password.sh': 
-              content: |
-                #!/bin/bash
-                password="$1"
-                [ -z "$password" ] && echo "Invalid password" && exit 1
-                initialPassword=/var/lib/jenkins/secrets/initialAdminPassword
-                cli=/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar
-                url=http://localhost:8080
-                echo "Changing default password for admin..."
-                echo "jenkins.model.Jenkins.instance.securityRealm.createAccount('admin', '$password')" | \
-                  java -jar $cli -s $url -auth "admin:$(cat $initialPassword 2> /dev/null)" groovy =
-                #echo "$password" > /var/lib/jenkins/secrets/initialAdminPassword
+            '/root/jenkins/change_default_password.sh': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/change_default_password.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_configure_ldap.groovy': 
-              # Inspired from https://github.com/samrocketman/jenkins-bootstrap-shared
-              content: |
-                import hudson.security.LDAPSecurityRealm
-                import hudson.util.Secret
-                import jenkins.model.Jenkins
-                import jenkins.model.IdStrategy
-                import jenkins.security.plugins.ldap.LDAPConfiguration
-
-                if(!(Jenkins.instance.securityRealm instanceof LDAPSecurityRealm)) {
-                  LDAPConfiguration conf = new LDAPConfiguration(
-                    '%ldapHostname%:%ldapPort%',
-                    '%rootDC%',
-                    false,
-                    '%managerDN%',
-                    Secret.fromString('%managerPassword%'))
-                  conf.userSearchBase = 'ou=People'
-                  conf.userSearch = 'uid={0}'
-                  conf.groupSearchBase = 'ou=Group'
-                  conf.displayNameAttributeName = 'displayName'
-                  conf.mailAddressAttributeName = 'mail'
-                  List<LDAPConfiguration> configurations = [conf]
-                  Jenkins.instance.securityRealm = new LDAPSecurityRealm(
-                    configurations,
-                    false,
-                    null,
-                    IdStrategy.CASE_INSENSITIVE,
-                    IdStrategy.CASE_INSENSITIVE)
-                  Jenkins.instance.save()
-                } else {
-                  println 'Nothing changed.  LDAP security realm already configured.'
-                }
-                println 'LDAP configured...' 
+            '/root/jenkins/configure_ldap.groovy': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_ldap.groovy'
               mode: '000600'
               owner: 'root'
               group: 'root'
-            '/root/jenkins_configure_ldap.sh':
-              content: |
-                #!/bin/bash
-                ldapHostname="$1"
-                ldapPort="$2"
-                rootDC="$3"
-                managerDN="$4"
-                managerPassword="$5"
-                adminPassword="$6"
-                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit 1
-                [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit 1
-                [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
-                [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1
-                [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
-                [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
-                ldapHostname=${ldapHostname,,}
-                sed -i -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%rootDC%/$rootDC/;s/%managerDN%/$managerDN/;s/%managerPassword%/$managerPassword/" /root/jenkins_configure_ldap.groovy
-                /root/jenkins_wait.sh "$adminPassword" || (echo "Failed. Bailing out!" && exit 1)
-                /root/jenkins_call_cli.sh /root/jenkins_configure_ldap.groovy "$adminPassword"
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
+              context:
+                DNSName: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
+                LDAPPort: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+                RootDC: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                ManagerDN: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                LDAPManagerPassword: 
+                  !Sub '${LDAPManagerPassword}'
           commands: 
             '01_alternatives_java':
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
             '02_jenkins_configure_logs':
-              command: 'sudo /root/jenkins_configure_logs.sh'
+              command: !Sub 'sudo /root/jenkins/configure_logs.sh ${LogGroup}'
             '03_jenkins_configure_jobs_directory': 
-              command: 'sudo rm -rf /var/lib/jenkins/jobs && sudo ln -s /mnt/jenkins/jobs /var/lib/jenkins/jobs'
+              command: 'sudo rm -rf /var/lib/jenkins/jobs && sudo ln -s /mnt/application/jobs /var/lib/jenkins/jobs'
             '04_jenkins_chown_jenkins': 
-              command: 'sudo chown -R jenkins.jenkins /mnt/jenkins'
+              command: 'sudo chown -R jenkins.jenkins /mnt/application'
             '10_jenkins_start': 
               command: 'sudo service jenkins start'
             '11_jenkins_install_plugins': 
-              command: 'sudo /root/jenkins_install_plugins.sh'
+              command: 'sudo /root/jenkins/install_plugins.sh'
             '12_jenkins_configure_jdk': 
-              command: 'sudo /root/jenkins_call_cli.sh /root/jenkins_configure_jdk.groovy'
+              command: 'sudo /root/jenkins_call_cli.sh /root/jenkins/configure_jdk.groovy'
             '20_jenkins_configure_artifactory': 
-              command: !Join
-                - ' '
-                - - 'sudo /root/jenkins_configure_artifactory.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-DNSName'
-                  - 'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-ArtifactoryAdminUsername'
-                  - !Sub '${ArtifactoryAdminPassword}'
+              command: 'sudo /root/jenkins_call_cli.sh /root/jenkins/configure_artifactory.groovy'
             '30_jenkins_configure_sonarqube': 
               command: !Join
                 - ' '
-                - - 'sudo /root/jenkins_configure_sonarqube.sh'
+                - - 'sudo /root/jenkins/configure_sonarqube.sh'
                   - 'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
                   - !Sub '${SonarqubeAdminPassword}'
                   - !Sub '${JenkinsAdminPassword}'
@@ -873,16 +550,10 @@ Resources:
               command: !Sub 'sudo /root/jenkins_change_default_password.sh ${JenkinsAdminPassword}'              
             '41_jenkins_change_default_password': 
               command: 'sudo service jenkins restart'
+            '42_jenkins_wait':
+              command: !Sub 'sudo /root/jenkins/wait.sh "${JenkinsAdminPassword}"'  
             '42_jenkins_configure_ldap': 
-              command: !Join
-                - ' '
-                - - 'sudo /root/jenkins_configure_ldap.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-                  - !Sub '${LDAPManagerPassword}'
-                  - !Sub '${JenkinsAdminPassword}'
+              command: !Sub 'sudo /root/jenkins_call_cli.sh /root/jenkins/configure_ldap.groovy "${JenkinsAdminPassword}"'
             '98_application_configured': 
               command: 'sudo touch /mnt/jenkins/.application_configured'
             '99_jenkins_restart':

@@ -22,11 +22,12 @@ Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
     - Label:
-        default: 'Parent Stack'
+        default: 'Parent Stacks'
       Parameters:
       - ParentVpcStack
       - ParentLDAPStack
       - ParentDBStack
+      - S3ConfigBucketName
     - Label: 
         default: 'EC2 Parameters'
       Parameters:
@@ -39,7 +40,7 @@ Metadata:
     - Label:
         default: 'MySQL DB Parameters'
       Parameters:
-      - DBMasterUserPassword
+      - DBMasterPassword
     - Label:
         default: 'Artifactory Parameters'
       Parameters:
@@ -61,19 +62,25 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the DB stack'
-  InstanceType:
-    Description: 'The Artifactory instance type'
+  S3ConfigBucketName:
+    Description: "Enter the name of the S3 bucket name where to find the configuration files"
     Type: String
-    Default: 'c5.large'    
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the S3 bucket name where to find the configuration files'
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
+    ConstraintDescription: "Must be the name of an existing EC2 KeyPair."
+  InstanceType:
+    Description: 'The instance type'
+    Type: String
+    Default: 'c5.large'    
   LDAPManagerPassword: 
     Description: 'The LDAP Manager password'
     Type: String
     NoEcho: true
     MinLength: 3
-  DBMasterUserPassword: 
+  DBMasterPassword: 
     Description: 'The DB Admin password'
     Type: String
     NoEcho: true
@@ -81,7 +88,7 @@ Parameters:
   ArtifactoryAdminEmail:
     Description: 'The LDAP Admin email'
     Type: String
-    Default: 'artifactory-admin@example.com'
+    Default: 'application-admin@example.com'
   ArtifactoryAdminPassword: 
     Description: 'The Artifactory Admin password'
     Type: String
@@ -156,7 +163,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
           PropagateAtLaunch: true
         - Key: Name
-          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          Value: !Sub '${AWS::StackName}-Main'
           PropagateAtLaunch: true
     CreationPolicy: 
       ResourceSignal: 
@@ -245,7 +252,7 @@ Resources:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
-  LogGroup:
+  LogGroup: 
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Sub '${AWS::StackName}'
@@ -253,6 +260,13 @@ Resources:
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCredentials:
+          type: s3
+          roleName: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
+          buckets: 
+            - !Ref S3ConfigBucketName
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
@@ -264,105 +278,46 @@ Resources:
               awslogs: []
               yum-cron: []
           files: 
-            '/etc/awslogs/awscli.conf':
-              content: !Sub |
-                [default]
-                region = ${AWS::Region}
-                [plugins]
-                cwlogs = cwlogs
+            '/etc/awslogs/awscli.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
               mode: '000644'
               owner: root
               group: root
-            '/etc/awslogs/awslogs.conf':
-              content: !Sub |
-                [general]
-                state_file = /var/lib/awslogs/agent-state
-                [/var/log/messages]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/messages
-                log_stream_name = {instance_id}/var/log/messages
-                log_group_name = ${LogGroup}
-                [/var/log/secure]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/secure
-                log_stream_name = {instance_id}/var/log/secure
-                log_group_name = ${LogGroup}
-                [/var/log/cron]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/cron
-                log_stream_name = {instance_id}/var/log/cron
-                log_group_name = ${LogGroup}
-                [/var/log/cloud-init.log]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/cloud-init.log
-                log_stream_name = {instance_id}/var/log/cloud-init.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-init.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-init.log
-                log_stream_name = {instance_id}/var/log/cfn-init.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-hup.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-hup.log
-                log_stream_name = {instance_id}/var/log/cfn-hup.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-init-cmd.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-init-cmd.log
-                log_stream_name = {instance_id}/var/log/cfn-init-cmd.log
-                log_group_name = ${LogGroup}
-                [/var/log/cloud-init-output.log]
-                file = /var/log/cloud-init-output.log
-                log_stream_name = {instance_id}/var/log/cloud-init-output.log
-                log_group_name = ${LogGroup}
-                [/var/log/dmesg]
-                file = /var/log/dmesg
-                log_stream_name = {instance_id}/var/log/dmesg
-                log_group_name = ${LogGroup}
+              context:
+                Region: !Sub ${AWS::Region}
+            '/etc/awslogs/awslogs.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
               mode: '000644'
               owner: root
               group: root
-            '/etc/cfn/cfn-hup.conf':
-              content: !Sub |
-                [main]
-                stack=${AWS::StackName}
-                region=${AWS::Region}
-              mode: '000400' 
+              context:
+                LogGroup: !Sub ${LogGroup}
+            '/etc/cfn/cfn-hup.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
+              mode: '000644' 
               owner: 'root'
               group: 'root'
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
-              content: !Sub |
-                [cfn-auto-reloader-hook]
-                triggers=post.update
-                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
-                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-                runas=root
-              mode: '000400' 
+              context:
+                Region: !Sub ${AWS::Region}
+                StackName: !Sub ${AWS::StackName}
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+              mode: '000644' 
               owner: 'root'
               group: 'root'
-            '/home/ec2-user/.bashrc':
-              content: !Sub |
-                [ -f /etc/bashrc ] && . /etc/bashrc
-                alias c=clear
-                alias l='ls -l'
-                alias vi=vim
-                PS1='[\u@${AWS::StackName} \W]\$ '
+              context:
+                Region: !Sub ${AWS::Region}
+                StackName: !Sub ${AWS::StackName}
+            '/home/ec2-user/bashrc': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
+              context:
+                StackName: !Sub ${AWS::StackName}
             '/root/tag_root_volume.sh':
-              content: !Sub |
-                #!/bin/bash
-                STACK_NAME=${AWS::StackName}
-                REGION=${AWS::Region}
-                echo "Tagging Root volume..."
-                INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-                VOLUME_ID=$(aws --region $REGION ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/xvda" --query "Volumes[0].VolumeId" --output text)
-                PLATFORM=$(aws --region $REGION ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].Tags" --output table | grep PLATFORM | cut -d '|' -f 3 | sed -e 's/ //g')
-                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=Name,Value=$STACK_NAME-VolumeRoot"
-                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=PLATFORM,Value=$PLATFORM"
-              mode: '000744'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
+              mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
@@ -373,7 +328,7 @@ Resources:
             '03_yum_cron.conf':
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
-              command: "sudo /root/tag_root_volume.sh"
+              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
           services:
             sysvinit:
               awslogs:
@@ -407,186 +362,74 @@ Resources:
           files: 
             '/etc/yum.repos.d/bintray-jfrog-artifactory-rpms.repo':
               source: 'https://bintray.com/jfrog/artifactory-rpms/rpm'
-              mode: "000644"
-              owner: "root"
-              group: "root"
+              mode: '000644'
+              owner: 'root'
+              group: 'root'
             '/root/create_fs.sh': 
-              content: !Sub |
-                #!/bin/bash -x
-                MNT=/mnt/application
-                [ -d $MNT ] || mkdir $MNT
-                mount -t efs -o tls ${FileSystem}:/ $MNT
-                [ -d $MNT/data ] || mkdir -p $MNT/data
-                [ -d $MNT/data ] && echo "File system OK"
-              mode: "000700"
-              owner: "root"
-              group: "root"
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_remove_jdk7':
               command: 'sudo yum remove -y java-1.7.0-openjdk'
             '02_alternatives':
               command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
             '03_create_fs':
-              command: 'sudo /root/create_fs.sh'              
+              command: !Sub 'sudo /root/create_fs.sh ${FileSystem}'              
         InstallApplication: 
           packages:
             yum:
               jfrog-artifactory-oss: []
           files:
             '/etc/opt/jfrog/artifactory/binarystore.xml':
-              content: |
-                <?xml version="1.0" encoding="UTF-8"?>
-                <config version="1">
-                  <chain template="file-system"/>
-                  <provider id="file-system" type="file-system">
-                    <baseDataDir>/mnt/application/data</baseDataDir>
-                    <fileStoreDir>filestore</fileStoreDir>  
-                    <tempDir>temp</tempDir>
-                  </provider>                  
-                </config>
-              mode: '000744'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/opt/jfrog/artifactory/binarystore.xml'
+              mode: '000644'
               owner: 'artifactory'
               group: 'artifactory'
             '/etc/opt/jfrog/artifactory/db.properties':
-              content: |
-                type=mysql
-                driver=com.mysql.jdbc.Driver
-                url=jdbc:mysql://%address%:%port%/artifactory?characterEncoding=UTF-8&elideSetAutoCommits=true
-                username=artifactory
-                password=artifactory
-              mode: '000744'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/opt/jfrog/artifactory/db.properties'
+              mode: '000644'
               owner: 'artifactory'
               group: 'artifactory'
-            '/root/artifactory/create_db.sh':
-              content: !Sub |
-                #!/bin/bash
-                address=$1
-                port=$2
-                username=$3
-                password=$4
-                [ -z "$address" ] && echo "Invalid address" && exit 1
-                [ -z "$port" ] && echo "Invalid port" && exit 1
-                [ -z "$username" ] && echo "Invalid username" && exit 1
-                [ -z "$password" ] && echo "Invalid password" && exit 1
-                mysql -h $address -P $port --user=$username --password=$password <<EOF
-                DROP DATABASE IF EXISTS artifactory;
-                CREATE DATABASE artifactory CHARACTER SET utf8 COLLATE utf8_bin;
-                GRANT ALL on artifactory.* TO 'artifactory'@'%' IDENTIFIED BY 'artifactory';
-                FLUSH PRIVILEGES;
-                EOF
-              mode: '000700'
+              context:
+                EndpointAddress: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                EndpointPort: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+            '/root/artifactory/settings.yaml': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/settings.yaml'
+              mode: '000600'
               owner: 'root'
               group: 'root'
-            '/root/artifactory/configure_db.sh':
-              content: !Sub |
-                #!/bin/bash
-                address=$1
-                port=$2
-                [ -z "$address" ] && echo "Invalid address" && exit 1
-                [ -z "$port" ] && echo "Invalid port" && exit 1
-                sed -ibckp -E "s/%address%/$address/;s/%port%/$port/" /etc/opt/jfrog/artifactory/db.properties
+              context:
+                DNSName: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
+                LDAPPort: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+                RootDC: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                ManagerDN: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                LDAPManagerPassword: 
+                  !Sub '${LDAPManagerPassword}'
+            '/root/artifactory/create_db.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/create_db.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/artifactory/change_password.sh':
-              content: |
-                #!/bin/bash
-                oldPassword="$1"
-                newPassword="$2"
-                [ -z "$oldPassword" ] && echo "Invalid old password" && exit 1
-                [ -z "$newPassword" ] && echo "Invalid new password" && exit 1
-                API_URL="http://localhost:8081/artifactory/api"
-                header="Content-type: application/json"
-                data='{ "userName":"admin", "oldPassword":"'"$oldPassword"'", "newPassword1":"'"$newPassword"'", "newPassword2":"'"$newPassword"'"}'
-                url="$API_URL/security/users/authorization/changePassword"
-                echo -n "Changing default admin password"
-                while (true); do
-                        result=$(curl -s --user "admin:$oldPassword" -H "$header" -d "$data" -X POST "$url")
-                        [ $(echo -n "$result" | grep -c "Password has been successfully changed") -gt 0 ] && break
-                        echo -n "."
-                        sleep 2
-                done
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/change_password.sh'
               mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/artifactory/ldap_settings.yaml': 
-              content: |
-                security:
-                  anonAccessEnabled: false
-                  anonAccessToBuildInfosDisabled: true
-                  ldapSettings:
-                    OpenLDAP:
-                      emailAttribute: mail
-                      ldapPoisoningProtection: true
-                      ldapUrl: 'ldap://%ldapHostname%:%ldapPort%'
-                      search:
-                        managerDn: '%managerDN%'
-                        managerPassword: %managerPassword%
-                        searchBase: ou=People,%rootDC%
-                        searchFilter: (uid={0})
-                        searchSubTree: true
-                      allowUserToAccessProfile: true
-                      autoCreateUser: true
-                      enabled: true
-                localRepositories: 
-                  'libs-releases-local':
-                    type: maven
-                    includesPattern: '**/*'
-                    handleReleases: true
-                    handleSnapshots: false
-                  'libs-snapshots-local':
-                    type: maven
-                    includesPattern: '**/*'
-                    handleReleases: false
-                    handleSnapshots: true
-              mode: '000600'
               owner: 'root'
               group: 'root'
             '/root/artifactory/start_and_configure_master_key.sh':
-              content: |
-                #!/bin/bash
-                MASTER_KEY_TARGET=/etc/opt/jfrog/artifactory/security/master.key
-                MASTER_KEY_BACKUP=/mnt/application/data/master.key
-                if [ -f '/mnt/application/.application_configured' ]; then
-                  echo "This is not the first install. Restoring $MASTER_KEY_TARGET from $MASTER_KEY_BACKUP"
-                  [ -d $(dirname $MASTER_KEY_TARGET) ] ||  mkdir -p $(dirname $MASTER_KEY_TARGET)
-                  cp $MASTER_KEY_BACKUP $MASTER_KEY_TARGET
-                  chown -R artifactory.artifactory /etc/opt/jfrog/artifactory
-                  service artifactory start
-                else
-                  service artifactory start
-                  echo -n "Waiting for master.key to be available"
-                  while [ ! -f $MASTER_KEY_TARGET ]; do 
-                    sleep 1 
-                    echo -n "."
-                  done
-                  cp $MASTER_KEY_TARGET $MASTER_KEY_BACKUP
-                fi
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/start_and_configure_master_key.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/artifactory/configure_ldap.sh':
-              content: |
-                #!/bin/bash
-                ldapHostname=$1
-                ldapPort=$2
-                rootDC=$3
-                managerDN=$4
-                managerPassword=$5
-                adminPassword=$6
-                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit 1
-                [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit 1
-                [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
-                [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1 
-                [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
-                [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
-                
-                API_URL="http://localhost:8081/artifactory/api"
-                header="Content-Type: application/yaml"
-                url="$API_URL/system/configuration"
-                echo "Configuring LDAP ($ldapHostname:$ldapPort w/ $rootDC) ..."
-                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%managerDN%/$managerDN/;s/%rootDC%/$rootDC/;s/%managerPassword%/$managerPassword/;" /root/artifactory/ldap_settings.yaml
-                curl -s --user "admin:$adminPassword" -H "$header" -T /root/artifactory/ldap_settings.yaml -X PATCH "$url"
+            '/root/artifactory/apply_settings.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/apply_settings.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -601,14 +444,8 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
-                  - !Sub '${DBMasterUserPassword}'
+                  - !Sub '${DBMasterPassword}'
               test: 'sudo test ! -e /mnt/application/.application_configured'
-            '03_configure_db':
-              command: !Join
-                - ' '
-                - - 'sudo /root/artifactory/configure_db.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
             '04_chown':
               command: 'sudo chown -R artifactory.artifactory /mnt/application'
             '05_start_and_configure_master_key':
@@ -616,16 +453,8 @@ Resources:
             '06_change_password': 
               command: !Sub 'sudo /root/artifactory/change_password.sh password ${ArtifactoryAdminPassword}'
               test: 'sudo test ! -e /mnt/application/.application_configured'
-            '07_configure_ldap': 
-              command: !Join
-                - ' '
-                - - 'sudo /root/artifactory/configure_ldap.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-                  - !Sub '${LDAPManagerPassword}'
-                  - !Sub '${ArtifactoryAdminPassword}'
+            '07_apply_settings': 
+              command: !Sub 'sudo /root/artifactory/apply_settings.sh ${ArtifactoryAdminPassword}'
               test: 'sudo test ! -e /mnt/application/.application_configured'
             '98_application_configured':
               command: 'sudo touch /mnt/application/.application_configured'

@@ -243,12 +243,12 @@ Resources:
         Enabled: true
       SnapshotOptions:
         AutomatedSnapshotStartHour: 0
-      VPCOptions: 
-        SecurityGroupIds: 
-          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-        SubnetIds: 
-          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+#      VPCOptions: 
+#        SecurityGroupIds: 
+#          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+#        SubnetIds: 
+#          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+#          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
       Tags:
         - Key: PLATFORM
           Value: 

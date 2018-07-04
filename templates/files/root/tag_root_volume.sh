@@ -1,4 +1,12 @@
 #!/bin/bash
+#
+# FILE: tag_root_volume.sh
+#
+# DESCRIPTION: This script will tag the EC2 instance root EBS Volume. This is taken from:
+#   https://stackoverflow.com/questions/24026425/is-there-a-way-to-tag-a-root-volume-when-initializing-from-the-cloudformation-te
+#   It will determine the volume_id attached to the current instance, extract the PLATFROM tag of that instance and
+#   propagate the tag to the volume.
+#
 region="$1"
 stack_name="$2"
 [ -z "$region" ] && echo "Invalid region" && exit 1

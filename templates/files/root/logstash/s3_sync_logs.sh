@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# FILE: s3_sync_logs.sh
+#
+# DESCRIPTION: This script will 
+#
 s3ImportBucketName="$1"
 [ -z "$s3ImportBucketName" ] && echo "Invalid s3ImportBucketName" && exit 1
 

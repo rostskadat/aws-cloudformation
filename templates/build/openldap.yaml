@@ -24,6 +24,7 @@ Metadata:
         default: 'Parent Stack'
       Parameters:
       - ParentVpcStack
+      - S3ConfigBucketName
     - Label:
         default: 'EC2 Parameters'
       Parameters:
@@ -42,6 +43,11 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the parent VPC stack (01-vpc.yaml)'
+  S3ConfigBucketName:
+    Description: "Enter the name of the S3 bucket name where to find the configuration files"
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the S3 bucket name where to find the configuration files'
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
@@ -138,7 +144,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
           PropagateAtLaunch: true
         - Key: Name
-          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          Value: !Sub '${AWS::StackName}-Main'
           PropagateAtLaunch: true
     CreationPolicy: 
       ResourceSignal: 
@@ -199,115 +205,64 @@ Resources:
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCredentials:
+          type: s3
+          roleName: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
+          buckets: 
+            - !Ref S3ConfigBucketName
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, InstallApplication ]
-        Bootstrap:
-          packages:
-            yum:
+        Bootstrap: 
+          packages: 
+            yum: 
+              wget: []
               htop: []
               awslogs: []
               yum-cron: []
-          files:
-            '/etc/awslogs/awscli.conf':
-              content: !Sub |
-                [default]
-                region = ${AWS::Region}
-                [plugins]
-                cwlogs = cwlogs
+          files: 
+            '/etc/awslogs/awscli.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
               mode: '000644'
               owner: root
               group: root
-            '/etc/awslogs/awslogs.conf':
-              content: !Sub |
-                [general]
-                state_file = /var/lib/awslogs/agent-state
-                [/var/log/messages]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/messages
-                log_stream_name = {instance_id}/var/log/messages
-                log_group_name = ${LogGroup}
-                [/var/log/secure]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/secure
-                log_stream_name = {instance_id}/var/log/secure
-                log_group_name = ${LogGroup}
-                [/var/log/cron]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/cron
-                log_stream_name = {instance_id}/var/log/cron
-                log_group_name = ${LogGroup}
-                [/var/log/cloud-init.log]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/cloud-init.log
-                log_stream_name = {instance_id}/var/log/cloud-init.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-init.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-init.log
-                log_stream_name = {instance_id}/var/log/cfn-init.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-hup.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-hup.log
-                log_stream_name = {instance_id}/var/log/cfn-hup.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-init-cmd.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-init-cmd.log
-                log_stream_name = {instance_id}/var/log/cfn-init-cmd.log
-                log_group_name = ${LogGroup}
-                [/var/log/cloud-init-output.log]
-                file = /var/log/cloud-init-output.log
-                log_stream_name = {instance_id}/var/log/cloud-init-output.log
-                log_group_name = ${LogGroup}
-                [/var/log/dmesg]
-                file = /var/log/dmesg
-                log_stream_name = {instance_id}/var/log/dmesg
-                log_group_name = ${LogGroup}
+              context:
+                Region: !Sub ${AWS::Region}
+            '/etc/awslogs/awslogs.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
               mode: '000644'
               owner: root
               group: root
-            '/etc/cfn/cfn-hup.conf':
-              content: !Sub |
-                [main]
-                stack=${AWS::StackName}
-                region=${AWS::Region}
-              mode: '000400' 
+              context:
+                LogGroup: !Sub ${LogGroup}
+            '/etc/cfn/cfn-hup.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
+              mode: '000644' 
               owner: 'root'
               group: 'root'
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
-              content: !Sub |
-                [cfn-auto-reloader-hook]
-                triggers=post.update
-                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
-                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-                runas=root
-              mode: '000400' 
+              context:
+                Region: !Sub ${AWS::Region}
+                StackName: !Sub ${AWS::StackName}
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+              mode: '000644' 
               owner: 'root'
               group: 'root'
-            '/home/ec2-user/.bashrc':
-              content: !Sub |
-                [ -f /etc/bashrc ] && . /etc/bashrc
-                alias c=clear
-                alias l='ls -l'
-                alias vi=vim
-                PS1='[\u@${AWS::StackName} \W]\$ '
+              context:
+                Region: !Sub ${AWS::Region}
+                StackName: !Sub ${AWS::StackName}
+            '/home/ec2-user/bashrc': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
+              context:
+                StackName: !Sub ${AWS::StackName}
             '/root/tag_root_volume.sh':
-              content: !Sub |
-                #!/bin/bash
-                STACK_NAME=${AWS::StackName}
-                REGION=${AWS::Region}
-                echo "Tagging Root volume..."
-                INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-                VOLUME_ID=$(aws --region $REGION ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/xvda" --query "Volumes[0].VolumeId" --output text)
-                PLATFORM=$(aws --region $REGION ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].Tags" --output table | grep PLATFORM | cut -d '|' -f 3 | sed -e 's/ //g')
-                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=Name,Value=$STACK_NAME-VolumeRoot"
-                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=PLATFORM,Value=$PLATFORM"
-              mode: '000744'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
+              mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
@@ -318,7 +273,7 @@ Resources:
             '03_yum_cron.conf':
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
-              command: "sudo /root/tag_root_volume.sh"
+              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
           services:
             sysvinit:
               awslogs:
@@ -350,70 +305,35 @@ Resources:
               openldap-servers: []
           files:
             '/etc/crontab':
-              content: !Sub |
-                SHELL=/bin/bash
-                PATH=/sbin:/bin:/usr/sbin:/usr/bin
-                MAILTO=root
-                HOME=/
-                */5 * * * * root /root/update_users.sh ${LDAPUsersLdif}
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/openldap/etc/crontab'
               mode: '000644'
               owner: 'root'
               group: 'root'
-            '/root/update_users.sh':
-              content: !Sub |
-                #!/bin/bash
-                ldapUsersLdif="$1"
-                [ -z "$ldapUsersLdif" ] && echo "Invalid ldapUsersLdif" && exit 1
-                echo "Loading initial LDIF user database from $ldapUsersLdif"
-                aws s3 cp "$ldapUsersLdif" /root/import.ldif
-                ldapsearch -x -LLL -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" -H ldapi:/// -b "${RootDC}" 2> /dev/null | \
-                  awk -F": " '$1~/^\s*dn/{print $2}' > /root/to_delete.txt
-                [ -s to_delete.txt ] && ldapdelete -r -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" -H ldapi:/// -f /root/to_delete.txt
-                ldapadd -x -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" -H ldapi:/// -f /root/import.ldif
+            '/root/openldap/update_users.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/openldap/update_users.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/configure_ldap.sh':
-              content: !Sub |
-                #!/bin/bash
-                managerPassword="$1"
-                rootDC="$2"
-                [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
-                [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
-                # BEWARE the 'dn' line should be equals to the file found in /etc/openldap/slapd.d/cn=config
-                ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
-                dn: olcDatabase={2}bdb,cn=config
-                changetype: modify
-                replace: olcSuffix
-                olcSuffix: $rootDC
-                EOF
-                # Changing the root DN
-                echo "Changing olcRootDN to 'cn=Manager,$rootDC'..."
-                ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
-                dn: olcDatabase={2}bdb,cn=config
-                changetype: modify
-                replace: olcRootDN
-                olcRootDN: cn=Manager,$rootDC
-                EOF
-                # Adding the Root password
-                echo "Changing olcRootPW..."
-                ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
-                dn: olcDatabase={2}bdb,cn=config
-                changetype: modify
-                add: olcRootPW
-                olcRootPW: $managerPassword
-                EOF
-                [ ! -z "${LDAPUsersLdif}" ] && /root/update_users.sh ${LDAPUsersLdif}
-              mode: '000744'
+              context: 
+                RootDC: !Sub '${RootDC}'
+                ManagerPassword: !Sub '${ManagerPassword}'
+                LDAPUsersLdif: !Sub '${LDAPUsersLdif}'
+            '/root/openldap/configure_ldap.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/openldap/configure_ldap.sh'
+              mode: '000700'
               owner: 'root'
               group: 'root'
-          commands:
+              context: 
+                RootDC: !Sub '${RootDC}'
+                ManagerPassword: !Sub '${ManagerPassword}'
+                LDAPUsersLdif: !Sub '${LDAPUsersLdif}'
+          commands: 
             '01_copy_default_config':
               command: 'sudo cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG'
             '02_start_slpad':
               command: 'sudo service slapd start'
             '03_configure_ldap':
-              command: !Sub 'sudo /root/configure_ldap.sh ${ManagerPassword} ${RootDC}'
+              command: !Sub 'sudo /root/openldap/configure_ldap.sh'
             '04_restart_slpad':
               command: 'sudo service slapd restart'
           services:

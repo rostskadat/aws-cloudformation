@@ -16,11 +16,11 @@ Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
     - Label:
-        default: 'Parent VPC Stack'
+        default: 'Parent Stacks'
       Parameters:
       - ParentVpcStack
       - S3ConfigBucketName
-    - Label:
+    - Label: 
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
@@ -108,14 +108,13 @@ Resources:
         - !Ref TargetGroup
       VPCZoneIdentifier: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
       Tags: 
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
           PropagateAtLaunch: true
         - Key: Name
-          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          Value: !Sub '${AWS::StackName}-Main'
           PropagateAtLaunch: true
     CreationPolicy: 
       ResourceSignal: 
@@ -132,8 +131,7 @@ Resources:
     Properties:
       Scheme: internet-facing
       Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetDMZ'
       Type: network
       Tags: 
         - Key: PLATFORM
@@ -194,37 +192,37 @@ Resources:
               awslogs: []
               yum-cron: []
           files: 
-            '/etc/awslogs/awscli.conf':
+            '/etc/awslogs/awscli.conf': 
               source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
               mode: '000644'
               owner: root
               group: root
               context:
                 Region: !Sub ${AWS::Region}
-            '/etc/awslogs/awslogs.conf':
+            '/etc/awslogs/awslogs.conf': 
               source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
               mode: '000644'
               owner: root
               group: root
               context:
                 LogGroup: !Sub ${LogGroup}
-            '/etc/cfn/cfn-hup.conf':
+            '/etc/cfn/cfn-hup.conf': 
               source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
-              mode: '000400' 
+              mode: '000644' 
               owner: 'root'
               group: 'root'
               context:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
               source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
-              mode: '000400' 
+              mode: '000644' 
               owner: 'root'
               group: 'root'
               context:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
-            '/home/ec2-user/.bashrc':
+            '/home/ec2-user/.bashrc': 
               source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
               mode: '000600'
               owner: 'ec2-user'
@@ -233,7 +231,7 @@ Resources:
                 StackName: !Sub ${AWS::StackName}
             '/root/tag_root_volume.sh':
               source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
-              mode: '000744'
+              mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
@@ -275,7 +273,7 @@ Resources:
       InstanceType: "t2.micro"
       KeyName: !Ref KeyName
       SecurityGroups: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupDMZ'
         - !Ref SecurityGroupHealthCheck
       UserData: 
         'Fn::Base64': !Sub |

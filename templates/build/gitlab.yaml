@@ -27,7 +27,8 @@ Metadata:
       - ParentVpcStack
       - ParentLDAPStack
       - ParentDBStack
-    - Label:
+      - S3ConfigBucketName
+    - Label: 
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
@@ -39,7 +40,7 @@ Metadata:
     - Label:
         default: 'PostgreSQL DB Parameters'
       Parameters:
-      - DBMasterUserPassword
+      - DBMasterPassword
     - Label:
         default: 'Gitlab Parameters'
       Parameters:
@@ -61,11 +62,16 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the DB stack'
+  S3ConfigBucketName:
+    Description: "Enter the name of the S3 bucket name where to find the configuration files"
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the S3 bucket name where to find the configuration files'
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
   InstanceType:
-    Description: 'The Gitlab instance type'
+    Description: 'The instance type'
     Type: String
     Default: 'c5.large'    
   LDAPManagerPassword: 
@@ -73,19 +79,19 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 3
-  DBMasterUserPassword:
-    Description: 'The LDAP Manager password'
+  DBMasterPassword: 
+    Description: 'The DB Admin password'
     Type: String
     NoEcho: true
     MinLength: 3
   GitlabRootEmail: 
     Description: 'The Gitlab Root email'
     Type: String
-    Default: ''
+    Default: 'application-admin@example.com'
   GitlabRootPassword: 
     Description: 'The Gitlab Root password'
     Type: String
-    Default: ''
+    MinLength: 1
     NoEcho: true
 Mappings:
   # cf 01-mappings.yaml
@@ -156,7 +162,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
           PropagateAtLaunch: true
         - Key: Name
-          Value: !Sub '${AWS::StackName}-AutoScalingGroup'
+          Value: !Sub '${AWS::StackName}-Main'
           PropagateAtLaunch: true
     CreationPolicy: 
       ResourceSignal: 
@@ -245,7 +251,7 @@ Resources:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
-  LogGroup:
+  LogGroup: 
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Sub '${AWS::StackName}'
@@ -253,116 +259,64 @@ Resources:
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCredentials:
+          type: s3
+          roleName: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
+          buckets: 
+            - !Ref S3ConfigBucketName
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
-        Bootstrap:
-          packages:
-            yum:
+        Bootstrap: 
+          packages: 
+            yum: 
               wget: []
               htop: []
               awslogs: []
               yum-cron: []
-          files:
-            '/etc/awslogs/awscli.conf':
-              content: !Sub |
-                [default]
-                region = ${AWS::Region}
-                [plugins]
-                cwlogs = cwlogs
+          files: 
+            '/etc/awslogs/awscli.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
               mode: '000644'
               owner: root
               group: root
-            '/etc/awslogs/awslogs.conf':
-              content: !Sub |
-                [general]
-                state_file = /var/lib/awslogs/agent-state
-                [/var/log/messages]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/messages
-                log_stream_name = {instance_id}/var/log/messages
-                log_group_name = ${LogGroup}
-                [/var/log/secure]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/secure
-                log_stream_name = {instance_id}/var/log/secure
-                log_group_name = ${LogGroup}
-                [/var/log/cron]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/cron
-                log_stream_name = {instance_id}/var/log/cron
-                log_group_name = ${LogGroup}
-                [/var/log/cloud-init.log]
-                datetime_format = %b %d %H:%M:%S
-                file = /var/log/cloud-init.log
-                log_stream_name = {instance_id}/var/log/cloud-init.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-init.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-init.log
-                log_stream_name = {instance_id}/var/log/cfn-init.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-hup.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-hup.log
-                log_stream_name = {instance_id}/var/log/cfn-hup.log
-                log_group_name = ${LogGroup}
-                [/var/log/cfn-init-cmd.log]
-                datetime_format = %Y-%m-%d %H:%M:%S
-                file = /var/log/cfn-init-cmd.log
-                log_stream_name = {instance_id}/var/log/cfn-init-cmd.log
-                log_group_name = ${LogGroup}
-                [/var/log/cloud-init-output.log]
-                file = /var/log/cloud-init-output.log
-                log_stream_name = {instance_id}/var/log/cloud-init-output.log
-                log_group_name = ${LogGroup}
-                [/var/log/dmesg]
-                file = /var/log/dmesg
-                log_stream_name = {instance_id}/var/log/dmesg
-                log_group_name = ${LogGroup}
+              context:
+                Region: !Sub ${AWS::Region}
+            '/etc/awslogs/awslogs.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
               mode: '000644'
               owner: root
               group: root
-            '/etc/cfn/cfn-hup.conf':
-              content: !Sub |
-                [main]
-                stack=${AWS::StackName}
-                region=${AWS::Region}
-              mode: '000400' 
+              context:
+                LogGroup: !Sub ${LogGroup}
+            '/etc/cfn/cfn-hup.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
+              mode: '000644' 
               owner: 'root'
               group: 'root'
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
-              content: !Sub |
-                [cfn-auto-reloader-hook]
-                triggers=post.update
-                path=Resources.LaunchConfiguration.Metadata.AWS::CloudFormation::Init
-                action=/opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-                runas=root
-              mode: '000400' 
+              context:
+                Region: !Sub ${AWS::Region}
+                StackName: !Sub ${AWS::StackName}
+            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+              mode: '000644' 
               owner: 'root'
               group: 'root'
-            '/home/ec2-user/.bashrc':
-              content: !Sub |
-                [ -f /etc/bashrc ] && . /etc/bashrc
-                alias c=clear
-                alias l='ls -l'
-                alias vi=vim
-                PS1='[\u@${AWS::StackName} \W]\$ '
+              context:
+                Region: !Sub ${AWS::Region}
+                StackName: !Sub ${AWS::StackName}
+            '/home/ec2-user/bashrc': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
+              context:
+                StackName: !Sub ${AWS::StackName}
             '/root/tag_root_volume.sh':
-              content: !Sub |
-                #!/bin/bash
-                STACK_NAME=${AWS::StackName}
-                REGION=${AWS::Region}
-                echo "Tagging Root volume..."
-                INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-                VOLUME_ID=$(aws --region $REGION ec2 describe-volumes --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/xvda" --query "Volumes[0].VolumeId" --output text)
-                PLATFORM=$(aws --region $REGION ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].Tags" --output table | grep PLATFORM | cut -d '|' -f 3 | sed -e 's/ //g')
-                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=Name,Value=$STACK_NAME-VolumeRoot"
-                aws --region $REGION ec2 create-tags --resources $VOLUME_ID --tag "Key=PLATFORM,Value=$PLATFORM"
-              mode: '000744'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
+              mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
@@ -373,7 +327,7 @@ Resources:
             '03_yum_cron.conf':
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
-              command: "sudo /root/tag_root_volume.sh"
+              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
           services:
             sysvinit:
               awslogs:
@@ -414,21 +368,15 @@ Resources:
               owner: 'root'
               group: 'root'
             '/root/create_fs.sh': 
-              content: !Sub |
-                #!/bin/bash -x
-                MNT=/mnt/application
-                [ -d $MNT ] || mkdir $MNT
-                mount -t efs -o tls ${FileSystem}:/ $MNT
-                [ -d $MNT/git-data ] || mkdir -p $MNT/git-data
-                [ -d $MNT/git-data ] && echo "File system OK"
-              mode: "000700"
-              owner: "root"
-              group: "root"
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
+              mode: '000700'
+              owner: 'root'
+              group: 'root'
           commands:
             '01_add_gitlab_repo':
               command: 'sudo /root/add_gitlab_repo.sh'
             '02_create_fs':
-              command: 'sudo /root/create_fs.sh'              
+              command: !Sub 'sudo /root/create_fs.sh ${FileSystem}'              
           services:
             sysvinit:
               postfix: 
@@ -440,202 +388,72 @@ Resources:
               gitlab-ee: []
           files:
             '/etc/gitlab/gitlab.rb':
-              content: |
-                external_url 'http://%external_url%'
-                git_data_dirs({
-                  'default': {
-                    'path': '/mnt/application/git-data'
-                  }
-                })
-                
-                postgresql['enable'] = false
-                gitlab_rails['db_adapter'] = 'postgresql'
-                gitlab_rails['db_encoding'] = 'utf8'
-                gitlab_rails['db_host'] = '%endpointAddress%'
-                gitlab_rails['db_port'] = %endpointPort%
-                gitlab_rails['db_username'] = '%masterUsername%'
-                gitlab_rails['db_password'] = '%masterUserPassword%'
-                
-                gitlab_rails['ldap_enabled'] = true
-                gitlab_rails['ldap_servers'] = {
-                  'main' => { 
-                    'label' => 'OpenLDAP',
-                    'host' => '%ldapHostname%',
-                    'port' => %ldapPort%,
-                    'uid' => 'uid',
-                    'bind_dn' => '%managerDN%',
-                    'password' => '%managerPassword%',
-                    'encryption' => 'plain',
-                    'verify_certificates' => false,
-                    'active_directory' => false,
-                    'allow_username_or_email_login' => false,
-                    'lowercase_usernames' => false,
-                    'block_auto_created_users' => false,
-                    'base' => 'ou=People,%rootDC%',
-                    'user_filter' => '(objectclass=person)'
-                  }
-                }
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/gitlab/gitlab.rb'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab/configure_url.sh':
-              content: |
-                #!/bin/bash -x
-                external_url="$1"
-                [ -z "$external_url" ] && echo "Invalid external_url" && exit 1
-                external_url=${external_url,,}
-                sed -ibckp -E "s/%external_url%/$external_url/" /etc/gitlab/gitlab.rb
+              context:
+                ExternalUrl: 
+                  !Sub '${LoadBalancer.DNSName}'
+                EndpointAddress: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                EndpointPort: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+                MasterUsername: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+                DBMasterPassword: 
+                  !Sub '${DBMasterPassword}'
+                DNSName: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
+                LDAPPort: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+                RootDC: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                ManagerDN: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                LDAPManagerPassword: 
+                  !Sub '${LDAPManagerPassword}'
+            '/root/gitlab/config.rb.patch': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/config.rb.patch'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab/configure_ldap.sh':
-              content: |
-                #!/bin/bash
-                ldapHostname=$1
-                ldapPort=$2
-                rootDC=$3
-                managerDN="$4"
-                managerPassword=$5
-                [ -z "$ldapHostname" ] && echo "Invalid ldapHostname" && exit 1
-                [ -z "$ldapPort" ] && echo "Invalid ldapPort" && exit 1
-                [ -z "$rootDC" ] && echo "Invalid rootDC" && exit 1
-                [ -z "$managerDN" ] && echo "Invalid managerDN" && exit 1
-                [ -z "$managerPassword" ] && echo "Invalid managerPassword" && exit 1
-                sed -ibckp -E "s/%ldapHostname%/$ldapHostname/;s/%ldapPort%/$ldapPort/;s/%rootDC%/$rootDC/;s/%managerDN%/$managerDN/;s/%managerPassword%/$managerPassword/" /etc/gitlab/gitlab.rb
+            '/root/gitlab/patching_config.sh': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/patching_config.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab/patch_config.rb':
-              content: !Sub |
-                --- /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb      2018-06-26 14:53:20.531134934 +0000
-                +++ /root/config.rb     2018-06-26 14:53:02.519089466 +0000
-                @@ -12,10 +12,10 @@
-                               enabled? && ::License.feature_available?(:ldap_group_sync)
-                             end
-                
-                -            override :_available_servers
-                -            def _available_servers
-                -              ::License.feature_available?(:multiple_ldap_servers) ? servers : super
-                -            end
-                +#            override :_available_servers
-                +#            def _available_servers
-                +#              ::License.feature_available?(:multiple_ldap_servers) ? servers : super
-                +#            end
-                           end
-                         end
-                       end
+            '/root/gitlab/create_db.sh': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/create_db.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab/create_db.sh':
-              content: |
-                #!/bin/bash
-                endpointAddress="$1"
-                endpointPort="$2"
-                masterUsername="$3"
-                masterUserPassword="$4"
-                [ -z "$endpointAddress" ] && echo "Invalid endpointAddress" && exit 1
-                [ -z "$endpointPort" ] && echo "Invalid endpointPort" && exit 1
-                [ -z "$masterUsername" ] && echo "Invalid masterUsername" && exit 1
-                [ -z "$masterUserPassword" ] && echo "Invalid masterUserPassword" && exit 1
-                
-                echo "Patching config.rb..."
-                patch /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb /root/gitlab/patch_config.rb
-                expect - <<EOF
-                spawn /usr/bin/createdb --host=$endpointAddress --port=$endpointPort --username=$masterUsername --encoding=UTF8 gitlabhq_production
-                expect "Password:"
-                send "$masterUserPassword\r"
-                expect eof
-                EOF
+            '/root/gitlab/configure.sh': 
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/configure.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/gitlab/configure_db.sh':
-              content: |
-                #!/bin/bash
-                endpointAddress="$1"
-                endpointPort="$2"
-                masterUsername="$3"
-                masterUserPassword="$4"
-                [ -z "$masterUsername" ] && echo "Invalid masterUsername" && exit 1
-                [ -z "$masterUserPassword" ] && echo "Invalid masterUserPassword" && exit 1
-                [ -z "$endpointAddress" ] && echo "Invalid endpointAddress" && exit 1
-                [ -z "$endpointPort" ] && echo "Invalid endpointPort" && exit 1
-                sed -ibckp -E "s/%endpointAddress%/$endpointAddress/;s/%endpointPort%/$endpointPort/;s/%masterUsername%/$masterUsername/;s/%masterUserPassword%/$masterUserPassword/" /etc/gitlab/gitlab.rb
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/gitlab/configure.sh':
-              content: |
-                #!/bin/bash
-                email=$1
-                password=$2
-                [ -z "$email" ] && echo "Invalid email" && exit 1
-                [ -z "$password" ] && echo "Invalid password" && exit 1
-                GITLAB_ROOT_EMAIL="$email" GITLAB_ROOT_PASSWORD="$password" gitlab-ctl reconfigure
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/gitlab/configure_extra.sh':
-              content: |
-                #!/bin/bash
-                password=$1
-                [ -z "$password" ] && echo "Invalid password" && exit 1
-                # Obtain a token (https://github.com/doorkeeper-gem/doorkeeper/wiki/API-endpoint-descriptions-and-examples#curl-command-password-grant)
-                token=$(curl -s -F grant_type=password -F "username=root" -F "password=$password" -X POST http://localhost:80/oauth/token | jq -r '.access_token')
-                [ "$token" == "null" ] && echo "Failed to retrieve token" && exit 1 
-                url="http://localhost:80/api/v4/application/settings"
-                echo "Changing settings (token=$token)..."
-                
-                change_settings()
-                {
-                  local key="$1"
-                  local value="$2"
-                  echo $key=$(curl -s --request PUT -H "Authorization: Bearer $token" "$url?$key=$value" | jq ".$key")                  
-                }
-                change_settings signup_enabled                    false
-                change_settings default_project_visibility        public
-                change_settings email_author_in_body              true
-                change_settings gravatar_enabled                  false
-                change_settings help_page_hide_commercial_content true
-                change_settings html_emails_enabled               true
-                curl -s --request POST -H "Authorization: Bearer $token" -F token=$token http://localhost:80/oauth/revoke > /dev/null
+            '/root/gitlab/apply_settings.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/apply_settings.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
           commands:
-            '01_configure_url': 
-              command: !Sub 'sudo /root/gitlab/configure_url.sh ${LoadBalancer.DNSName}'
-            '02_configure_ldap': 
-              command: !Join
-                - ' '
-                - - 'sudo /root/gitlab/configure_ldap.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                  - 'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-                  - !Sub '${LDAPManagerPassword}'
-            '03_create_db':
+            '01_patching_config': 
+              command: 'sudo /root/gitlab/patching_config.sh'
+            '02_create_db':
               command: !Join
                 - ' '
                 - - 'sudo /root/gitlab/create_db.sh'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
-                  - !Sub '${DBMasterUserPassword}'
+                  - !Sub '${DBMasterPassword}'
               test: 'sudo test ! -e /mnt/application/.application_configured'
-            '04_configure_db': 
-              command: !Join
-                - ' '
-                - - 'sudo /root/gitlab/configure_db.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
-                  - !Sub '${DBMasterUserPassword}'
-            '05_configure': 
+            '03_configure': 
               command: !Sub 'sudo /root/gitlab/configure.sh "${GitlabRootEmail}" "${GitlabRootPassword}"'
-            '06_configure_extra': 
-              command: !Sub 'sudo /root/gitlab/configure_extra.sh "${GitlabRootPassword}"'
+            '04_apply_settings': 
+              command: !Sub 'sudo /root/gitlab/apply_settings.sh "${GitlabRootPassword}"'
               test: 'sudo test ! -e /mnt/application/.application_configured'
             '98_application_configured':
               command: 'sudo touch /mnt/application/.application_configured'
