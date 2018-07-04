@@ -16,7 +16,7 @@ ldapmodify -Q -Y EXTERNAL -H ldapi:/// <<EOF
 dn: olcDatabase={2}bdb,cn=config
 changetype: modify
 replace: olcSuffix
-olcSuffix: $rootDC
+olcSuffix: ${RootDC}
 EOF
 
 # Changing the root DN
