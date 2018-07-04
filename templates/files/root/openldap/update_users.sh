@@ -7,7 +7,7 @@
 RootDC="{{RootDC}}"
 ManagerPassword="{{ManagerPassword}}"
 LDAPUsersLdif="{{LDAPUsersLdif}}"
-[ -z "$ldapUsersLdif" ] && echo "Invalid LDAPUsersLdif" && exit 1
+[ -z "${LDAPUsersLdif}" ] && echo "Invalid LDAPUsersLdif" && exit 1
 
 echo "Loading initial LDIF user database from ${LDAPUsersLdif}"
 
