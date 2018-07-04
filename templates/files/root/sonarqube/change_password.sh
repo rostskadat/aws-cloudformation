@@ -4,9 +4,9 @@
 #
 # DESCRIPTION: This script will
 #
-endpointAddress=$1
-endpointPort=$2
-adminPassword=$4
+endpointAddress="$1"
+endpointPort="$2"
+adminPassword="$3"
 [ -z "$endpointAddress" ] && echo "Invalid endpointAddress" && exit 1
 [ -z "$endpointPort" ] && echo "Invalid endpointPort" && exit 1
 [ -z "$adminPassword" ] && echo "Invalid adminPassword" && exit 1
