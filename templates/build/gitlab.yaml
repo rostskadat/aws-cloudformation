@@ -307,7 +307,7 @@ Resources:
               context:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
-            '/home/ec2-user/bashrc': 
+            '/home/ec2-user/.bashrc': 
               source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
               mode: '000600'
               owner: 'ec2-user'
