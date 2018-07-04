@@ -1,4 +1,7 @@
 #!/bin/bash
+
+ROOT_DIR=$(dirname "${BASH_SOURCE[0]}")
+
 sonarqubeDNSName="$1"
 sonarqubeAdminPassword="$2"
 jenkinsAdminEmail="$3"
@@ -32,5 +35,5 @@ if [ $exists -ne 0 ]; then
 fi
 sonarqubeToken=$(curl -s -u "admin:$sonarqubeAdminPassword" -X POST $apiUrl/user_tokens/generate -F "login=jenkins" -F "name=JENKINS_TOKEN" | jq -r ".token")
 
-sed -i -E "s/%sonarqubeToken%/$sonarqubeToken/" /root/jenkins/configure_sonarqube.groovy
-/root/jenkins/call_cli.sh /root/jenkins/configure_sonarqube.groovy
+sed -i -E "s/%sonarqubeToken%/$sonarqubeToken/" $ROOT_DIR/configure_sonarqube.groovy
+$ROOT_DIR/call_cli.sh $ROOT_DIR/configure_sonarqube.groovy

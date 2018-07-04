@@ -536,9 +536,9 @@ Resources:
             '11_jenkins_install_plugins': 
               command: 'sudo /root/jenkins/install_plugins.sh'
             '12_jenkins_configure_jdk': 
-              command: 'sudo /root/jenkins_call_cli.sh /root/jenkins/configure_jdk.groovy'
+              command: 'sudo /root/jenkins/call_cli.sh /root/jenkins/configure_jdk.groovy'
             '20_jenkins_configure_artifactory': 
-              command: 'sudo /root/jenkins_call_cli.sh /root/jenkins/configure_artifactory.groovy'
+              command: 'sudo /root/jenkins/call_cli.sh /root/jenkins/configure_artifactory.groovy'
             '30_jenkins_configure_sonarqube': 
               command: !Join
                 - ' '
@@ -547,13 +547,13 @@ Resources:
                   - !Sub '${SonarqubeAdminPassword}'
                   - !Sub '${JenkinsAdminPassword}'
             '40_jenkins_change_default_password': 
-              command: !Sub 'sudo /root/jenkins_change_default_password.sh ${JenkinsAdminPassword}'              
+              command: !Sub 'sudo /root/jenkins/change_default_password.sh ${JenkinsAdminPassword}'              
             '41_jenkins_change_default_password': 
               command: 'sudo service jenkins restart'
             '42_jenkins_wait':
               command: !Sub 'sudo /root/jenkins/wait.sh "${JenkinsAdminPassword}"'  
             '42_jenkins_configure_ldap': 
-              command: !Sub 'sudo /root/jenkins_call_cli.sh /root/jenkins/configure_ldap.groovy "${JenkinsAdminPassword}"'
+              command: !Sub 'sudo /root/jenkins/call_cli.sh /root/jenkins/configure_ldap.groovy "${JenkinsAdminPassword}"'
             '98_application_configured': 
               command: 'sudo touch /mnt/jenkins/.application_configured'
             '99_jenkins_restart':
