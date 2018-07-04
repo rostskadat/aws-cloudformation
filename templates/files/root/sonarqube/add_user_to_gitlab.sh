@@ -18,14 +18,14 @@ echo "Obtaining a token..."
 token=$(curl -s -F grant_type=password -F "username=root" -F "password=${GitlabRootPassword}" -X POST http://${GitlabDNSName}/oauth/token | jq '.access_token' | tr -d '"')
 [ "$token" == "null" ] && echo "Failed to get Gitlab token" && exit 1
 
+gitlabSonarqubePassword=$(echo -n "${SonarqubeAdminEmail}" | md5sum | cut -d ' ' -f 1)
+SonarqubeAdminEmail=sonarqube.${SonarqubeAdminEmail}
+url="http://${GitlabDNSName}/api/v4"
+
 echo "Checking if user 'sonarqube' exists..."
-user_exists=$(curl -s -H 'Authorization: Bearer $token' "$url/users" | jq '.[] | select (.username == "sonarqube" )')
+user_exists=$(curl -s -H "Authorization: Bearer $token" "$url/users" | jq '.[] | select (.username == "sonarqube" )')
 
 if [ -z "$user_exists" ]; then
-    gitlabSonarqubePassword=$(echo -n "${SonarqubeAdminEmail}" | md5sum | cut -d ' ' -f 1)
-    url="http://${GitlabDNSName}/api/v4"
-    SonarqubeAdminEmail=sonarqube.${SonarqubeAdminEmail}
-
     echo "Creating sonarqube user in Gitlab @ $url (${SonarqubeAdminEmail})..."
     userId=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users" -F "email=${SonarqubeAdminEmail}" -F "password=$gitlabSonarqubePassword" -F "username=sonarqube" -F "name=Sonarqube User" -F "admin=true" -F "skip_confirmation=true" | jq '.id')
     gitlabSonarqubeToken=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users/$userId/impersonation_tokens" -F "name=SONARQUBE" -F "scopes[]=api" | jq '.token' | tr -d '"')
