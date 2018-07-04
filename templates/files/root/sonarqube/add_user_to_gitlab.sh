@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 #
 # FILE: add_user_to_gitlab.sh
 #
