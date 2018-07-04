@@ -431,22 +431,22 @@ Resources:
               owner: 'root'
               group: 'root'
             '/var/lib/jenkins/hudson.tasks.Ant.xml':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/var/lib/jenkins/hudson.tasks.Ant.xml'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.tasks.Ant.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
             '/var/lib/jenkins/hudson.tasks.Maven.xml':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/var/lib/jenkins/hudson.tasks.Maven.xml'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.tasks.Maven.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
             '/var/lib/jenkins/hudson.plugins.git.GitTool.xml':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/var/lib/jenkins/hudson.plugins.git.GitTool.xml'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.plugins.git.GitTool.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
             '/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml'
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
