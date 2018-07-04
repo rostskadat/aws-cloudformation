@@ -522,7 +522,7 @@ Resources:
               test: 'sudo test ! -e /mnt/application/.application_configured'
               ignoreErrors: true
             '04_sonarqube_start':
-              command: 'sudo service sonar start'
+              command: 'sudo service sonar restart'
             '05_sonarqube_change_password':
               command: !Join
                 - ' '
