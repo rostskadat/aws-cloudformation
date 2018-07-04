@@ -2,14 +2,15 @@
 # Adding logs to awslog
 
 LogGroup="$1"
+LogFile="$2"
 
 [ -z "${LogGroup}" ] && echo "Invalid LogGroup" && exit 1
-
+[ -z "${LogFile}" ] && echo "Invalid LogFile" && exit 1
 
 cat >> /etc/awslogs/awslogs.conf <<EOF
-[/var/log/jenkins/jenkins.log]
-file = /var/log/jenkins/jenkins.log
-log_stream_name = {instance_id}/var/log/jenkins/jenkins.log
+[${LogFile}]
+file = ${LogFile}
+log_stream_name = {instance_id}${LogFile}
 log_group_name = ${LogGroup}
 EOF
 
