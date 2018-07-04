@@ -249,31 +249,34 @@ Resources:
       GroupDescription: "Security group for instances for public facing instances"
       VpcId: !Ref Vpc
       SecurityGroupIngress: 
-        - Description: "Allow all inbound SSH traffic from our public address"
+        - Description: "Allow all inbound HTTP traffic from our public address"
           CidrIp: "195.149.215.221/32"
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-        - Description: "Allow all inbound SSH traffic from our public address"
+        - Description: "Allow all inbound HTTP traffic from our public address"
           CidrIp: "195.149.209.221/32"
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-        - Description: "Allow all inbound SSH traffic from our public address"
+        - Description: "Allow all inbound HTTP traffic from our public address"
           CidrIp: "193.127.200.51/32"
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-        - Description: "Allow all inbound SSH traffic from our public address"
+        - Description: "Allow all inbound HTTP traffic from our public address"
           CidrIp: "193.127.200.52/32"
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-        - Description: "Allow all inbound SSH traffic from our public address"
+        - Description: "Allow all inbound HTTPS traffic from our public address"
           CidrIp: "0.0.0.0/0"
           IpProtocol: tcp
           FromPort: 443
           ToPort: 443
+        - Description: "Allow all inbound from our the NAT"
+          CidrIp: !Sub "${NatGatewayEIP}/32"
+          IpProtocol: "-1"
         - Description: "Allow all inbound traffic from the DMZ"
           SourceSecurityGroupId: !Ref SecurityGroupDMZ
           IpProtocol: "-1"
