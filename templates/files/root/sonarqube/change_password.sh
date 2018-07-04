@@ -21,4 +21,4 @@ done
 mysql -h $endpointAddress -P $endpointPort --user=sonarqube --password=sonarqube --database=sonarqube  <<EOF
 UPDATE users SET crypted_password=SHA1(CONCAT('--', salt, '--', '$adminPassword', '--')) WHERE id='1';
 COMMIT;
- EOF
+EOF
