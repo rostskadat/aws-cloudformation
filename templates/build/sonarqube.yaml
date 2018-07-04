@@ -432,8 +432,8 @@ Resources:
               mode: '000700'
               owner: 'root'
               group: 'root'
-            '/root/sonarqube/configure_gitlab.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/sonarqube/configure_gitlab.sh'
+            '/root/sonarqube/add_user_to_gitlab.sh':
+              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/sonarqube/add_user_to_gitlab.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -512,10 +512,10 @@ Resources:
                   - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
                   - !Sub '${DBMasterPassword}'
               test: 'sudo test ! -e /mnt/application/.application_configured'
-            '03_sonarqube_configure_gitlab':
+            '03_sonarqube_add_user_to_gitlab':
               command: !Join
                 - ' '
-                - - 'sudo /root/sonarqube/configure_gitlab.sh'
+                - - 'sudo /root/sonarqube/add_user_to_gitlab.sh'
                   - 'Fn::ImportValue': !Sub '${ParentGitlabStack}-DNSName'
                   - !Sub '${GitlabRootPassword}'
                   - !Sub '${SonarqubeAdminEmail}'
