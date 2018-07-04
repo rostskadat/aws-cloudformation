@@ -548,7 +548,7 @@ Resources:
                   - !Sub '${JenkinsAdminPassword}'
             '40_jenkins_change_default_password': 
               command: !Sub 'sudo /root/jenkins/change_default_password.sh ${JenkinsAdminPassword}'              
-            '41_jenkins_change_default_password': 
+            '41_jenkins_restart': 
               command: 'sudo service jenkins restart'
             '42_jenkins_wait':
               command: !Sub 'sudo /root/jenkins/wait.sh "${JenkinsAdminPassword}"'  
