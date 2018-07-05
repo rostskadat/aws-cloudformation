@@ -189,7 +189,6 @@ Resources:
             yum: 
               wget: []
               htop: []
-              chrony: []
               awslogs: []
               yum-cron: []
           files: 
@@ -246,6 +245,8 @@ Resources:
               command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
             '05_remove_ntp':
               command: 'sudo yum erase -y ntp*'
+            '06_install_chrnoy':
+              command: 'sudo yum install -y chrony'
           services:
             sysvinit:
               awslogs:
