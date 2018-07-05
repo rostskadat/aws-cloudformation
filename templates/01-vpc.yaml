@@ -781,3 +781,14 @@ Outputs:
     Value: !Join [',', [!Ref SubnetPrivateAZA, !Ref SubnetPrivateAZB]]
     Export:
       Name: !Sub '${AWS::StackName}-SubnetsPrivate'
+  TopicHealth:
+    Description: 'The Health Notification topic'
+    Value: !Ref TopicHealth
+    Export:
+      Name: !Sub '${AWS::StackName}-TopicHealth'
+  DefaultImageId:
+    Description: 'The default ImageId as per the RegionMap'
+    Value: !FindInMap [RegionMap, !Ref 'AWS::Region', ImageId]
+    Export:
+      Name: !Sub '${AWS::StackName}-DefaultImageId'
+      

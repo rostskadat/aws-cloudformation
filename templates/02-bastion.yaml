@@ -24,10 +24,6 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
-    - Label:
-        default: 'Bastion Parameters'
-      Parameters:
-      - BastionAdminEmail
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Parent Stack"
@@ -44,51 +40,7 @@ Parameters:
     Type: "AWS::EC2::KeyPair::KeyName"
     MinLength: 1
     ConstraintDescription: 'must be the name of an existing Key Pair to use to log to the EC2 Instance'
-  BastionAdminEmail:
-    Description: 'The Bastion Admin email'
-    Type: String
-    Default: 'bastion-admin@example.com'
-Mappings:
-  # cf 01-mappings.yaml
-  RegionMap:
-    ap-northeast-1:
-      AMI: ami-92df37ed
-    ap-northeast-2:
-      AMI: ami-c10fa6af
-    ap-south-1:
-      AMI: ami-76d6f519
-    ap-southeast-1:
-      AMI: ami-de90a5a2
-    ap-southeast-2:
-      AMI: ami-423bec20
-    ca-central-1:
-      AMI: ami-338a0a57
-    eu-central-1:
-      AMI: ami-9a91b371
-    eu-west-1:
-      AMI: ami-ca0135b3
-    eu-west-2:
-      AMI: ami-a36f8dc4
-    eu-west-3:
-      AMI: ami-969c2deb
-    sa-east-1:
-      AMI: ami-3885d854
-    us-east-1:
-      AMI: ami-14c5486b
-    us-east-2:
-      AMI: ami-922914f7
-    us-west-1:
-      AMI: ami-25110f45
-    us-west-2:
-      AMI: ami-e251209a
 Resources: 
-  TopicHealth: 
-    Type: 'AWS::SNS::Topic'
-    Properties: 
-      DisplayName: !Sub '${AWS::StackName} - Server health notification'
-      Subscription:
-        - Endpoint: !Ref BastionAdminEmail
-          Protocol: 'email'
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
@@ -98,7 +50,8 @@ Resources:
       MinSize: 1
       MaxSize: 1
       NotificationConfigurations:
-        - TopicARN: !Ref TopicHealth
+        - TopicARN: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
           NotificationTypes:
             - 'autoscaling:EC2_INSTANCE_LAUNCH'
             - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
@@ -278,7 +231,8 @@ Resources:
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', ImageId]
+      ImageId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-DefaultImageId'
       InstanceType: "t2.micro"
       KeyName: !Ref KeyName
       SecurityGroups: 
