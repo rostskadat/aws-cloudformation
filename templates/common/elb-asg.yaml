@@ -1,0 +1,145 @@
+#
+# FILE: elb-asg.yaml
+#
+# DESCRIPTION: This stack is a nested stack that can be used by application
+#   require a Load Balancer in conjonction with an AutoScalingGroup
+#
+---
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: 'This netsted stack create an ElasticLoadBalancer and an AutoScalingGroup'
+
+Metadata: 
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Parent Stack'
+      Parameters:
+      - ParentVpcStack
+    - Label: 
+        default: 'EC2 Parameters'
+      Parameters:
+      - LaunchConfigurationName
+    - Label: 
+        default: 'Load Balancer Parameter'
+      Parameters:
+      - HealthCheckPath
+      - HealthCheckPort
+
+Parameters: 
+
+  ParentVpcStack: 
+    Description: "Enter the name of the VPC Parent Stack"
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the parent VPC stack (01-vpc.yaml)'
+
+  LaunchConfigurationName: 
+    Description: 'The LaunchConfiguration to trigger when scaling out'
+    Type: String
+    MinLength: 1
+    
+  HealthCheckPath:
+    Description: 'The path to check'
+    Type: String
+    MinLength: 1
+
+  HealthCheckPort:
+    Description: 'The port to check'
+    Type: Number
+
+  ListenerPort:
+    Description: 'The port to check'
+    Type: Number
+
+Resources: 
+
+  AutoScalingGroup: 
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref LaunchConfigurationName
+      MinSize: 1
+      MaxSize: 1
+      NotificationConfigurations:
+        - TopicARN: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Main'
+          PropagateAtLaunch: true
+    CreationPolicy: 
+      ResourceSignal: 
+        Timeout: PT15M
+        Count: 1
+    UpdatePolicy: 
+      AutoScalingRollingUpdate: 
+        MinInstancesInService: 0
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+#    DependsOn:
+#      - MountTargetA
+#      - MountTargetB
+  LoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Scheme: internet-facing
+      SecurityGroups:
+      - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
+      Subnets: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-LoadBalancer'
+  TargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: !Ref HealthCheckPath
+      HealthCheckTimeoutSeconds: 2
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200-299'
+      Port: !Ref HealthCheckPort
+      Protocol: HTTP
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TargetGroup'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      TargetGroupAttributes:
+        - Key: 'deregistration_delay.timeout_seconds'
+          Value: 30
+  Listener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref TargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: !Ref ListenerPort
+      Protocol: HTTP
