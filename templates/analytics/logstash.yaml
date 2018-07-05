@@ -48,7 +48,7 @@ Parameters:
     Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "must be the name of an existing EC2 KeyPair."
   InstanceType:
-    Description: 'The Jenkins instance type'
+    Description: 'The instance type'
     Type: String
     Default: 'c5.large'    
   ElasticSearchAdminEmail:
@@ -284,6 +284,7 @@ Resources:
             yum: 
               wget: []
               htop: []
+              chrony: []
               awslogs: []
               yum-cron: []
           files: 
@@ -338,6 +339,8 @@ Resources:
               command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
             '04_tag_root_volume':
               command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
+            '05_remove_ntp':
+              command: 'sudo yum erase -y ntp*'
           services:
             sysvinit:
               awslogs:
@@ -361,6 +364,11 @@ Resources:
                 files:
                   - /etc/yum/yum-cron.conf
                   - /etc/yum/yum-cron-hourly.conf
+              chronyd: 
+                enabled: true
+                ensureRunning: true
+                files:
+                  - /etc/chrony.conf
         BootstrapApplication:
           packages:
             yum:
