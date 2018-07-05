@@ -299,6 +299,7 @@ Resources:
               - 'SNS:Publish'
               - 'SNS:Receive'
             Resource: !Ref TopicAWSInspector
+          # Condition: ${AWS::AccountId}            
   #
   # Then we configure AWS Inspector to analyse the resources tagged with the correct PLATFORM tag.
   #
@@ -321,6 +322,56 @@ Resources:
       AssessmentTemplateName: !Sub 'Assessment Template for the ${AWS::StackName} Stack'
       RulesPackageArns: !FindInMap [RegionMap, !Ref 'AWS::Region', RulesPackageArns ]
 
+  #----------------------------------------------------------------------------
+  #
+  # Echo Service: This function is returns the value of the key passed as 
+  # parameter. It is meant to be used by child stack to retrieve output in
+  # an elegant fashion
+  #
+  RoleLambdaGetVariable:
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'lambda.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Path: '/'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaENIManagementAccess'
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+  
+  FunctionGetVariable: 
+    Type: 'AWS::Lambda::Function'
+    Properties: 
+      Code: 
+        ZipFile: !Sub |
+          var response = require('cfn-response');
+          exports.handler = function(event, context) {
+            var responseData = { 'S3ConfigBucketName': '${S3ConfigBucketName}' };
+            response.send(event, context, response.SUCCESS, responseData);
+          };
+      Description: 'Function to get a specific variable'
+      Handler: index.handler
+      Role: !GetAtt RoleLambdaGetVariable.Arn
+      Runtime: nodejs4.3
+      VpcConfig: 
+        SecurityGroupIds: 
+          - !Ref SecurityGroupPrivate
+        SubnetIds:
+          - !Ref SubnetPrivateAZA
+          - !Ref SubnetPrivateAZB
+      Tags:  
+        - Key: PLATFORM
+          Value: !Sub '${AWS::StackName}'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-FunctionGetVariable'
+  
+  
   #----------------------------------------------------------------------------
   #
   # Health Notification
@@ -791,4 +842,13 @@ Outputs:
     Value: !FindInMap [RegionMap, !Ref 'AWS::Region', ImageId]
     Export:
       Name: !Sub '${AWS::StackName}-DefaultImageId'
-      
+  FunctionGetVariable:
+    Description: 'The ARN of the FunctionGetVariable Lambda function'
+    Value: !GetAtt FunctionGetVariable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionGetVariable'
+  S3ConfigBucketName:
+    Description: 'The config bucket name'
+    Value: !Ref S3ConfigBucketName
+    Export:
+      Name: !Sub '${AWS::StackName}-S3ConfigBucketName'

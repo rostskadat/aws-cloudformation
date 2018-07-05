@@ -15,7 +15,6 @@ Metadata:
         default: 'Parent Stack'
       Parameters:
       - ParentVpcStack
-      - S3ConfigBucketName
     - Label: 
         default: 'EC2 Parameters'
       Parameters:
@@ -34,15 +33,10 @@ Metadata:
       - S3LogsIncludeFilters
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Stack where the instance will reside"
+    Description: "Enter the name of the VPC Parent Stack"
     Type: String
     MinLength: 1
-    ConstraintDescription: 'must be the name of the VPC stack'
-  S3ConfigBucketName:
-    Description: "Enter the name of the S3 bucket name where to find the configuration files"
-    Type: String
-    MinLength: 1
-    ConstraintDescription: 'must be the name of the S3 bucket name where to find the configuration files'
+    ConstraintDescription: 'must be the name of the parent VPC stack (01-vpc.yaml)'
   KeyName: 
     Description: "The Instance Key Pair"
     Type: "AWS::EC2::KeyPair::KeyName"
@@ -78,6 +72,14 @@ Parameters:
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
+
+  FunctionGetVariable: 
+    Type: 'Custom::FunctionGetVariable'
+    Version: '1.0'
+    Properties: 
+      ServiceToken: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-FunctionGetVariable'
+
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
@@ -236,7 +238,7 @@ Resources:
           roleName: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
           buckets: 
-            - !Ref S3ConfigBucketName
+            - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
@@ -249,21 +251,21 @@ Resources:
               yum-cron: []
           files: 
             '/etc/awslogs/awscli.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
               mode: '000644'
               owner: root
               group: root
               context:
                 Region: !Sub ${AWS::Region}
             '/etc/awslogs/awslogs.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
               mode: '000644'
               owner: root
               group: root
               context:
                 LogGroup: !Sub ${LogGroup}
             '/etc/cfn/cfn-hup.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
               mode: '000644' 
               owner: 'root'
               group: 'root'
@@ -271,7 +273,7 @@ Resources:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
             '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
               mode: '000644' 
               owner: 'root'
               group: 'root'
@@ -279,14 +281,14 @@ Resources:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
             '/home/ec2-user/.bashrc': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
               context:
                 StackName: !Sub ${AWS::StackName}
             '/root/tag_root_volume.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -338,17 +340,17 @@ Resources:
               amazon-efs-utils: []
           files: 
             '/etc/yum.repos.d/logstash.repo':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/yum.repos.d/logstash.repo'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/yum.repos.d/logstash.repo'
               mode: '000644'
               owner: 'root'
               group: 'root'
             '/root/create_fs.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/monitor_log.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -367,7 +369,7 @@ Resources:
               logstash: []
           files:
             '/etc/crontab': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/etc/crontab'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/etc/crontab'
               mode: '000644'
               owner: 'root'
               group: 'root'
@@ -377,7 +379,7 @@ Resources:
               owner: 'root'
               group: 'root'
             '/etc/logstash/conf.d/02-elastic_output.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/logstash/conf.d/02-elastic_output.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/logstash/conf.d/02-elastic_output.conf'
               mode: '000644'
               owner: 'root'
               group: 'root'
@@ -385,24 +387,24 @@ Resources:
                 DomainEndpoint: !GetAtt Domain.DomainEndpoint
                 DomainPort: 443
             '/root/logstash/s3_sync_logs.sh':  
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/s3_sync_logs.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/s3_sync_logs.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
               context: 
                 S3LogsIncludeFilters: !Sub '${S3LogsIncludeFilters}'
             '/root/logstash/monitor_logs.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/monitor_logs.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/monitor_logs.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/logstash/configure.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/configure.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/configure.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/logstash/wait.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/wait.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/wait.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'

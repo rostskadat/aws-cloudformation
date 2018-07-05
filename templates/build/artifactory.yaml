@@ -22,12 +22,11 @@ Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
     - Label:
-        default: 'Parent Stacks'
+        default: 'Parent Stack'
       Parameters:
       - ParentVpcStack
       - ParentLDAPStack
       - ParentDBStack
-      - S3ConfigBucketName
     - Label: 
         default: 'EC2 Parameters'
       Parameters:
@@ -62,11 +61,6 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the DB stack'
-  S3ConfigBucketName:
-    Description: "Enter the name of the S3 bucket name where to find the configuration files"
-    Type: String
-    MinLength: 1
-    ConstraintDescription: 'must be the name of the S3 bucket name where to find the configuration files'
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
@@ -97,6 +91,14 @@ Parameters:
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
+
+  FunctionGetVariable: 
+    Type: 'Custom::FunctionGetVariable'
+    Version: '1.0'
+    Properties: 
+      ServiceToken: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-FunctionGetVariable'
+
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
@@ -227,7 +229,7 @@ Resources:
           roleName: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
           buckets: 
-            - !Ref S3ConfigBucketName
+            - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
@@ -240,21 +242,21 @@ Resources:
               yum-cron: []
           files: 
             '/etc/awslogs/awscli.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
               mode: '000644'
               owner: root
               group: root
               context:
                 Region: !Sub ${AWS::Region}
             '/etc/awslogs/awslogs.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
               mode: '000644'
               owner: root
               group: root
               context:
                 LogGroup: !Sub ${LogGroup}
             '/etc/cfn/cfn-hup.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
               mode: '000644' 
               owner: 'root'
               group: 'root'
@@ -262,7 +264,7 @@ Resources:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
             '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
               mode: '000644' 
               owner: 'root'
               group: 'root'
@@ -270,14 +272,14 @@ Resources:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
             '/home/ec2-user/.bashrc': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
               context:
                 StackName: !Sub ${AWS::StackName}
             '/root/tag_root_volume.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -336,7 +338,7 @@ Resources:
               owner: 'root'
               group: 'root'
             '/root/create_fs.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -353,12 +355,12 @@ Resources:
               jfrog-artifactory-oss: []
           files:
             '/etc/opt/jfrog/artifactory/binarystore.xml':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/opt/jfrog/artifactory/binarystore.xml'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/opt/jfrog/artifactory/binarystore.xml'
               mode: '000644'
               owner: 'artifactory'
               group: 'artifactory'
             '/etc/opt/jfrog/artifactory/db.properties':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/opt/jfrog/artifactory/db.properties'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/opt/jfrog/artifactory/db.properties'
               mode: '000644'
               owner: 'artifactory'
               group: 'artifactory'
@@ -368,7 +370,7 @@ Resources:
                 EndpointPort: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
             '/root/artifactory/settings.yaml': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/settings.yaml'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/settings.yaml'
               mode: '000600'
               owner: 'root'
               group: 'root'
@@ -384,22 +386,22 @@ Resources:
                 LDAPManagerPassword: 
                   !Sub '${LDAPManagerPassword}'
             '/root/artifactory/create_db.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/create_db.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/create_db.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/artifactory/change_password.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/change_password.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/change_password.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/artifactory/start_and_configure_master_key.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/start_and_configure_master_key.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/start_and_configure_master_key.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/artifactory/apply_settings.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/apply_settings.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/apply_settings.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'

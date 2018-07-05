@@ -38,7 +38,6 @@ Metadata:
       - ParentLDAPStack
       - ParentArtifactoryStack
       - ParentSonarqubeStack
-      - S3ConfigBucketName
     - Label: 
         default: 'EC2 Parameters'
       Parameters:
@@ -82,11 +81,6 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the Artifactory stack'
-  S3ConfigBucketName:
-    Description: "Enter the name of the S3 bucket name where to find the configuration files"
-    Type: String
-    MinLength: 1
-    ConstraintDescription: 'must be the name of the S3 bucket name where to find the configuration files'
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
@@ -122,6 +116,14 @@ Parameters:
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
 Resources: 
+
+  FunctionGetVariable: 
+    Type: 'Custom::FunctionGetVariable'
+    Version: '1.0'
+    Properties: 
+      ServiceToken: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-FunctionGetVariable'
+
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
@@ -252,7 +254,7 @@ Resources:
           roleName: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
           buckets: 
-            - !Ref S3ConfigBucketName
+            - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication ]
@@ -265,21 +267,21 @@ Resources:
               yum-cron: []
           files: 
             '/etc/awslogs/awscli.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
               mode: '000644'
               owner: root
               group: root
               context:
                 Region: !Sub ${AWS::Region}
             '/etc/awslogs/awslogs.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
               mode: '000644'
               owner: root
               group: root
               context:
                 LogGroup: !Sub ${LogGroup}
             '/etc/cfn/cfn-hup.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
               mode: '000644' 
               owner: 'root'
               group: 'root'
@@ -287,7 +289,7 @@ Resources:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
             '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
               mode: '000644' 
               owner: 'root'
               group: 'root'
@@ -295,14 +297,14 @@ Resources:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
             '/home/ec2-user/.bashrc': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
               mode: '000600'
               owner: 'ec2-user'
               group: 'ec2-user'
               context:
                 StackName: !Sub ${AWS::StackName}
             '/root/tag_root_volume.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -366,12 +368,12 @@ Resources:
               owner: "root"
               group: "root"
             '/root/create_fs.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/monitor_log.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
@@ -396,32 +398,32 @@ Resources:
               apache-maven: []
           files:
             '/root/jenkins/monitor_logs.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/monitor_logs.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/monitor_logs.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/jenkins/plugins.txt':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/plugins.txt'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/plugins.txt'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/var/lib/jenkins/hudson.tasks.Ant.xml':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.tasks.Ant.xml'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.tasks.Ant.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
             '/var/lib/jenkins/hudson.tasks.Maven.xml':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.tasks.Maven.xml'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.tasks.Maven.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
             '/var/lib/jenkins/hudson.plugins.git.GitTool.xml':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.plugins.git.GitTool.xml'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.plugins.git.GitTool.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
             '/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml'
               mode: '000644'
               owner: 'jenkins'
               group: 'jenkins'
@@ -429,27 +431,27 @@ Resources:
                 JenkinsAdminEmail: !Sub '${JenkinsAdminEmail}'
                 DNSName: !GetAtt LoadBalancer.DNSName
             '/root/jenkins/wait.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/wait.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/wait.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/jenkins/call_cli.sh':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/call_cli.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/call_cli.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/jenkins/install_plugins.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/install_plugins.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/install_plugins.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/jenkins/configure_jdk.groovy': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_jdk.groovy'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_jdk.groovy'
               mode: '000600'
               owner: 'root'
               group: 'root'
             '/root/jenkins/configure_artifactory.groovy':
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_artifactory.groovy'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_artifactory.groovy'
               mode: '000600'
               owner: 'root'
               group: 'root'
@@ -464,7 +466,7 @@ Resources:
               owner: 'root'
               group: 'root'
             '/root/jenkins/configure_sonarqube.groovy': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_sonarqube.groovy'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_sonarqube.groovy'
               mode: '000600'
               owner: 'root'
               group: 'root'
@@ -472,17 +474,17 @@ Resources:
                 SonarqubeDNSName:
                   'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
             '/root/jenkins/configure_sonarqube.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_sonarqube.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_sonarqube.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/jenkins/change_default_password.sh': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/change_default_password.sh'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/change_default_password.sh'
               mode: '000700'
               owner: 'root'
               group: 'root'
             '/root/jenkins/configure_ldap.groovy': 
-              source: !Sub 'https://${S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_ldap.groovy'
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_ldap.groovy'
               mode: '000600'
               owner: 'root'
               group: 'root'
