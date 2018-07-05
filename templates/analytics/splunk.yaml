@@ -30,18 +30,19 @@ Metadata:
         default: 'Parent Stack'
       Parameters:
       - ParentVpcStack
-    - Label:
+      - S3ConfigBucketName
+    - Label: 
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
       - InstanceType
-    - Label:
+    - Label: 
         default: 'Splunk Parameters'
       Parameters:
       - SplunkAdminPassword
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Stack where Artifactory will reside"
+    Description: "Enter the name of the VPC Stack where the instance will reside"
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the VPC stack'
@@ -229,6 +230,13 @@ Resources:
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCredentials:
+          type: s3
+          roleName: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
+          buckets: 
+            - !Ref S3ConfigBucketName
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap, BootstrapApplication, InstallApplication, StartSplunk ]
@@ -353,13 +361,13 @@ Resources:
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', ImageId]
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
         - !Ref SecurityGroupHealthCheck
-      UserData: 
+      UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
@@ -385,7 +393,6 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
-
 Outputs: 
   DNSName: 
     Description: 'Public DNS address of the internet facing ELB'

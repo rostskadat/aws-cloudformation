@@ -471,7 +471,7 @@ Resources:
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', ImageId]
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroups: 

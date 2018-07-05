@@ -34,7 +34,7 @@ Metadata:
       - S3LogsIncludeFilters
 Parameters: 
   ParentVpcStack: 
-    Description: "Enter the name of the VPC Stack where Jenkins will reside"
+    Description: "Enter the name of the VPC Stack where the instance will reside"
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the VPC stack'
@@ -467,7 +467,7 @@ Resources:
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
-      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', ImageId]
       InstanceType: !Ref InstanceType
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroups: 
