@@ -24,6 +24,7 @@
 # - Configure SMTP server
 # - Configure Global Tool Configuration >> SonarQube Scanner
 # - Configure Global Tool Configuration >> Docker 
+# - Configure System >> email settings usig SES 
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -142,6 +143,7 @@ Resources:
             - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
       TargetGroupARNs:
         - !Ref TargetGroup
+        - !Ref TargetGroupJNPL
       VPCZoneIdentifier: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
@@ -213,6 +215,50 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
+      
+  LoadBalancerJNPL:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Scheme: internal
+      Subnets: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Type: network
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-LoadBalancerJNPL'
+  TargetGroupJNPL:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      # This must be the port that you specify for the Agents in your Jenkins Global Security Configuration
+      Port: 49817
+      Protocol: TCP
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TargetGroupJNPL'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      TargetGroupAttributes:
+        - Key: 'deregistration_delay.timeout_seconds'
+          Value: 30
+  ListenerJNPL:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref TargetGroupJNPL
+        Type: forward
+      LoadBalancerArn: !Ref LoadBalancerJNPL
+      Port: 8080
+      Protocol: TCP
+      
   FileSystem:
     Type: 'AWS::EFS::FileSystem'
     Properties: 
@@ -397,6 +443,16 @@ Resources:
               jenkins: []
               apache-maven: []
           files:
+            '/var/lib/jenkins/.m2/settings.xml':
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/var/lib/jenkins/.m2/settings.xml'
+              mode: '000600'
+              owner: 'jenkins'
+              group: 'jenkins'
+              context: 
+                SonarqubeDNSName:
+                  'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
+                SonarqubeUsername: 'admin'
+                SonarqubeAdminPassword: !Sub '${SonarqubeAdminPassword}'
             '/root/jenkins/monitor_logs.sh':
               source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/monitor_logs.sh'
               mode: '000700'
@@ -505,9 +561,11 @@ Resources:
             '02_monitor_logs':
               command: !Sub 'sudo /root/jenkins/monitor_logs.sh ${LogGroup}'
             '03_jenkins_configure_jobs_directory': 
-              command: 'sudo rm -rf /var/lib/jenkins/jobs && sudo ln -s /mnt/application/jobs /var/lib/jenkins/jobs'
+              command: 'sudo rm -rf /var/lib/jenkins/jobs && sudo ln -s /mnt/application/data /var/lib/jenkins/jobs'
             '04_jenkins_chown_jenkins': 
               command: 'sudo chown -R jenkins.jenkins /mnt/application'
+            '05_jenkins_chown_m2': 
+              command: 'sudo chown -R jenkins.jenkins /var/lib/jenkins/.m2'
             '10_jenkins_start': 
               command: 'sudo service jenkins start'
             '11_jenkins_install_plugins': 
@@ -570,6 +628,11 @@ Resources:
         FromPort: 8080
         ToPort: 8080
         IpProtocol: tcp
+      - CidrIp: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-CidrBlock'
+        FromPort: 49817
+        ToPort: 49817
+        IpProtocol: tcp
       Tags: 
         - Key: PLATFORM
           Value: 
@@ -583,4 +646,10 @@ Outputs:
     Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
+  DNSNameJNPL:
+    Description: 'DNS address of the JNPL ELB'
+    Value: !Sub '${LoadBalancerJNPL.DNSName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-DNSNameJNPL'
+
       
