@@ -1,0 +1,65 @@
+#
+# FILE: 02-bastion.yaml
+#
+# DESCRIPTION: This Stack create a Bastion Host in the DMZ of the Parent VPC stack. The Bastion Host is necessary in 
+#   order to access other instances within the VPC.
+#
+# TODO: 
+# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
+# - Should provide alert when the platform is unhealthy
+# - Fixed el cfn-init with LaunchConfiguration
+#
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "This test stack create "
+Resources: 
+
+  FunctionGetVariable: 
+    Type: 'Custom::FunctionGetVariable'
+    Version: '1.0'
+    Properties: 
+      ServiceToken: 
+        'Fn::ImportValue': 'BUILD-FunctionGetVariable'
+
+  Ec2Instance: 
+    Type: 'AWS::EC2::Instance'
+    Metadata: 
+      AWS::CloudFormation::Init:
+        configSets: 
+          default: [ Bootstrap ] 
+        Bootstrap: 
+          packages: 
+            yum: 
+              ansible: []
+          commands:
+            '01_sync_playbooks': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /tmp/playbooks'
+            '02_set_host': 
+              command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
+            '03_launch_playbook':
+              command: 'sudo ansible-playbook --become /tmp/playbooks/playbook.yml'
+    Properties: 
+      IamInstanceProfile: 
+        'Fn::ImportValue': 'BUILD-InstanceProfileEC2Instance'      
+      ImageId: ami-e4515e0e
+      InstanceType: 't2.micro'
+      KeyName: BUILD_KEYPAIR
+      SecurityGroupIds: 
+        - 'Fn::ImportValue': 'BUILD-SecurityGroupDMZ'
+      SubnetId:
+        'Fn::ImportValue': 'BUILD-SubnetDMZ'        
+      UserData: 
+        'Fn::Base64': !Sub |
+          #!/bin/bash
+          yum-config-manager --enable epel
+          yum update -y
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource Ec2Instance
+
+Outputs: 
+  DNSName: 
+    Description: 'Public DNS address of the internet facing ELB'
+    Value: !Sub '${Ec2Instance.PublicDnsName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-DNSName'
+    

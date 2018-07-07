@@ -1,0 +1,6 @@
+---
+- name: Install Jenkins on the host
+  hosts: all
+  remote_user: root
+  roles: 
+    - common
