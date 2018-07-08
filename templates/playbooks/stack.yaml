@@ -31,12 +31,22 @@ Resources:
           packages: 
             yum: 
               ansible: []
+          files:
+            '/root/playbooks/group_vars/all':
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/playbooks/group_vars/all'
+              mode: '000644'
+              owner: root
+              group: root
+              context:
+                Region: !Sub ${AWS::Region}
+                StackName: !Sub ${AWS::StackName}
+                LogGroup: !Sub ${LogGroup}
           commands:
             '01_sync_playbooks': 
               command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /tmp/playbooks'
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
-            '03_launch_playbook':
+            '03_ansible_playbook': 
               command: 'sudo ansible-playbook --become /tmp/playbooks/playbook.yml'
     Properties: 
       IamInstanceProfile: 
