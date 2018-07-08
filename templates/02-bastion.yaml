@@ -7,7 +7,8 @@
 # TODO: 
 # - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 # - Should provide alert when the platform is unhealthy
-# - Fixed el cfn-init with LaunchConfiguration
+# - disable SSH root logins, set **PermitRootLogin** to "no" in **/etc/ssh/sshd_config**
+# - was listening on TCP port(s) 111, 37001, 44147, 51981
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
