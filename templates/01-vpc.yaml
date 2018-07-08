@@ -203,7 +203,8 @@ Resources:
   # AWS Inspector
   #
   # We create the lambda function that will execute code when receiving a 
-  # finding.
+  # finding. Note that you need to manually link the AWSInspector Topic to the 
+  # TopicAWSInspector. You can do that in AWS Inspector Console.
   #
   RoleLambdaAWSInspector:
     Type: 'AWS::IAM::Role'
