@@ -232,7 +232,14 @@ Resources:
                 Action:
                   - 'sns:Publish'
                 Resource: '*'
-
+        - PolicyName: 'AllowDescribeFindings'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action: 
+                  - 'inspector:DescribeFindings'
+                Resource: '*'
   TopicDLQAWSInspector: 
     Type: 'AWS::SNS::Topic'
     Properties: 
