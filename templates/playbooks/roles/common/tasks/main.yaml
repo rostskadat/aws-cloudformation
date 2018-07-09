@@ -1,16 +1,23 @@
 ---
-- name: Removing NTP packages...
+#
+# FILE: main.yaml
+#
+# DESCRIPTION: This file contains the base configuration for all host in the 
+#   stack. It mainly configure the 
+#
+#
+- name: Removing obsolete packages
   yum:
     name: "{{ packages_to_remove }}"
     state: absent
 
-- name: Installing default packages {{ packages }}
+- name: Installing default packages
   yum:
     name: "{{ packages_to_install }}"
 
 - name: Creating template /etc/awslogs/awscli.conf
   template:
-    src: /etc/awslogs/awscli.conf
+    src: templates/etc/awslogs/awscli.conf
     dest: /etc/awslogs/awscli.conf
     owner: root
     group: root
@@ -18,15 +25,21 @@
 
 - name: Creating template /etc/awslogs/awslogs.conf
   template:
-    src: /etc/awslogs/awslogs.conf
+    src: templates/etc/awslogs/awslogs.conf
     dest: /etc/awslogs/awslogs.conf
     owner: root
     group: root
     mode: 0644    
 
+- name: Creating directory /etc/cfn/hooks.d
+  file:
+    path: /etc/cfn/hooks.d
+    state: directory
+    mode: 0755
+
 - name: Creating template /etc/cfn/cfn-hup.conf
   template:
-    src: /etc/cfn/cfn-hup.conf
+    src: templates/etc/cfn/cfn-hup.conf
     dest: /etc/cfn/cfn-hup.conf
     owner: root
     group: root
@@ -34,7 +47,7 @@
 
 - name: Creating template /etc/cfn/hooks.d/cfn-auto-reloader.conf
   template:
-    src: /etc/cfn/hooks.d/cfn-auto-reloader.conf
+    src: templates/etc/cfn/hooks.d/cfn-auto-reloader.conf
     dest: /etc/cfn/hooks.d/cfn-auto-reloader.conf
     owner: root
     group: root
@@ -42,48 +55,77 @@
 
 - name: Creating template .bashrc 
   template:
-    src: /home/ec2-user/.bashrc
+    src: templates/home/ec2-user/.bashrc
     dest: /home/ec2-user/.bashrc
     owner: root
     group: root
     mode: 0644    
 
-- name: Tagging root volume
-  template:
-    src: /root/tag_root_volume.sh
+- name: Copying /root/tag_root_volume.sh
+  file:
+    src: files/root/tag_root_volume.sh
     dest: /root/tag_root_volume.sh
     owner: root
     group: root
-    mode: 0600    
+    mode: 0700
+
+- name: Check if AWS Inspector Agent is installed
+  yum:
+    list=AwsAgent
+  register: is_installed
+
+- name: Downloading AWS Inspector Agent
+  get_url:
+    url: https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install
+    dest: /root/AWSInspectorAgent
+    mode: 0700
+  when: (is_installed.results|length == 1) or (is_installed.results[1].yumstate != 'installed') 
 
 - name: Installing AWS Inspector Agent
-  command: wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s
+  shell: /root/AWSInspectorAgent
+  when: (is_installed.results|length == 1) or (is_installed.results[1].yumstate != 'installed') 
 
-- name: Configuring yum-cron-hourly
-  command: sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf
+- name: Configuring yum-cron-hourly (update_cmd = security)
+  lineinfile:
+    path: /etc/yum/yum-cron-hourly.conf
+    regexp: '^update_cmd.*'
+    line: 'update_cmd = security'
 
-- name: Configuring yum-cron
-  command: sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf
+- name: Configuring yum-cron-hourly (update_messages|download_updates|apply_updates = yes)
+  replace:
+    path: /etc/yum/yum-cron-hourly.conf
+    regexp: '^(update_messages|download_updates|apply_updates).*'
+    replace: '\1 = yes'
+    
+- name: Configuring yum-cron (update_messages|download_updates|apply_updates = yes)
+  replace:
+    path: /etc/yum/yum-cron.conf
+    regexp: '^(update_messages|download_updates|apply_updates).*'
+    replace: '\1 = yes'
 
 - name: Tagging root volume
-  command: sudo /root/tag_root_volume.sh {{ Region }} {{ StackName }}
+  script: /root/tag_root_volume.sh {{Region}} {{StackName}}
 
 - name: Enabling awslogs service
   service:
     name: awslogs
+    state: started
     enabled: yes
 
 - name: Enabling cfn-hup service
   service:
-    name: awslogs
+    name: cfn-hup
+    state: started
     enabled: yes
 
 - name: Enabling yum-cron service
   service:
-    name: awslogs
+    name: yum-cron
+    state: started
     enabled: yes
 
 - name: Enabling chronyd service
   service:
-    name: awslogs
+    name: chronyd
+    state: started
     enabled: yes

@@ -24,6 +24,13 @@ Resources:
   Ec2Instance: 
     Type: 'AWS::EC2::Instance'
     Metadata: 
+      AWS::CloudFormation::Authentication:
+        S3AccessCredentials:
+          type: s3
+          roleName: 
+            'Fn::ImportValue': 'BUILD-RoleEC2Instance'
+          buckets: 
+            - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Bootstrap ] 
@@ -32,22 +39,23 @@ Resources:
             yum: 
               ansible: []
           files:
-            '/root/playbooks/group_vars/all':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/playbooks/group_vars/all'
+            # The idea is to use ansible to provision this specific instance
+            '/root/playbooks/group_vars/all.yaml':
+              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/playbooks/group_vars/all.yaml'
               mode: '000644'
               owner: root
               group: root
               context:
                 Region: !Sub ${AWS::Region}
                 StackName: !Sub ${AWS::StackName}
-                LogGroup: !Sub ${LogGroup}
+                LogGroup: !Sub ${AWS::StackName}
           commands:
             '01_sync_playbooks': 
-              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /tmp/playbooks'
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks'
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_ansible_playbook': 
-              command: 'sudo ansible-playbook --become /tmp/playbooks/playbook.yml'
+              command: 'sudo ansible-playbook --become /root/playbooks/playbook.yml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': 'BUILD-InstanceProfileEC2Instance'      

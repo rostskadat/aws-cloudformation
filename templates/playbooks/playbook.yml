@@ -1,6 +1,19 @@
 ---
-- name: Install Jenkins on the host
-  hosts: all
-  remote_user: root
-  roles: 
+#------------------------------------------------------------------------------
+#
+# FILE: playbook.yml
+#
+# DESCRIPTION: This file is used to setup the Build Infrastructure, which 
+#   contains the following components
+#
+# ?> ansible-playbook playbook.yml
+
+#
+# All hosts share the same configuration
+#
+- hosts: all
+  gather_facts: True
+  vars_files: 
+    - vars/config.yml
+  roles:
     - common
