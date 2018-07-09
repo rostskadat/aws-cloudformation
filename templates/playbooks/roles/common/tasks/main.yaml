@@ -8,12 +8,12 @@
 #
 - name: Removing obsolete packages
   yum:
-    name: "{{ packages_to_remove }}"
+    name: "{{ default_packages_to_remove }}"
     state: absent
 
 - name: Installing default packages
   yum:
-    name: "{{ packages_to_install }}"
+    name: "{{ default_packages_to_install }}"
 
 - name: Creating directory /etc/cfn/hooks.d
   file:
