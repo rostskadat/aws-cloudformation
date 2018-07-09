@@ -4,9 +4,9 @@
 #
 # DESCRIPTION: This script will
 #
-RootDC="dc=allfundsbank,dc=com"
-ManagerPassword="XRQtUZ7NKtD9EdV8"
-LDAPUsersLdif="s3://cloudformation-eu-west-1-791682668801/ldap/export.ldif"
+RootDC="{{RootDC}}"
+ManagerPassword="{{ManagerPassword}}"
+LDAPUsersLdif="{{LDAPUsersLdif}}"
 [ -z "${LDAPUsersLdif}" ] && echo "Invalid LDAPUsersLdif" && exit 1
 
 echo "Downloading LDIF DB from ${LDAPUsersLdif}"
