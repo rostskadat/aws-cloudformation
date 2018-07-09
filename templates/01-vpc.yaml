@@ -273,6 +273,14 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-FunctionAWSInspector'
 
+  PermissionInvokeFunctionAWSInspector: 
+    Type: 'AWS::Lambda::Permission'
+    Properties: 
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt FunctionAWSInspector.Arn
+      Principal: 'sns.amazonaws.com'
+      SourceArn: !Ref TopicAWSInspector
+
   #  
   # Then we create the SNS topic to which AWS Inspector will publish its findings
   #
@@ -307,7 +315,8 @@ Resources:
               - 'SNS:Publish'
               - 'SNS:Receive'
             Resource: !Ref TopicAWSInspector
-          # Condition: ${AWS::AccountId}            
+          # Condition: ${AWS::AccountId}
+          
   #
   # Then we configure AWS Inspector to analyse the resources tagged with the correct PLATFORM tag.
   #
@@ -317,11 +326,13 @@ Resources:
       ResourceGroupTags: 
         - Key: PLATFORM
           Value: !Sub '${AWS::StackName}'
+
   AssessmentTarget: 
     Type: 'AWS::Inspector::AssessmentTarget'
     Properties:
       AssessmentTargetName: !Sub 'Assessment Target for the ${AWS::StackName} Stack'
       ResourceGroupArn: !GetAtt ResourceGroup.Arn
+
   AssessmentTemplate:
     Type: 'AWS::Inspector::AssessmentTemplate'
     Properties:
