@@ -1,12 +1,12 @@
 ---
-Region: eu-west-1
-StackName: TEST01
-LogGroup: TEST01
+Region: {{Region}}
+StackName: {{StackName}}
+LogGroup: {{LogGroup}}
 
-packages_to_remove:
+default_packages_to_remove: 
   - ntp*
 
-packages_to_install:
+default_packages_to_install: 
   - wget
   - htop
   - awslogs

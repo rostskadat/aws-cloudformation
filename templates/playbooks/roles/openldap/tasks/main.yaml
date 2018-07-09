@@ -1,0 +1,80 @@
+---
+#
+# FILE: main.yaml
+#
+# DESCRIPTION: Install and configure the OpenLDAP 
+#
+#
+- name: Installing OpenLDAP packages
+  yum:
+    name: "{{ openldap_packages_to_install }}"
+
+- name: Installing Pip modules
+  pip:
+    name: python-ldap
+
+- name: Copying DB_CONFIG
+  copy:
+    src: /usr/share/openldap-servers/DB_CONFIG.example
+    dest: /var/lib/ldap/DB_CONFIG
+    
+- name: Starting slapd
+  service: 
+    name: 'slapd'
+    state: started
+
+- name: Copying /etc/crontab
+  file:
+    src: files/etc/crontab
+    dest: /etc/crontab
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Creating directory /root/openldap
+  file:
+    path: /root/openldap
+    state: directory
+    mode: 0700
+
+- name: Creating templates
+  template:
+    src: 'templates{{item}}'
+    dest: '{{item}}'
+    owner: root
+    group: root
+    mode: 0700
+  with_items:
+    - /root/openldap/update_users.sh
+    - /root/openldap/configure_ldap.sh
+
+- name: Configuring slapd
+  shell: /root/openldap/configure_ldap.sh
+  
+- name: Make sure we have a parent entry for users
+  ldap_entry:
+    dn: cn=deployer,ou=People,{{RootDC}}'
+    objectClass:
+      - inetOrgPerson
+      - organizationalPerson
+      - person
+      - top
+    attributes:
+      cn: deployer
+      sn: deployer
+      displayName: User to deploy artifacts
+      employeeType: developer
+      mail: deployer@example.com
+      uid: deployer
+      userPassword: "{SSHA}tabyipcHzhwESzRaGA7oQ/SDoBZQOGND"
+    server_uri: ldap:///
+    bind_dn: 'cn=Manager,{{RootDC}}'
+    bind_pw: '{{ManagerPassword}}'
+
+- name: Enabling services
+  service:
+    name: '{{item}}'
+    state: restarted
+    enabled: yes
+  with_items:
+    - slapd
