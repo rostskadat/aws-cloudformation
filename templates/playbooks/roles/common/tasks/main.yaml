@@ -15,43 +15,24 @@
   yum:
     name: "{{ packages_to_install }}"
 
-- name: Creating template /etc/awslogs/awscli.conf
-  template:
-    src: templates/etc/awslogs/awscli.conf
-    dest: /etc/awslogs/awscli.conf
-    owner: root
-    group: root
-    mode: 0644
-
-- name: Creating template /etc/awslogs/awslogs.conf
-  template:
-    src: templates/etc/awslogs/awslogs.conf
-    dest: /etc/awslogs/awslogs.conf
-    owner: root
-    group: root
-    mode: 0644    
-
 - name: Creating directory /etc/cfn/hooks.d
   file:
     path: /etc/cfn/hooks.d
     state: directory
     mode: 0755
 
-- name: Creating template /etc/cfn/cfn-hup.conf
+- name: Creating templates
   template:
-    src: templates/etc/cfn/cfn-hup.conf
-    dest: /etc/cfn/cfn-hup.conf
+    src: 'templates{{item}}'
+    dest: '{{item}}'
     owner: root
     group: root
-    mode: 0644    
-
-- name: Creating template /etc/cfn/hooks.d/cfn-auto-reloader.conf
-  template:
-    src: templates/etc/cfn/hooks.d/cfn-auto-reloader.conf
-    dest: /etc/cfn/hooks.d/cfn-auto-reloader.conf
-    owner: root
-    group: root
-    mode: 0644    
+    mode: 0644
+  with_items:
+    - /etc/awslogs/awscli.conf
+    - /etc/awslogs/awslogs.conf
+    - /etc/cfn/cfn-hup.conf
+    - /etc/cfn/hooks.d/cfn-auto-reloader.conf
 
 - name: Creating template .bashrc 
   template:
@@ -106,26 +87,13 @@
 - name: Tagging root volume
   script: /root/tag_root_volume.sh {{Region}} {{StackName}}
 
-- name: Enabling awslogs service
+- name: Enabling services
   service:
-    name: awslogs
+    name: '{{item}}'
     state: started
     enabled: yes
-
-- name: Enabling cfn-hup service
-  service:
-    name: cfn-hup
-    state: started
-    enabled: yes
-
-- name: Enabling yum-cron service
-  service:
-    name: yum-cron
-    state: started
-    enabled: yes
-
-- name: Enabling chronyd service
-  service:
-    name: chronyd
-    state: started
-    enabled: yes
+  with_items:
+    - awslogs
+    - cfn-hup
+    - yum-cron
+    - chronyd
