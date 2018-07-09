@@ -1,0 +1,18 @@
+---
+#
+# FILE: config.yml
+#
+# DESCRIPTION: This file contains variable that are common to all the nodes of
+#   build infrastructure.
+#
+
+admin_email: admin@example.com
+admin_realname: Administrator
+
+config:
+  common:
+    smtp:
+      hostname: email-smtp.{{Region}}.amazonaws.com
+      port: 587
+      username: SmtpUsername
+      password: SmtpPassword
