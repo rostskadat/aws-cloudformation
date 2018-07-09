@@ -39,7 +39,6 @@ Resources:
             yum: 
               ansible: []
           files:
-            # The idea is to use ansible to provision this specific instance
             '/root/playbooks/group_vars/all.yaml':
               source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/playbooks/group_vars/all.yaml'
               mode: '000644'
@@ -50,12 +49,12 @@ Resources:
                 StackName: !Sub ${AWS::StackName}
                 LogGroup: !Sub ${AWS::StackName}
           commands:
-            '01_sync_playbooks': 
-              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks'
+            '01_get_playbook': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks  --exclude "group_vars/*"'
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
-            '03_ansible_playbook': 
-              command: 'sudo ansible-playbook --become /root/playbooks/playbook.yml'
+            '03_run_playbook': 
+              command: 'sudo ansible-playbook --become /root/playbooks/playbook.yml --extra-vars=@/root/playbooks/group_vars/openldap.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': 'BUILD-InstanceProfileEC2Instance'      

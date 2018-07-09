@@ -17,3 +17,4 @@
     - vars/config.yml
   roles:
     - common
+    - openldap
