@@ -1,0 +1,11 @@
+openldap_packages_to_install: 
+  - openldap
+  - openldap-clients
+  - openldap-servers
+  - python-devel 
+  - openldap-devel
+  - gcc
+
+RootDC: '{{RootDC}}'
+ManagerPassword: '{{ManagerPassword}}'
+LDAPUsersLdif: '{{LDAPUsersLdif}}'
