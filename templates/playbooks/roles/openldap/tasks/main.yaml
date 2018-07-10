@@ -23,14 +23,6 @@
     name: 'slapd'
     state: started
 
-- name: Copying /etc/crontab
-  file:
-    src: files/etc/crontab
-    dest: /etc/crontab
-    owner: root
-    group: root
-    mode: 0644
-
 - name: Creating directory /root/openldap
   file:
     path: /root/openldap
@@ -46,6 +38,13 @@
     mode: 0700
   with_items:
     - /root/openldap/update_users.sh
+
+- name: Scheduling cron for /root/openldap/update_users.sh
+  cron:
+    user: root
+    name: 'Update LDAP Users database'
+    minute: "5"
+    job: "/root/openldap/update_users.sh"
 
 - name: Bootstrapping directory
   ldap_attr:
