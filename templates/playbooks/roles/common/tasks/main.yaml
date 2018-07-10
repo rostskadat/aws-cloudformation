@@ -8,12 +8,18 @@
 #
 - name: Removing obsolete packages
   yum:
-    name: "{{ default_packages_to_remove }}"
+    name: 'ntp*'
     state: absent
 
 - name: Installing default packages
   yum:
-    name: "{{ default_packages_to_install }}"
+    name: '{{item}}'
+  with_items:
+    - wget
+    - htop
+    - awslogs
+    - yum-cron
+    - chrony
 
 - name: Creating directory /etc/cfn/hooks.d
   file:

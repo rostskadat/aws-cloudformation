@@ -1,0 +1,110 @@
+---
+- name: Removing obsolete packages
+  yum:
+    name: '{{item}}'
+    state: absent
+  with_items:
+    - java-1.7.0-openjdk
+
+- name: Installing default packages
+  yum:
+    name: '{{item}}'
+  with_items: 
+    - mysql56
+    - java-1.8.0-openjdk
+    - mysql-connector-java
+    - amazon-efs-utils
+
+- name: Adding JFrog repository
+  yum_repository:
+    name: jfrog
+    description: JFrog Artifactory repository
+    baseurl: https://bintray.com/jfrog/artifactory-rpms/rpm
+    
+- name: Mounting EFS
+  mount:
+    path: /mnt/application
+    src: '{{FileSystem}}'
+    fstype: efs
+    opts: tls
+    state: present
+    
+- name: Installing Artifactory     
+  yum:
+    name: jfrog-artifactory-oss
+
+- name: Templating /etc/opt/jfrog/artifactory/db.properties
+  template: 
+    src: 'templates{{item.src}}'
+    dest: '{{item.src}}'
+    owner: root
+    group: root
+    mode: '{{item.mode}}'
+  with_items:
+    - { src: /etc/opt/jfrog/artifactory/db.properties, mode: '0644' }
+    - { src: /root/artifactory/settings.yaml, mode: '0700' }
+
+- name: Copying /etc/opt/jfrog/artifactory/binarystore.xml
+  copy:
+    src: files/etc/opt/jfrog/artifactory/binarystore.xml
+    dest: /etc/opt/jfrog/artifactory/binarystore.xml
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Creating symlink to mysql-connector-java.jar
+  file:
+    src: /usr/share/java/mysql-connector-java.jar
+    dest: /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar
+    owner: root
+    group: root
+    state: link
+
+- name: Creating Artifactory db
+  mysql_db:
+    name: artifactory
+    state: present
+    login_host: '{{EndpointAddress}}'
+    login_port: '{{EndpointPort}}'
+    login_user: '{{DBAdminUsername}}'
+    login_password: '{{DBAdminPassword}}'
+
+- name: Chown /mnt/application
+  file: dest=/mnt/application owner=artifactory group=artifactory mode=u=rwX,g=rX,o=rX recurse=yes
+  
+- name: Configuring master key
+  shell: /root/artifactory/start_and_configure_master_key.sh
+  
+- name: Changing admin password
+  uri:
+    url: http://localhost:8081/artifactory/api/security/users/authorization/changePassword
+    method: POST
+    user: admin
+    password: password
+    body_format: json
+    body: '{ "userName":"admin", "oldPassword":"password", "newPassword1":"{{ArtifactoryAdminPassword}}", "newPassword2":"{{ArtifactoryAdminPassword}}"}'
+    force_basic_auth: yes
+    status_code: 201
+
+- name: Changing system settings
+  uri:
+    url: http://localhost:8081/artifactory/api/system/configuration
+    method: PATCH
+    user: admin
+    password: '{{ArtifactoryAdminPassword}}'
+    HEADER_Content-Type: 'application/yaml'
+    body: '{ "userName":"admin", "oldPassword":"password", "newPassword1":"{{ArtifactoryAdminPassword}}", "newPassword2":"{{ArtifactoryAdminPassword}}"}'
+    others:
+     src: /root/artifactory/settings.yaml
+    force_basic_auth: yes
+    status_code: 201
+
+- name: Enabling services
+  service:
+    name: '{{item}}'
+    state: restarted
+    enabled: yes
+  with_items:
+    - artifactory
+    
+  

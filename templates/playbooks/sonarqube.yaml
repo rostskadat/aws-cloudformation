@@ -1,0 +1,16 @@
+---
+#------------------------------------------------------------------------------
+#
+# FILE: sonarqube.yaml
+#
+# DESCRIPTION: Install Sonarqube
+#
+# ?> ansible-playbook sonarqube.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml
+#
+- hosts: all
+  gather_facts: True
+  vars_files: 
+    - vars/config.yml
+  roles:
+    - common
+    - sonarqube

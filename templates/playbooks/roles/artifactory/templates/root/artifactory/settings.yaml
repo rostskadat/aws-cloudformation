@@ -1,0 +1,28 @@
+security:
+  anonAccessEnabled: false
+  anonAccessToBuildInfosDisabled: true
+  ldapSettings:
+    OpenLDAP:
+      emailAttribute: mail
+      ldapPoisoningProtection: true
+      ldapUrl: 'ldap://{{DNSName}}:{{LDAPPort}}'
+      search:
+        managerDn: '{{ManagerDN}}'
+        managerPassword: '{{LDAPManagerPassword}}'
+        searchBase: 'ou=People,{{RootDC}}'
+        searchFilter: (uid={0})
+        searchSubTree: true
+      allowUserToAccessProfile: true
+      autoCreateUser: true
+      enabled: true
+localRepositories: 
+  'libs-releases-local': 
+    type: maven
+    includesPattern: '**/*'
+    handleReleases: true
+    handleSnapshots: false
+  'libs-snapshots-local': 
+    type: maven
+    includesPattern: '**/*'
+    handleReleases: false
+    handleSnapshots: true

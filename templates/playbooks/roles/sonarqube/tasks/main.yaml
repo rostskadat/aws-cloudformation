@@ -1,0 +1,99 @@
+---
+- name: Removing obsolete packages
+  yum:
+    name: '{{item}}'
+    state: absent
+  with_items:
+    - java-1.7.0-openjdk
+
+- name: Installing default packages
+  yum:
+    name: '{{item}}'
+  with_items:
+    - jq
+    - mysql56
+    - py-bcrypt
+    - java-1.8.0-openjdk
+    - amazon-efs-utils
+
+- name: Correct python version
+  alternatives:
+    name: python
+    path: /usr/bin/python2.6
+
+- name: Adding Sonar repository
+  yum_repository:
+    name: sonar
+    description: Sonar repository
+    baseurl: http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo
+    
+- name: Mounting EFS
+  mount:
+    path: /mnt/application
+    src: '{{FileSystem}}'
+    fstype: efs
+    opts: tls
+    state: present
+    
+- name: Installing Sonarqube     
+  yum:
+    name: sonar
+
+- name: Templating /etc/opt/jfrog/artifactory/db.properties
+  template: 
+    src: 'templates{{item.src}}'
+    dest: '{{item.src}}'
+    owner: root
+    group: root
+    mode: '{{item.mode}}'
+  with_items:
+    - { src: /opt/sonar/conf/sonar.properties, mode: '0644' }
+
+- name: Creating SonarQube db
+  mysql_db:
+    name: sonarqube
+    state: present
+    login_host: '{{EndpointAddress}}'
+    login_port: '{{EndpointPort}}'
+    login_user: '{{DBAdminUsername}}'
+    login_password: '{{DBAdminPassword}}'
+
+- name: Chown /mnt/application
+  file: dest=/mnt/application owner=artifactory group=artifactory mode=u=rwX,g=rX,o=rX recurse=yes
+  
+- name: Configuring master key
+  shell: /root/artifactory/start_and_configure_master_key.sh
+  
+- name: Changing admin password
+  uri:
+    url: http://localhost:8081/artifactory/api/security/users/authorization/changePassword
+    method: POST
+    user: admin
+    password: password
+    body_format: json
+    body: '{ "userName":"admin", "oldPassword":"password", "newPassword1":"{{ArtifactoryAdminPassword}}", "newPassword2":"{{ArtifactoryAdminPassword}}"}'
+    force_basic_auth: yes
+    status_code: 201
+
+- name: Changing system settings
+  uri:
+    url: http://localhost:8081/artifactory/api/system/configuration
+    method: PATCH
+    user: admin
+    password: '{{ArtifactoryAdminPassword}}'
+    HEADER_Content-Type: 'application/yaml'
+    body: '{ "userName":"admin", "oldPassword":"password", "newPassword1":"{{ArtifactoryAdminPassword}}", "newPassword2":"{{ArtifactoryAdminPassword}}"}'
+    others:
+     src: /root/artifactory/settings.yaml
+    force_basic_auth: yes
+    status_code: 201
+
+- name: Enabling services
+  service:
+    name: '{{item}}'
+    state: restarted
+    enabled: yes
+  with_items:
+    - artifactory
+    
+  

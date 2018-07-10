@@ -231,150 +231,37 @@ Resources:
             - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
-          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
-        Bootstrap: 
+          default: [ Install ] 
+        Install: 
           packages: 
             yum: 
-              wget: []
-              htop: []
-              awslogs: []
-              yum-cron: []
-          files: 
-            '/etc/awslogs/awscli.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                Region: !Sub ${AWS::Region}
-            '/etc/awslogs/awslogs.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                LogGroup: !Sub ${LogGroup}
-            '/etc/cfn/cfn-hup.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/home/ec2-user/.bashrc': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
-              mode: '000600'
-              owner: 'ec2-user'
-              group: 'ec2-user'
-              context:
-                StackName: !Sub ${AWS::StackName}
-            '/root/tag_root_volume.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_install_aws_inspector': 
-              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
-            '02_yum_cron_hourly.conf':
-              command: "sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf"
-            '03_yum_cron.conf':
-              command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
-            '04_tag_root_volume':
-              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
-            '05_remove_ntp':
-              command: 'sudo yum erase -y ntp*'
-            '06_install_chrnoy':
-              command: 'sudo yum install -y chrony'
-          services:
-            sysvinit:
-              awslogs:
-                enabled: true
-                ensureRunning: true
-                packages:
-                  yum:
-                  - awslogs
-                files:
-                - '/etc/awslogs/awslogs.conf'
-                - '/etc/awslogs/awscli.conf'
-              cfn-hup:
-                enabled: true
-                ensureRunning: true
-                files: 
-                  - /etc/cfn/cfn-hup.conf
-                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
-              yum-cron: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/yum/yum-cron.conf
-                  - /etc/yum/yum-cron-hourly.conf
-              chronyd: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/chrony.conf
-        BootstrapApplication:
-          packages:
-            yum: 
-              jq: []
-              postfix: []
-              policycoreutils-python: []
-              amazon-efs-utils: []
-              postgresql96-contrib: []
-              patch: []
-              expect: []
-          files: 
-            '/root/add_gitlab_repo.sh':
-              source: 'https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/create_fs.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_add_gitlab_repo':
-              command: 'sudo /root/add_gitlab_repo.sh'
-            '02_create_fs':
-              command: !Sub 'sudo /root/create_fs.sh ${FileSystem}'              
-          services:
-            sysvinit:
-              postfix: 
-                enabled: true
-                ensureRunning: true
-        InstallApplication: 
-          packages:
-            yum:
-              gitlab-ee: []
+              ansible: []
           files:
-            '/etc/gitlab/gitlab.rb':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/gitlab/gitlab.rb'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
+            '/root/playbooks/group_vars/stack.yaml':
+              content: !Sub |
+                Region: '${AWS::Region}'
+                StackName: '${AWS::StackName}'
+                LogGroup: '${AWS::StackName}'
+                ExternalUrl: '${LoadBalancer.DNSName}'
+                EndpointAddress: '{{EndpointAddress}}'
+                EndpointPort: '{{EndpointPort}}'
+                MasterUsername: '{{MasterUsername}}'
+                DBMasterPassword: '${DBMasterPassword}'
+                DNSName: '{{DNSName}}'
+                LDAPPort: '{{LDAPPort}}'
+                RootDC: '{{RootDC}}'
+                ManagerDN: '{{ManagerDN}}'
+                LDAPManagerPassword: '${LDAPManagerPassword}'
+              mode: '000600'
+              owner: root
+              group: root
               context:
-                ExternalUrl: 
-                  !Sub '${LoadBalancer.DNSName}'
                 EndpointAddress: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                 EndpointPort: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                 MasterUsername: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
-                DBMasterPassword: 
-                  !Sub '${DBMasterPassword}'
                 DNSName: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
                 LDAPPort: 
@@ -383,54 +270,13 @@ Resources:
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                 ManagerDN: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-                LDAPManagerPassword: 
-                  !Sub '${LDAPManagerPassword}'
-            '/root/gitlab/config.rb.patch': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/config.rb.patch'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/gitlab/patching_config.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/patching_config.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/gitlab/create_db.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/create_db.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/gitlab/configure.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/configure.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/gitlab/apply_settings.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/gitlab/apply_settings.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
           commands:
-            '01_patching_config': 
-              command: 'sudo /root/gitlab/patching_config.sh'
-            '02_create_db':
-              command: !Join
-                - ' '
-                - - 'sudo /root/gitlab/create_db.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
-                  - !Sub '${DBMasterPassword}'
-              test: 'sudo test ! -e /mnt/application/.application_configured'
-            '03_configure': 
-              command: !Sub 'sudo /root/gitlab/configure.sh "${GitlabRootEmail}" "${GitlabRootPassword}"'
-            '04_apply_settings': 
-              command: !Sub 'sudo /root/gitlab/apply_settings.sh "${GitlabRootPassword}"'
-              test: 'sudo test ! -e /mnt/application/.application_configured'
-            '98_application_configured':
-              command: 'sudo touch /mnt/application/.application_configured'
-            '99_gitlab_restart': 
-              command: 'sudo gitlab-ctl restart'
+            '01_get_playbook': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks  --exclude "group_vars/*.*"'
+            '02_set_host': 
+              command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
+            '03_run_playbook': 
+              command: 'sudo ansible-playbook /root/playbooks/gitlab.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
@@ -441,7 +287,7 @@ Resources:
       SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
         - !Ref SecurityGroupHealthCheck
-      UserData:
+      UserData: 
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
@@ -474,4 +320,3 @@ Outputs:
     Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
-      

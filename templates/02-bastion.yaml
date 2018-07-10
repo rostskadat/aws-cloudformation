@@ -139,98 +139,27 @@ Resources:
             - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
-          default: [ Bootstrap ] 
-        Bootstrap: 
+          default: [ Install ] 
+        Install: 
           packages: 
             yum: 
-              wget: []
-              htop: []
-              awslogs: []
-              yum-cron: []
-          files: 
-            '/etc/awslogs/awscli.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                Region: !Sub ${AWS::Region}
-            '/etc/awslogs/awslogs.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                LogGroup: !Sub ${LogGroup}
-            '/etc/cfn/cfn-hup.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/home/ec2-user/.bashrc': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
+              ansible: []
+          files:
+            '/root/playbooks/group_vars/stack.yaml':
+              content: !Sub |
+                Region: '${AWS::Region}'
+                StackName: '${AWS::StackName}'
+                LogGroup: '${AWS::StackName}'
               mode: '000600'
-              owner: 'ec2-user'
-              group: 'ec2-user'
-              context:
-                StackName: !Sub ${AWS::StackName}
-            '/root/tag_root_volume.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
+              owner: root
+              group: root
           commands:
-            '01_install_aws_inspector': 
-              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
-            '02_yum_cron_hourly.conf':
-              command: "sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf"
-            '03_yum_cron.conf':
-              command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
-            '04_tag_root_volume':
-              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
-            '05_remove_ntp':
-              command: 'sudo yum erase -y ntp*'
-            '06_install_chrnoy':
-              command: 'sudo yum install -y chrony'
-          services:
-            sysvinit:
-              awslogs:
-                enabled: true
-                ensureRunning: true
-                packages:
-                  yum:
-                  - awslogs
-                files:
-                - '/etc/awslogs/awslogs.conf'
-                - '/etc/awslogs/awscli.conf'
-              cfn-hup:
-                enabled: true
-                ensureRunning: true
-                files: 
-                  - /etc/cfn/cfn-hup.conf
-                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
-              yum-cron: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/yum/yum-cron.conf
-                  - /etc/yum/yum-cron-hourly.conf
-              chronyd: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/chrony.conf
+            '01_get_playbook': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks  --exclude "group_vars/*.*"'
+            '02_set_host': 
+              command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
+            '03_run_playbook': 
+              command: 'sudo ansible-playbook /root/playbooks/bastion.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      

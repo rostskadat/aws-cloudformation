@@ -1,0 +1,15 @@
+---
+#------------------------------------------------------------------------------
+#
+# FILE: bastion.yaml
+#
+# DESCRIPTION: Install Bastion
+#
+# ?> ansible-playbook bastion.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml
+#
+- hosts: all
+  gather_facts: True
+  vars_files: 
+    - vars/config.yml
+  roles:
+    - common

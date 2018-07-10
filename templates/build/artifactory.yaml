@@ -232,211 +232,38 @@ Resources:
             - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
-          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
-        Bootstrap: 
+          default: [ Install ] 
+        Install: 
           packages: 
             yum: 
-              wget: []
-              htop: []
-              awslogs: []
-              yum-cron: []
-          files: 
-            '/etc/awslogs/awscli.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                Region: !Sub ${AWS::Region}
-            '/etc/awslogs/awslogs.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                LogGroup: !Sub ${LogGroup}
-            '/etc/cfn/cfn-hup.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/home/ec2-user/.bashrc': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
-              mode: '000600'
-              owner: 'ec2-user'
-              group: 'ec2-user'
-              context:
-                StackName: !Sub ${AWS::StackName}
-            '/root/tag_root_volume.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_install_aws_inspector': 
-              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
-            '02_yum_cron_hourly.conf':
-              command: "sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf"
-            '03_yum_cron.conf':
-              command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
-            '04_tag_root_volume':
-              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
-            '05_remove_ntp':
-              command: 'sudo yum erase -y ntp*'
-            '06_install_chrnoy':
-              command: 'sudo yum install -y chrony'
-          services:
-            sysvinit:
-              awslogs:
-                enabled: true
-                ensureRunning: true
-                packages:
-                  yum:
-                  - awslogs
-                files:
-                - '/etc/awslogs/awslogs.conf'
-                - '/etc/awslogs/awscli.conf'
-              cfn-hup:
-                enabled: true
-                ensureRunning: true
-                files: 
-                  - /etc/cfn/cfn-hup.conf
-                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
-              yum-cron: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/yum/yum-cron.conf
-                  - /etc/yum/yum-cron-hourly.conf
-              chronyd: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/chrony.conf
-        BootstrapApplication:
-          packages:
-            yum: 
-              mysql56: []
-              java-1.8.0-openjdk: []
-              mysql-connector-java: []
-              amazon-efs-utils: []
-          files: 
-            '/etc/yum.repos.d/bintray-jfrog-artifactory-rpms.repo':
-              source: 'https://bintray.com/jfrog/artifactory-rpms/rpm'
-              mode: '000644'
-              owner: 'root'
-              group: 'root'
-            '/root/create_fs.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_remove_jdk7':
-              command: 'sudo yum remove -y java-1.7.0-openjdk'
-            '02_alternatives':
-              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
-            '03_create_fs':
-              command: !Sub 'sudo /root/create_fs.sh ${FileSystem}'              
-        InstallApplication: 
-          packages:
-            yum:
-              jfrog-artifactory-oss: []
+              ansible: []
           files:
-            '/etc/opt/jfrog/artifactory/binarystore.xml':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/opt/jfrog/artifactory/binarystore.xml'
-              mode: '000644'
-              owner: 'artifactory'
-              group: 'artifactory'
-            '/etc/opt/jfrog/artifactory/db.properties':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/opt/jfrog/artifactory/db.properties'
-              mode: '000644'
-              owner: 'artifactory'
-              group: 'artifactory'
-              context:
-                EndpointAddress: 
-                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                EndpointPort: 
-                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
-            '/root/artifactory/settings.yaml': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/settings.yaml'
+            '/root/playbooks/group_vars/stack.yaml':
+              content: !Sub |
+                Region: '${AWS::Region}'
+                StackName: '${AWS::StackName}'
+                LogGroup: '${AWS::StackName}'
+                RootDC: '${RootDC}'
+                ManagerPassword: '${ManagerPassword}'
+                LDAPUsersLdif: '${LDAPUsersLdif}'
+                FileSystem: '{{FileSystem}}'
+                EndpointAddress: '{{EndpointAddress}}'
+                EndpointPort: '{{EndpointPort}}'
+                DNSName: '{{DNSName}}'
+                LDAPPort: '{{LDAPPort}}'
+                RootDC: '{{RootDC}}'
+                ManagerDN: '{{ManagerDN}}'
+                LDAPManagerPassword: '{{LDAPManagerPassword}}'
               mode: '000600'
-              owner: 'root'
-              group: 'root'
-              context:
-                DNSName: 
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
-                LDAPPort: 
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-                RootDC: 
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                ManagerDN: 
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-                LDAPManagerPassword: 
-                  !Sub '${LDAPManagerPassword}'
-            '/root/artifactory/create_db.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/create_db.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/artifactory/change_password.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/change_password.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/artifactory/start_and_configure_master_key.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/start_and_configure_master_key.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/artifactory/apply_settings.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/artifactory/apply_settings.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
+              owner: root
+              group: root
           commands:
-            '01_create_symlink_for_mysql':
-              command: 'sudo ln -s /usr/share/java/mysql-connector-java.jar /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
-              test: 'test ! -e /var/opt/jfrog/artifactory/tomcat/lib/mysql-connector-java.jar'
-            '02_create_db':
-              command: !Join
-                - ' '
-                - - 'sudo /root/artifactory/create_db.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
-                  - !Sub '${DBMasterPassword}'
-              test: 'sudo test ! -e /mnt/application/.application_configured'
-            '04_chown':
-              command: 'sudo chown -R artifactory.artifactory /mnt/application'
-            '05_start_and_configure_master_key':
-              command: 'sudo /root/artifactory/start_and_configure_master_key.sh'
-            '06_change_password': 
-              command: !Sub 'sudo /root/artifactory/change_password.sh password ${ArtifactoryAdminPassword}'
-              test: 'sudo test ! -e /mnt/application/.application_configured'
-            '07_apply_settings': 
-              command: !Sub 'sudo /root/artifactory/apply_settings.sh ${ArtifactoryAdminPassword}'
-              test: 'sudo test ! -e /mnt/application/.application_configured'
-            '98_application_configured':
-              command: 'sudo touch /mnt/application/.application_configured'
-            '99_artifactory_restart': 
-              command: 'sudo service artifactory restart'
-          services: 
-            sysvinit: 
-              artifactory: 
-                enabled: true
-                ensureRunning: true
+            '01_get_playbook': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks  --exclude "group_vars/*.*"'
+            '02_set_host': 
+              command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
+            '03_run_playbook': 
+              command: 'sudo ansible-playbook /root/playbooks/artifactory.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      

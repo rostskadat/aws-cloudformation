@@ -1,0 +1,72 @@
+---
+- name: Removing obsolete packages
+  yum:
+    name: '{{item}}'
+    state: absent
+  with_items:
+    - java-1.7.0-openjdk
+
+- name: Installing default packages
+  yum:
+    name: '{{item}}'
+  with_items: 
+    - jq
+    - postfix
+    - policycoreutils-python
+    - amazon-efs-utils
+    - postgresql96-contrib
+    - patch
+    - expect
+
+- name: Adding Gitlab repository
+  yum_repository:
+    name: gitlab
+    description: Gitlab repository
+    baseurl: https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh
+    
+- name: Mounting EFS
+  mount:
+    path: /mnt/application
+    src: '{{FileSystem}}'
+    fstype: efs
+    opts: tls
+    state: present
+    
+- name: Installing Gitlab     
+  yum:
+    name: gitlab-ee
+
+- name: Templating /etc/gitlab/gitlab.rb
+  template: 
+    src: 'templates{{item.src}}'
+    dest: '{{item.src}}'
+    owner: root
+    group: root
+    mode: '{{item.mode}}'
+  with_items:
+    - { src: /etc/gitlab/gitlab.rb, mode: '0700' }
+
+- name: Patching config.rb...
+  patch: 
+    src: /root/gitlab/config.rb.patch 
+    dest: /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb 
+
+- name: Creating Gitlab db
+  postgresql_db:
+    name: gitlabhq_production
+    state: present
+    encoding: UTF-8
+    login_host: '{{EndpointAddress}}'
+    port: '{{EndpointPort}}'
+    login_user: '{{DBAdminUsername}}'
+    login_password: '{{DBAdminPassword}}'
+
+- name: Configuring Gitlab
+  shell: 'GITLAB_ROOT_EMAIL="{{GitlabRootEmail}}" GITLAB_ROOT_PASSWORD="{{GitlabRootPassword}}" gitlab-ctl reconfigure'
+  
+- name: Apply settings
+  shell: '/root/gitlab/apply_settings.sh "{{GitlabRootPassword}}"'
+
+- name: restarting gitlab  
+  shell: 'sudo gitlab-ctl restart'
+  

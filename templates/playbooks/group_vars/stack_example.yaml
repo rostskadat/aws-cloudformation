@@ -1,0 +1,35 @@
+---
+#
+# FILE: stack_example.yaml
+#
+# DESCRIPTION: this is a template that you can use to create the stack.yaml 
+#   used by the CloudFormation template in order to provision your stack.
+#   You should create a file with all the variable that come from the 
+#   CloudFormation stack and needed by your playbook. Each stack should 
+#   have a different set of variables. 
+#
+Region: {{Region}}
+StackName: {{StackName}}
+LogGroup: {{LogGroup}}
+
+# Artifactory
+FileSystem: '{{FileSystem}}'
+EndpointAddress: '{{EndpointAddress}}'
+EndpointPort: '{{EndpointPort}}'
+
+DNSName: '{{DNSName}}'
+LDAPPort: '{{LDAPPort}}'
+RootDC: '{{RootDC}}'
+ManagerDN: '{{ManagerDN}}'
+LDAPManagerPassword: '{{LDAPManagerPassword}}' 
+
+# OpenLDAP
+
+RootDC: '{{RootDC}}'
+ManagerPassword: '{{ManagerPassword}}'
+LDAPUsersLdif: '{{LDAPUsersLdif}}'
+
+ldap_auth: 
+  server_uri: ldap:///
+  bind_dn: 'cn=Manager,{{RootDC}}'
+  bind_pw: '{{ManagerPassword}}'

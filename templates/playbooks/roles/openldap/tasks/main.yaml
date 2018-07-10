@@ -7,7 +7,14 @@
 #
 - name: Installing OpenLDAP packages
   yum:
-    name: "{{ openldap_packages_to_install }}"
+    name: '{{items}}'
+  with_items:
+    - openldap
+    - openldap-clients
+    - openldap-servers
+    - python-devel 
+    - openldap-devel
+    - gcc
 
 - name: Installing Pip modules
   pip:
