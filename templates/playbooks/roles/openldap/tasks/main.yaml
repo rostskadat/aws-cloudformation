@@ -46,30 +46,17 @@
     mode: 0700
   with_items:
     - /root/openldap/update_users.sh
-    - /root/openldap/configure_ldap.sh
 
-- name: Configuring slapd
-  shell: /root/openldap/configure_ldap.sh
-  
-- name: Make sure we have a parent entry for users
-  ldap_entry:
-    dn: cn=deployer,ou=People,{{RootDC}}'
-    objectClass:
-      - inetOrgPerson
-      - organizationalPerson
-      - person
-      - top
-    attributes:
-      cn: deployer
-      sn: deployer
-      displayName: User to deploy artifacts
-      employeeType: developer
-      mail: deployer@example.com
-      uid: deployer
-      userPassword: "{SSHA}tabyipcHzhwESzRaGA7oQ/SDoBZQOGND"
-    server_uri: ldap:///
-    bind_dn: 'cn=Manager,{{RootDC}}'
-    bind_pw: '{{ManagerPassword}}'
+- name: Bootstrapping directory
+  ldap_attr:
+    dn: olcDatabase={2}bdb,cn=config
+    name: "{{ item.key }}"
+    values: "{{ item.value }}"
+    state: exact
+  with_dict:
+    olcSuffix: '{{RootDC}}'
+    olcRootDN: 'cn=Manager,{{RootDC}}'
+    olcRootPW: '{{ManagerPassword}}'
 
 - name: Enabling services
   service:
