@@ -42,7 +42,7 @@
 - name: Chown on /mnt/application
   file: dest=/mnt/application owner=sonar group=sonar mode=u=rwX,g=rX,o=rX recurse=yes 
 
-- name: Monitoring SonarQube logs
+- name: Monitoring application logs
   blockinfile: 
     path: /etc/awslogs/awslogs.conf
     block: |
@@ -71,20 +71,19 @@
   mysql_db:
     name: sonarqube
     state: present
-    login_host: '{{EndpointAddress}}'
-    login_port: '{{EndpointPort}}'
+    login_host: '{{DBEndpointAddress}}'
+    login_port: '{{DBEndpointPort}}'
     login_user: '{{DBAdminUsername}}'
     login_password: '{{DBAdminPassword}}'
 
 - name: Creating SonarQube DB User
-  mysql_db:
+  mysql_user:
     name: sonarqube
     password: sonarqube
-    host_all: yes
     state: present
     priv: 'sonarqube.*:ALL'
-    login_host: '{{EndpointAddress}}'
-    login_port: '{{EndpointPort}}'
+    login_host: '{{DBEndpointAddress}}'
+    login_port: '{{DBEndpointPort}}'
     login_user: '{{DBAdminUsername}}'
     login_password: '{{DBAdminPassword}}'
 
