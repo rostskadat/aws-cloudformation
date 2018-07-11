@@ -20,9 +20,11 @@ Metadata:
       Parameters:
       - S3ConfigBucketName
     - Label:
-        default: 'Notification Settings'
+        default: 'General Settings'
       Parameters:
       - AWSInspectorDLQEmail
+      - UseVPCFlowLog
+      - UseTopicHealth
       - HealthNotificationEmail
 Parameters: 
   S3ConfigBucketName:
@@ -36,12 +38,29 @@ Parameters:
     Default: 'admin@example.com'
     ConstraintDescription: 'must be a valid email address'
     AllowedPattern: '^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}$'
+  UseVPCFlowLog:
+    Description: 'Allow VPC Flow Logs for forensic analysis'
+    Type: String
+    Default: false
+    AllowedValues:
+    - true
+    - false
+  UseTopicHealth:
+    Description: 'Create a SNS to send alert about the health of teh platform'
+    Type: String
+    Default: false
+    AllowedValues:
+    - true
+    - false
   HealthNotificationEmail:
     Description: 'Enter an email address to send Health Notification to'
     Type: String
     Default: 'admin@example.com'
     ConstraintDescription: 'must be a valid email address'
     AllowedPattern: '^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}$'
+Conditions: 
+  HasFlowLog: !Equals [!Ref UseVPCFlowLog, 'true']
+  HasTopicHealth: !Equals [!Ref UseTopicHealth, 'true']
 Mappings:
   # cf. files/root/create_region_map.sh
   RegionMap:
@@ -253,7 +272,7 @@ Resources:
     Properties: 
       Code: 
         S3Bucket: !Ref S3ConfigBucketName
-        S3Key: 'files/lambda-auto-remediate.zip'
+        S3Key: 'stacks/files/lambda-auto-remediate.zip'
       DeadLetterConfig: 
         TargetArn: !Ref TopicDLQAWSInspector
       Description: 'Function to automatically solve AWS Inspector CVE Findings (https://aws.amazon.com/blogs/security/how-to-remediate-amazon-inspector-security-findings-automatically/)'
@@ -262,12 +281,12 @@ Resources:
       Runtime: python2.7
       Timeout: 60
       VpcConfig: 
-        SecurityGroupIds: 
+        SecurityGroupIds:  
           - !Ref SecurityGroupPrivate
-        SubnetIds:
+        SubnetIds: 
           - !Ref SubnetPrivateAZA
           - !Ref SubnetPrivateAZB
-      Tags:  
+      Tags: 
         - Key: PLATFORM
           Value: !Sub '${AWS::StackName}'
         - Key: Name
@@ -396,12 +415,36 @@ Resources:
   # Health Notification
   #
   TopicHealth: 
+    Condition: HasTopicHealth
     Type: 'AWS::SNS::Topic'
     Properties: 
       DisplayName: !Sub '${AWS::StackName} - Server health notification'
       Subscription:
         - Endpoint: !Ref HealthNotificationEmail
           Protocol: 'email'
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS FlowLog
+  #
+  # First let's create the different Subnets
+  #
+  LogGroupFlowLog: 
+    Condition: HasFlowLog
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Sub '${AWS::StackName}-FlowLog'
+      RetentionInDays: 7
+  
+  FlowLog: 
+    Condition: HasFlowLog
+    Type: 'AWS::EC2::FlowLog'
+    Properties:
+      DeliverLogsPermissionArn : !Ref RoleEC2Instance
+      LogGroupName : !Ref LogGroupFlowLog
+      ResourceId : !Ref Vpc
+      ResourceType : VPC
+      TrafficType : ACCEPT
 
   #----------------------------------------------------------------------------
   #

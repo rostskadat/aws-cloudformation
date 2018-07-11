@@ -1,0 +1,131 @@
+---
+- name: Removing obsolete packages
+  yum:
+    name: '{{item}}'
+    state: absent
+  with_items:
+    - java-1.7.0-openjdk
+
+- name: Installing default packages
+  yum:
+    name: '{{item}}'
+  with_items:
+    - jq
+    - mysql56
+    - py-bcrypt
+    - java-1.8.0-openjdk
+    - amazon-efs-utils
+
+- name: Correct python version
+  alternatives:
+    name: python
+    path: /usr/bin/python2.6
+
+- name: Adding Sonar repository
+  yum_repository:
+    name: sonar
+    description: Sonar repository
+    baseurl: http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo
+
+- name: Mounting EFS
+  mount:
+    path: /mnt/application
+    src: '{{FileSystem}}'
+    fstype: efs
+    opts: tls
+    state: present
+
+- name: Installing Sonarqube     
+  yum:
+    name: sonar
+
+- name: Chown on /mnt/application
+  file: dest=/mnt/application owner=sonar group=sonar mode=u=rwX,g=rX,o=rX recurse=yes 
+
+- name: Monitoring SonarQube logs
+  blockinfile: 
+    path: /etc/awslogs/awslogs.conf
+    block: |
+      [{{item}}]
+      file = {{item}}
+      log_stream_name = {instance_id}{{item}}
+      log_group_name = {{LogGroup}}
+  with_items:
+    - /opt/sonar/logs/access.log 
+    - /opt/sonar/logs/ce.log 
+    - /opt/sonar/logs/es.log 
+    - /opt/sonar/logs/sonar.log 
+    - /opt/sonar/logs/web.log
+
+- name: Templating /opt/sonar/conf/sonar.properties
+  template: 
+    src: 'templates{{item.src}}'
+    dest: '{{item.src}}'
+    owner: root
+    group: root
+    mode: '{{item.mode}}'
+  with_items:
+    - { src: /opt/sonar/conf/sonar.properties, mode: '0644' }
+
+- name: Creating SonarQube DB
+  mysql_db:
+    name: sonarqube
+    state: present
+    login_host: '{{EndpointAddress}}'
+    login_port: '{{EndpointPort}}'
+    login_user: '{{DBAdminUsername}}'
+    login_password: '{{DBAdminPassword}}'
+
+- name: Creating SonarQube DB User
+  mysql_db:
+    name: sonarqube
+    password: sonarqube
+    host_all: yes
+    state: present
+    priv: 'sonarqube.*:ALL'
+    login_host: '{{EndpointAddress}}'
+    login_port: '{{EndpointPort}}'
+    login_user: '{{DBAdminUsername}}'
+    login_password: '{{DBAdminPassword}}'
+
+- name: Chown /mnt/application
+  file: dest=/mnt/application owner=artifactory group=artifactory mode=u=rwX,g=rX,o=rX recurse=yes
+  
+- name: Adding user to gitlab
+  shell: '/root/sonarqube/add_user_to_gitlab.sh {{GitlabDNSName}} {{GitlabRootPassword}} {{SonarqubeAdminEmail}}'
+  notify: 
+
+- name: Installing plugins
+  uri:
+    url: http://localhost:9000/web_api/api/plugins/install
+    method: POST
+    body_format: form-urlencoded
+    body:
+      key: '{{item}}'
+    user: admin
+    password: '{{SonarQubeAdminPassword}}'
+    force_basic_auth: yes
+    status_code: 201
+  with_items:
+    - sonar-java-plugin
+    - sonar-ldap-plugin
+    - sonar-findbugs-plugin 
+    - sonar-gitlab-plugin
+    - sonar-auth-gitlab-plugin
+    - sonar-pmd-plugin
+    - qualinsight-sonarqube-badges
+    - sonar-sonargraph-plugin
+    - sonar-sonargraph-integration
+    - sonar-jdepend-plugin
+    - checkstyle-sonar-plugin
+
+
+- name: Enabling services
+  service:
+    name: '{{item}}'
+    state: restarted
+    enabled: yes
+  with_items:
+    - artifactory
+    
+  

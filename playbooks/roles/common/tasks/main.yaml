@@ -2,8 +2,8 @@
 #
 # FILE: main.yaml
 #
-# DESCRIPTION: This file contains the base configuration for all host in the 
-#   stack. It mainly configure the 
+# DESCRIPTION: This file contains the base configuration for all host in the
+#   stack.
 #
 #
 - name: Removing obsolete packages
@@ -40,13 +40,13 @@
     - /etc/cfn/cfn-hup.conf
     - /etc/cfn/hooks.d/cfn-auto-reloader.conf
 
-- name: Creating template .bashrc 
+- name: Creating template .bashrc
   template:
     src: templates/home/ec2-user/.bashrc
     dest: /home/ec2-user/.bashrc
     owner: root
     group: root
-    mode: 0644    
+    mode: 0644
 
 - name: Copying /root/tag_root_volume.sh
   copy:
@@ -83,7 +83,7 @@
     path: /etc/yum/yum-cron-hourly.conf
     regexp: '^(update_messages|download_updates|apply_updates).*'
     replace: '\1 = yes'
-    
+
 - name: Configuring yum-cron (update_messages|download_updates|apply_updates = yes)
   replace:
     path: /etc/yum/yum-cron.conf

@@ -2,17 +2,17 @@
 #
 # FILE: main.yaml
 #
-# DESCRIPTION: Install and configure the OpenLDAP 
+# DESCRIPTION: Install and configure the OpenLDAP
 #
 #
 - name: Installing OpenLDAP packages
   yum:
-    name: '{{items}}'
+    name: '{{item}}'
   with_items:
     - openldap
     - openldap-clients
     - openldap-servers
-    - python-devel 
+    - python-devel
     - openldap-devel
     - gcc
 
@@ -24,9 +24,9 @@
   copy:
     src: /usr/share/openldap-servers/DB_CONFIG.example
     dest: /var/lib/ldap/DB_CONFIG
-    
+
 - name: Starting slapd
-  service: 
+  service:
     name: 'slapd'
     state: started
 
@@ -49,8 +49,9 @@
 - name: Scheduling cron for /root/openldap/update_users.sh
   cron:
     user: root
+    minute: '5'
+    cron_file: 'update_users'
     name: 'Update LDAP Users database'
-    minute: "5"
     job: "/root/openldap/update_users.sh"
 
 - name: Bootstrapping directory
