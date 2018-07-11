@@ -15,11 +15,12 @@
     - py-bcrypt
     - java-1.8.0-openjdk
     - amazon-efs-utils
+    - MySQL-python27
 
-- name: Correct python version
-  alternatives:
-    name: python
-    path: /usr/bin/python2.6
+#- name: Correct python version
+#  alternatives:
+#    name: python
+#    path: /usr/bin/python2.6
 
 - name: Adding Sonar repository
   get_url:
@@ -42,8 +43,7 @@
     state: present
 
 - name: Installing Sonarqube     
-  yum:
-    name: sonar
+  yum: name=sonar
 
 - name: Chown on /mnt/application
   file: dest=/mnt/application owner=sonar group=sonar mode=u=rwX,g=rX,o=rX recurse=yes 
@@ -94,22 +94,23 @@
     login_user: '{{DBAdminUsername}}'
     login_password: '{{DBAdminPassword}}'
 
-- name: Chown /mnt/application
-  file: dest=/mnt/application owner=artifactory group=artifactory mode=u=rwX,g=rX,o=rX recurse=yes
-  
-- name: Adding user to gitlab
-  shell: '/root/sonarqube/add_user_to_gitlab.sh {{GitlabDNSName}} {{GitlabRootPassword}} {{SonarqubeAdminEmail}}'
+#- name: Adding user to gitlab
+#  shell: '/root/sonarqube/add_user_to_gitlab.sh {{GitlabDNSName}} {{GitlabRootPassword}} {{SonarqubeAdminEmail}}'
+
+- name: Starting Sonar
+  service: name=sonar state=started
 
 - name: Installing plugins
   uri:
     url: http://localhost:9000/web_api/api/plugins/install
     method: POST
+    body_format: json
     body:
       key: '{{item}}'
     user: admin
-    password: '{{SonarQubeAdminPassword}}'
+    password: '{{SonarqubeAdminPassword}}'
     force_basic_auth: yes
-    status_code: 201
+    status_code: 200
   with_items:
     - sonar-java-plugin
     - sonar-ldap-plugin
@@ -129,7 +130,7 @@
     method: POST
     body:
       login: 'admin'
-      password: '{{SonarQubeAdminPassword}}'
+      password: '{{SonarqubeAdminPassword}}'
       previousPassword: 'password'
     status_code: 200
 
@@ -139,6 +140,6 @@
     state: restarted
     enabled: yes
   with_items:
-    - artifactory
+    - sonar
     
   

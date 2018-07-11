@@ -253,192 +253,65 @@ Resources:
             - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
-          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
-        BootstrapApplication:
-          packages:
+          default: [ Install ] 
+        Install: 
+          packages: 
             yum: 
-              jq: []
-              mysql56: []
-              py-bcrypt: []
-              java-1.8.0-openjdk: []
-              amazon-efs-utils: []
-          files: 
-            '/etc/yum.repos.d/sonar.repo':
-              source: 'http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo'
-              mode: '000644'
-              owner: 'root'
-              group: 'root'
-            '/root/create_fs.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/monitor_log.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_alternatives_java':
-              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
-            '02_alternatives_python':
-              command: 'sudo /usr/sbin/alternatives --set python /usr/bin/python2.6'
-            '03_remove_jdk7':
-              command: 'sudo yum remove -y java-1.7.0-openjdk'
-            '04_create_fs':
-              command: !Sub 'sudo /root/create_fs.sh ${FileSystem}'              
-        InstallApplication: 
-          packages:
-            yum:
-              sonar: []
+              ansible: []
           files:
-            '/opt/sonar/conf/sonar.properties': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/sonarqube/opt/sonar/conf/sonar.properties'
+            '/root/playbooks/group_vars/stack.yaml':
+              content: !Sub |
+                Region: '${AWS::Region}'
+                StackName: '${AWS::StackName}'
+                LogGroup: '${AWS::StackName}'
+                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+
+                LDAPDNSName: '{{LDAPDNSName}}'
+                LDAPPort: '{{LDAPPort}}'
+                LDAPRootDC: '{{LDAPRootDC}}'
+                LDAPManagerDN: '{{LDAPManagerDN}}'
+                LDAPManagerPassword: '${LDAPManagerPassword}'
+
+                FileSystem: '${FileSystem}'
+                
+                DBEndpointAddress: '{{DBEndpointAddress}}'
+                DBEndpointPort: '{{DBEndpointPort}}'
+                DBAdminUsername: '{{DBAdminUsername}}'
+                DBAdminPassword: '${DBMasterPassword}'
+                
+                GitlabDNSName: '{{GitlabDNSName}}'
+                GitlabRootPassword: '${GitlabRootPassword}'
+                
+                SonarqubeAdminEmail: '${SonarqubeAdminEmail}'
+                SonarqubeAdminPassword: '${SonarqubeAdminPassword}'
+                
               mode: '000600'
-              owner: 'sonar'
-              group: 'sonar'
-              context: 
-                EndpointAddress: 
+              owner: root
+              group: root
+              context:
+                DBEndpointAddress: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                EndpointPort: 
+                DBEndpointPort: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
-                DNSName: 
+                DBAdminUsername: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+                LDAPDNSName: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
                 LDAPPort: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-                RootDC: 
+                LDAPRootDC: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                ManagerDN: 
+                LDAPManagerDN: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-                LDAPManagerPassword: 
-                  !Sub '${LDAPManagerPassword}'
                 GitlabDNSName: 
                   'Fn::ImportValue': !Sub '${ParentGitlabStack}-DNSName'
-            '/root/sonarqube/monitor_logs.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/sonarqube/monitor_logs.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/sonarqube/create_db.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/sonarqube/create_db.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/sonarqube/add_user_to_gitlab.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/sonarqube/add_user_to_gitlab.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/sonarqube/change_password.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/sonarqube/change_password.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/opt/sonar/extensions/plugins/sonar-java-plugin-5.5.0.14655.jar':
-              source: 'https://sonarsource.bintray.com/Distribution/sonar-java-plugin/sonar-java-plugin-5.5.0.14655.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/sonar-ldap-plugin-2.2.0.608.jar':
-              source: 'https://sonarsource.bintray.com/Distribution/sonar-ldap-plugin/sonar-ldap-plugin-2.2.0.608.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/checkstyle-sonar-plugin-4.10.1.jar':
-              source: 'https://github.com/checkstyle/sonar-checkstyle/releases/download/4.10.1/checkstyle-sonar-plugin-4.10.1.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/sonar-findbugs-plugin-3.7.0.jar':
-              source: 'https://github.com/spotbugs/sonar-findbugs/releases/download/3.7.0/sonar-findbugs-plugin-3.7.0.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/sonar-gitlab-plugin-3.0.1.jar':
-              source: 'https://github.com/gabrie-allaigre/sonar-gitlab-plugin/releases/download/3.0.1/sonar-gitlab-plugin-3.0.1.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/sonar-auth-gitlab-plugin-1.3.2.jar':
-              source: 'https://github.com/gabrie-allaigre/sonar-auth-gitlab-plugin/releases/download/1.3.2/sonar-auth-gitlab-plugin-1.3.2.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/sonar-pmd-plugin-2.6.jar':
-              source: 'https://github.com/SonarQubeCommunity/sonar-pmd/releases/download/2.6/sonar-pmd-plugin-2.6.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/qualinsight-sonarqube-badges-3.0.1.jar':
-              source: 'https://github.com/QualInsight/qualinsight-plugins-sonarqube-badges/releases/download/qualinsight-plugins-sonarqube-badges-3.0.1/qualinsight-sonarqube-badges-3.0.1.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/sonar-sonargraph-plugin-3.5.jar':
-              source: 'https://github.com/SonarQubeCommunity/sonar-sonargraph/releases/download/sonar-sonargraph-plugin-3.5/sonar-sonargraph-plugin-3.5.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/sonar-sonargraph-integration-2.1.5.jar':
-              source: 'https://github.com/sonargraph/sonar-sonargraph-integration/releases/download/Release-2.1.5/sonar-sonargraph-integration-2.1.5.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/opt/sonar/extensions/plugins/sonar-jdepend-plugin-1.1.1.jar':
-              source: 'https://github.com/willemsrb/sonar-jdepend-plugin/releases/download/sonar-jdepend-plugin-1.1.1/sonar-jdepend-plugin-1.1.1.jar'
-              mode: '000644'
-              owner: 'sonar'
-              group: 'sonar'
-            '/etc/limits.conf':
-              # Taken from https://docs.sonarqube.org/display/SONAR/Requirements#Requirements-Linux 
-              content: !Sub |
-                sonarqube   -   nofile   65536
-                sonarqube   -   nproc    2048
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
           commands:
-            '01_chown':
-              command: 'sudo chown -R sonar.sonar /mnt/application'
-            '02_monitor_logs':
-              command: !Sub 'sudo /root/sonarqube/monitor_logs.sh ${LogGroup}'
-            '03_sonarqube_create_db':
-              command: !Join
-                - ' '
-                - - 'sudo /root/sonarqube/create_db.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
-                  - !Sub '${DBMasterPassword}'
-              test: 'sudo test ! -e /mnt/application/.application_configured'
-            '04sonarqube_add_user_to_gitlab':
-              command: !Join
-                - ' '
-                - - 'sudo /root/sonarqube/add_user_to_gitlab.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentGitlabStack}-DNSName'
-                  - !Sub '${GitlabRootPassword}'
-                  - !Sub '${SonarqubeAdminEmail}'
-            '05_sonarqube_restart':
-              command: 'sudo service sonar restart'
-            '06_sonarqube_change_password':
-              command: !Join
-                - ' '
-                - - 'sudo /root/sonarqube/change_password.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                  - 'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
-                  - !Sub '${SonarqubeAdminPassword}'
-              test: 'sudo test ! -e /mnt/application/.application_configured'
-            '98_application_configured':
-              command: 'sudo touch /mnt/application/.application_configured'
-            '99_sonarqube_start':
-              command: 'sudo service sonar restart'
-          services: 
-            sysvinit: 
-              sonar: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /opt/sonar/conf/sonar.properties
+            '01_get_playbook': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
+            '02_set_host': 
+              command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
+            '03_run_playbook': 
+              command: 'sudo ansible-playbook /root/playbooks/sonarqube.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
@@ -456,7 +329,7 @@ Resources:
           yum update -y
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+          /opt/aws/bin/cfn-signal -e 0   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
