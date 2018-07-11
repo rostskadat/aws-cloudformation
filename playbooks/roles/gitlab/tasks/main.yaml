@@ -16,13 +16,20 @@
     - amazon-efs-utils
     - postgresql96-contrib
     - patch
-    - expect
+    
+- name: Install pip modules
+  pip:
+    name: psycopg2-binary
+
+- name: Downloading Gitlab repository
+  get_url:
+    url: https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh
+    dest: /root/gitlab-ee.repo.sh
+    mode: 700
 
 - name: Adding Gitlab repository
-  yum_repository:
-    name: gitlab
-    description: Gitlab repository
-    baseurl: https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh
+  shell: /root/gitlab-ee.repo.sh
+  creates: /etc/yum.repos.d/gitlab_gitlab-ee.repo
     
 - name: Mounting EFS
   mount:
@@ -46,27 +53,63 @@
   with_items:
     - { src: /etc/gitlab/gitlab.rb, mode: '0700' }
 
+- name: Copying /root/config.rb.patch
+  copy:
+    src: files/root/config.rb.patch
+    dest: /root/config.rb.patch
+    owner: root
+    group: root
+    mode: 0644
+
 - name: Patching config.rb...
   patch: 
-    src: /root/gitlab/config.rb.patch 
+    src: /root/config.rb.patch
     dest: /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb 
-
-- name: Creating Gitlab db
-  postgresql_db:
-    name: gitlabhq_production
-    state: present
-    encoding: UTF-8
-    login_host: '{{EndpointAddress}}'
-    port: '{{EndpointPort}}'
-    login_user: '{{DBAdminUsername}}'
-    login_password: '{{DBAdminPassword}}'
 
 - name: Configuring Gitlab
   shell: 'GITLAB_ROOT_EMAIL="{{GitlabRootEmail}}" GITLAB_ROOT_PASSWORD="{{GitlabRootPassword}}" gitlab-ctl reconfigure'
-  
-- name: Apply settings
-  shell: '/root/gitlab/apply_settings.sh "{{GitlabRootPassword}}"'
+
+- name: Obtaining token
+  uri:
+    url: http://localhost:80/oauth/token
+    method: POST
+    body_format: json
+    body:
+      grant_type: password
+      username: root
+      password: '{{GitlabRootPassword}}'
+    status_code: 200
+  register: response
+
+- set_fact:
+    token: "{{ response.json.access_token }}"
+
+- name: Changing settings
+  uri:
+    url: 'http://localhost:80/api/v4/application/settings?{{item.key}}={{item.value}}'
+    method: PUT
+    headers:
+      Authorization: 'Bearer {{token}}'
+    status_code: 200
+  with_items:
+    - { key: 'signup_enabled', value: false }
+    - { key: 'default_project_visibility', value: 'public' }
+    - { key: 'email_author_in_body', value: true }
+    - { key: 'gravatar_enabled', value: false }
+    - { key: 'help_page_hide_commercial_content', value: true }
+    - { key: 'html_emails_enabled', value: true }
+
+- name: Revoking token
+  uri:
+    url: 'http://localhost:80/oauth/revoke'
+    method: POST
+    headers:
+      Authorization: 'Bearer {{token}}'
+    body_format: json
+    body:
+      token: '{{token}}'
+    status_code: -1
 
 - name: restarting gitlab  
-  shell: 'sudo gitlab-ctl restart'
+  shell: 'gitlab-ctl restart'
   
