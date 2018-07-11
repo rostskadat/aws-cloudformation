@@ -114,7 +114,7 @@
     body_format: json
     body:
       token: '{{token}}'
-    status_code: -1
+    status_code: 200
 
 - name: restarting gitlab  
   shell: 'gitlab-ctl restart'
