@@ -243,23 +243,43 @@ Resources:
                 Region: '${AWS::Region}'
                 StackName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
-                RootDC: '${RootDC}'
-                ManagerPassword: '${ManagerPassword}'
-                LDAPUsersLdif: '${LDAPUsersLdif}'
-                FileSystem: '{{FileSystem}}'
-                EndpointAddress: '{{EndpointAddress}}'
-                EndpointPort: '{{EndpointPort}}'
-                DNSName: '{{DNSName}}'
+                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+
+                LDAPDNSName: '{{LDAPDNSName}}'
                 LDAPPort: '{{LDAPPort}}'
-                RootDC: '{{RootDC}}'
-                ManagerDN: '{{ManagerDN}}'
-                LDAPManagerPassword: '{{LDAPManagerPassword}}'
+                LDAPRootDC: '{{LDAPRootDC}}'
+                LDAPManagerDN: '{{LDAPManagerDN}}'
+                LDAPManagerPassword: '${LDAPManagerPassword}'
+
+                FileSystem: '${FileSystem}'
+                
+                DBEndpointAddress: '{{DBEndpointAddress}}'
+                DBEndpointPort: '{{DBEndpointPort}}'
+                DBAdminUsername: '{{DBAdminUsername}}'
+                DBAdminPassword: '${DBMasterPassword}'
+                
+                ArtifactoryAdminPassword: '${ArtifactoryAdminPassword}'
+              context:
+                LDAPDNSName:
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
+                LDAPPort:
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+                LDAPRootDC:
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                LDAPManagerDN:
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                DBEndpointAddress: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                DBEndpointPort: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+                DBAdminUsername: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
               mode: '000600'
               owner: root
               group: root
           commands:
             '01_get_playbook': 
-              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks  --exclude "group_vars/*.*"'
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 
