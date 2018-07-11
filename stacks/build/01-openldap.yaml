@@ -188,6 +188,8 @@ Resources:
                 Region: '${AWS::Region}'
                 StackName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
+                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+                
                 RootDC: '${RootDC}'
                 ManagerPassword: '${ManagerPassword}'
                 LDAPUsersLdif: '${LDAPUsersLdif}'
@@ -196,7 +198,7 @@ Resources:
               group: root
           commands:
             '01_get_playbook': 
-              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks  --exclude "group_vars/*.*"'
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 
