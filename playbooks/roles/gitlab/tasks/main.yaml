@@ -30,7 +30,13 @@
 - name: Adding Gitlab repository
   shell: /root/gitlab-ee.repo.sh
   creates: /etc/yum.repos.d/gitlab_gitlab-ee.repo
-    
+
+- name: Creating directory /mnt/application
+  file:
+    path: /mnt/application
+    state: directory
+    mode: 0755
+
 - name: Mounting EFS
   mount:
     path: /mnt/application
