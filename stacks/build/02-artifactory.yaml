@@ -301,8 +301,7 @@ Resources:
           yum update -y
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-          # TODO: change the signal to $? 
-          /opt/aws/bin/cfn-signal -e 0   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
