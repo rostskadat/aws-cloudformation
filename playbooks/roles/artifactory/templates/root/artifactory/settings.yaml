@@ -5,11 +5,11 @@ security:
     OpenLDAP:
       emailAttribute: mail
       ldapPoisoningProtection: true
-      ldapUrl: 'ldap://{{DNSName}}:{{LDAPPort}}'
+      ldapUrl: 'ldap://{{LDAPDNSName}}:{{LDAPPort}}'
       search:
-        managerDn: '{{ManagerDN}}'
+        managerDn: '{{LDAPManagerDN}}'
         managerPassword: '{{LDAPManagerPassword}}'
-        searchBase: 'ou=People,{{RootDC}}'
+        searchBase: 'ou=People,{{LDAPRootDC}}'
         searchFilter: (uid={0})
         searchSubTree: true
       allowUserToAccessProfile: true
