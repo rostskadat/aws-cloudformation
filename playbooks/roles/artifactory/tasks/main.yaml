@@ -1,37 +1,68 @@
 ---
 - name: Removing obsolete packages
-  yum:
-    name: '{{item}}'
-    state: absent
+  yum: name='{{item}}' state=absent
   with_items:
     - java-1.7.0-openjdk
 
 - name: Installing default packages
-  yum:
-    name: '{{item}}'
+  yum: name='{{item}}'
   with_items: 
     - mysql56
     - java-1.8.0-openjdk
     - mysql-connector-java
     - amazon-efs-utils
+    - MySQL-python27
 
 - name: Adding JFrog repository
-  yum_repository:
-    name: jfrog
-    description: JFrog Artifactory repository
-    baseurl: https://bintray.com/jfrog/artifactory-rpms/rpm
-    
+  get_url:
+    url: https://bintray.com/jfrog/artifactory-rpms/rpm
+    dest: /etc/yum.repos.d/jfrog.repo
+    mode: 644
+
+- name: Creating directory /mnt/application
+  file:
+    path: /mnt/application
+    state: directory
+    mode: 0755
+
 - name: Mounting EFS
   mount:
     path: /mnt/application
     src: '{{FileSystem}}'
     fstype: efs
     opts: tls
-    state: present
-    
+    state: mounted
+
+#
+# TODO: This only changes the last block!!!
+#
+- name: Monitoring application logs
+  blockinfile: 
+    path: /etc/awslogs/awslogs.conf
+    block: |
+      [{{item}}]
+      file = {{item}}
+      log_stream_name = {instance_id}{{item}}
+      log_group_name = {{LogGroup}}
+  with_items:
+    - /var/opt/jfrog/artifactory/logs/access.log
+    - /var/opt/jfrog/artifactory/logs/artifactory.log
+    - /var/opt/jfrog/artifactory/logs/catalina/catalina.out
+    - /var/opt/jfrog/artifactory/logs/event.log
+    - /var/opt/jfrog/artifactory/logs/import.export.log
+    - /var/opt/jfrog/artifactory/logs/request.log
+    - /var/opt/jfrog/artifactory/logs/request_trace.log
+    - /var/opt/jfrog/artifactory/logs/sha256_migration.log
+
 - name: Installing Artifactory     
   yum:
     name: jfrog-artifactory-oss
+
+- name: Creating directory /mnt/application
+  file:
+    path: /root/artifactory
+    state: directory
+    mode: 0700
 
 - name: Templating /etc/opt/jfrog/artifactory/db.properties
   template: 
@@ -60,21 +91,51 @@
     group: root
     state: link
 
-- name: Creating Artifactory db
+- name: Creating Artifactory DB
   mysql_db:
     name: artifactory
     state: present
-    login_host: '{{EndpointAddress}}'
-    login_port: '{{EndpointPort}}'
+    login_host: '{{DBEndpointAddress}}'
+    login_port: '{{DBEndpointPort}}'
+    login_user: '{{DBAdminUsername}}'
+    login_password: '{{DBAdminPassword}}'
+
+- name: Creating Artifactory DB User
+  mysql_user:
+    name: artifactory
+    password: artifactory
+    host: '%'
+    state: present
+    priv: 'artifactory.*:ALL'
+    login_host: '{{DBEndpointAddress}}'
+    login_port: '{{DBEndpointPort}}'
     login_user: '{{DBAdminUsername}}'
     login_password: '{{DBAdminPassword}}'
 
 - name: Chown /mnt/application
   file: dest=/mnt/application owner=artifactory group=artifactory mode=u=rwX,g=rX,o=rX recurse=yes
-  
-- name: Configuring master key
-  shell: /root/artifactory/start_and_configure_master_key.sh
-  
+
+- name: Check previous installation
+  stat: path=/mnt/application/.application_configured
+  register: stat_result
+
+- name: Creating directory /etc/opt/jfrog/artifactory/security
+  file: dest=/etc/opt/jfrog/artifactory/security owner=artifactory group=artifactory mode=u=rwX,g=rX,o=rX state=directory
+
+- name: Restoring master.key
+  copy: src=/mnt/application/master.key dest=/etc/opt/jfrog/artifactory/security/master.key mode=600 owner=artifactory group=artifactory
+  when: stat_result.stat.exists == True 
+
+- name: Starting Artifactory
+  service: name=artifactory state=started
+
+- name: Wait for Artifactory...
+  wait_for: path=/etc/opt/jfrog/artifactory/security/master.key
+
+- name: Backing up master.key
+  copy: src=/etc/opt/jfrog/artifactory/security/master.key dest=/mnt/application/master.key mode=600 owner=artifactory group=artifactory
+  when: stat_result.stat.exists == False 
+
 - name: Changing admin password
   uri:
     url: http://localhost:8081/artifactory/api/security/users/authorization/changePassword
@@ -84,7 +145,8 @@
     body_format: json
     body: '{ "userName":"admin", "oldPassword":"password", "newPassword1":"{{ArtifactoryAdminPassword}}", "newPassword2":"{{ArtifactoryAdminPassword}}"}'
     force_basic_auth: yes
-    status_code: 201
+    status_code: 200
+  when: stat_result.stat.exists == False 
 
 - name: Changing system settings
   uri:
@@ -92,17 +154,21 @@
     method: PATCH
     user: admin
     password: '{{ArtifactoryAdminPassword}}'
-    HEADER_Content-Type: 'application/yaml'
-    body: '{ "userName":"admin", "oldPassword":"password", "newPassword1":"{{ArtifactoryAdminPassword}}", "newPassword2":"{{ArtifactoryAdminPassword}}"}'
-    others:
-     src: /root/artifactory/settings.yaml
+    headers:
+      Content-Type: 'application/yaml'
+    body: "{{lookup('file', '/root/artifactory/settings.yaml')}}"
     force_basic_auth: yes
-    status_code: 201
+    status_code: 200
+  when: stat_result.stat.exists == False 
+
+- name: Recording installation
+  file: path=/mnt/application/.application_configured state=touch mode='u=rw,g=r,o=r'  
+  when: stat_result.stat.exists == False 
 
 - name: Enabling services
   service:
     name: '{{item}}'
-    state: restarted
+    state: started
     enabled: yes
   with_items:
     - artifactory
