@@ -242,37 +242,46 @@ Resources:
                 Region: '${AWS::Region}'
                 StackName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
-                ExternalUrl: '${LoadBalancer.DNSName}'
-                EndpointAddress: '{{EndpointAddress}}'
-                EndpointPort: '{{EndpointPort}}'
-                MasterUsername: '{{MasterUsername}}'
-                DBMasterPassword: '${DBMasterPassword}'
-                DNSName: '{{DNSName}}'
+                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+
+                LDAPDNSName: '{{LDAPDNSName}}'
                 LDAPPort: '{{LDAPPort}}'
-                RootDC: '{{RootDC}}'
-                ManagerDN: '{{ManagerDN}}'
+                LDAPRootDC: '{{LDAPRootDC}}'
+                LDAPManagerDN: '{{LDAPManagerDN}}'
                 LDAPManagerPassword: '${LDAPManagerPassword}'
+
+                FileSystem: '${FileSystem}'
+                
+                DBEndpointAddress: '{{DBEndpointAddress}}'
+                DBEndpointPort: '{{DBEndpointPort}}'
+                DBAdminUsername: '{{DBAdminUsername}}'
+                DBAdminPassword: '${DBMasterPassword}'
+                
+                ExternalUrl: '${LoadBalancer.DNSName}'
+
+                GitlabRootEmail: '${GitlabRootEmail}'
+                GitlabRootPassword: '${GitlabRootPassword}'
               mode: '000600'
               owner: root
               group: root
               context:
-                EndpointAddress: 
+                DBEndpointAddress: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                EndpointPort: 
+                DBEndpointPort: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
-                MasterUsername: 
+                DBAdminUsername: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
-                DNSName: 
+                LDAPDNSName: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
                 LDAPPort: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-                RootDC: 
+                LDAPRootDC: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                ManagerDN: 
+                LDAPManagerDN: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
           commands:
             '01_get_playbook': 
-              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks  --exclude "group_vars/*.*"'
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 
