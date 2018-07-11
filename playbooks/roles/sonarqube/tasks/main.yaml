@@ -22,10 +22,16 @@
     path: /usr/bin/python2.6
 
 - name: Adding Sonar repository
-  yum_repository:
-    name: sonar
-    description: Sonar repository
-    baseurl: http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo
+  get_url:
+    url: http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo
+    dest: /etc/yum.repos.d/sonar.repo
+    mode: 644
+
+- name: Creating directory /mnt/application
+  file:
+    path: /mnt/application
+    state: directory
+    mode: 0755
 
 - name: Mounting EFS
   mount:
@@ -80,6 +86,7 @@
   mysql_user:
     name: sonarqube
     password: sonarqube
+    host: '%'
     state: present
     priv: 'sonarqube.*:ALL'
     login_host: '{{DBEndpointAddress}}'
@@ -92,13 +99,11 @@
   
 - name: Adding user to gitlab
   shell: '/root/sonarqube/add_user_to_gitlab.sh {{GitlabDNSName}} {{GitlabRootPassword}} {{SonarqubeAdminEmail}}'
-  notify: 
 
 - name: Installing plugins
   uri:
     url: http://localhost:9000/web_api/api/plugins/install
     method: POST
-    body_format: form-urlencoded
     body:
       key: '{{item}}'
     user: admin
@@ -118,6 +123,15 @@
     - sonar-jdepend-plugin
     - checkstyle-sonar-plugin
 
+- name: Changing password
+  uri:
+    url: http://localhost:9000/web_api/api/users/change_password
+    method: POST
+    body:
+      login: 'admin'
+      password: '{{SonarQubeAdminPassword}}'
+      previousPassword: 'password'
+    status_code: 200
 
 - name: Enabling services
   service:
