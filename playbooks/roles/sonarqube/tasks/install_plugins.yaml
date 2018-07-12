@@ -10,5 +10,5 @@
     user: admin
     password: '{{current_password}}'
     force_basic_auth: yes
-    status_code: 204,400
+    status_code: 204
   when: plugin_installed.stdout == '0'
