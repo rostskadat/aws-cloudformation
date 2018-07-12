@@ -1,0 +1,14 @@
+---
+- name: Checking if plugin {{plugin}} is installed
+  shell: 'echo $(cat /tmp/installed_plugins.txt | grep -c {{plugin}})'
+  register: plugin_installed
+
+- name: Installing plugin '{{plugin}}'
+  uri:
+    url: 'http://localhost:9000/api/plugins/install?key={{plugin}}'
+    method: POST
+    user: admin
+    password: '{{current_password}}'
+    force_basic_auth: yes
+    status_code: 204,400
+  when: plugin_installed.stdout == '0'

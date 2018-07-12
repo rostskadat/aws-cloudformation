@@ -17,11 +17,6 @@
     - amazon-efs-utils
     - MySQL-python27
 
-#- name: Correct python version
-#  alternatives:
-#    name: python
-#    path: /usr/bin/python2.6
-
 - name: Adding Sonar repository
   get_url:
     url: http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo
@@ -29,24 +24,10 @@
     mode: 644
 
 - name: Creating directory /mnt/application
-  file:
-    path: /mnt/application
-    state: directory
-    mode: 0755
+  file: path=/mnt/application state=directory mode=0755
 
 - name: Mounting EFS
-  mount:
-    path: /mnt/application
-    src: '{{FileSystem}}'
-    fstype: efs
-    opts: tls
-    state: present
-
-- name: Installing Sonarqube     
-  yum: name=sonar
-
-- name: Chown on /mnt/application
-  file: dest=/mnt/application owner=sonar group=sonar mode=u=rwX,g=rX,o=rX recurse=yes 
+  mount: path=/mnt/application src='{{FileSystem}}' fstype=efs opts=tls state=present
 
 - name: Monitoring application logs
   blockinfile: 
@@ -63,15 +44,11 @@
     - /opt/sonar/logs/sonar.log 
     - /opt/sonar/logs/web.log
 
-- name: Templating /opt/sonar/conf/sonar.properties
-  template: 
-    src: 'templates{{item.src}}'
-    dest: '{{item.src}}'
-    owner: root
-    group: root
-    mode: '{{item.mode}}'
-  with_items:
-    - { src: /opt/sonar/conf/sonar.properties, mode: '0644' }
+- name: Installing Sonarqube     
+  yum: name=sonar
+
+- name: Chown on /mnt/application
+  file: dest=/mnt/application owner=sonar group=sonar mode=u=rwX,g=rX,o=rX recurse=yes 
 
 - name: Creating SonarQube DB
   mysql_db:
@@ -94,51 +71,128 @@
     login_user: '{{DBAdminUsername}}'
     login_password: '{{DBAdminPassword}}'
 
+- name: Templating /opt/sonar/conf/sonar.properties
+  template: 
+    src: 'templates{{item.src}}'
+    dest: '{{item.src}}'
+    owner: sonar
+    group: sonar
+    mode: '{{item.mode}}'
+  with_items:
+    - { src: /opt/sonar/conf/sonar.properties, mode: '0600' }
+
 #- name: Adding user to gitlab
 #  shell: '/root/sonarqube/add_user_to_gitlab.sh {{GitlabDNSName}} {{GitlabRootPassword}} {{SonarqubeAdminEmail}}'
 
 - name: Starting Sonar
   service: name=sonar state=started
 
+- name: Validating admin credentials
+  block:
+    - name: Validating admin credentials
+      uri: url=http://localhost:9000/api/authentication/validate user=admin password=admin force_basic_auth=yes
+      register: response
+      until: 
+        - response.status == 200
+        - response.json is defined
+      retries: 10
+      delay: 6
+    - name: Settings default credentials 
+      set_fact: current_password='admin'
+      when: response.json.valid == true
+    - name: Settings final credentials 
+      set_fact: current_password='{{SonarqubeAdminPassword}}'
+      when: response.json.valid == false
+
+- name: Listing installed plugins
+  block:
+    - uri:
+        url: 'http://localhost:9000/api/plugins/installed'
+        user: admin
+        password: '{{current_password}}'
+        force_basic_auth: yes
+        status_code: 200
+      register: installed_plugins
+    - name: Saving installed_plugins.json
+      copy: content='{{installed_plugins.json}}' dest=/tmp/installed_plugins.json
+    - name: Filtering keys
+      shell: cat /tmp/installed_plugins.json | jq -r '.plugins[].key' > /tmp/installed_plugins.txt
+
 - name: Installing plugins
-  uri:
-    url: http://localhost:9000/web_api/api/plugins/install
-    method: POST
-    body_format: json
-    body:
-      key: '{{item}}'
-    user: admin
-    password: '{{SonarqubeAdminPassword}}'
-    force_basic_auth: yes
-    status_code: 200
+  include_tasks:  install_plugins.yaml
   with_items:
-    - sonar-java-plugin
-    - sonar-ldap-plugin
-    - sonar-findbugs-plugin 
-    - sonar-gitlab-plugin
-    - sonar-auth-gitlab-plugin
-    - sonar-pmd-plugin
-    - qualinsight-sonarqube-badges
-    - sonar-sonargraph-plugin
-    - sonar-sonargraph-integration
-    - sonar-jdepend-plugin
-    - checkstyle-sonar-plugin
+    - checkstyle
+    - cssfamily
+    - findbugs
+    - gitlab
+    - go
+    - groovy
+    - issueresolver
+    - java
+    - javascript
+    - jdepend
+    - l10nes
+    - ldap
+    - php
+    - pmd
+    - python
+    - scmgit
+    - smells
+    - softvis3d
+    - Sonargraph
+    - sonargraphintegration
+    - status
+    - web
+    - xanitizer
+    - xml
+  loop_control:
+    loop_var: plugin
+
+- name: Restarting Sonar
+  service: name=sonar state=restarted
+
+- name: Waiting for Sonar
+  uri: url=http://localhost:9000/api/authentication/validate user=admin password='{{current_password}}' force_basic_auth=yes
+  register: wait
+  until: 
+    - wait.status == 200
+    - wait.json is defined
+  retries: 60
+  delay: 1 
+
+- name: Apply configuration settings
+  uri:
+    url: 'http://localhost:9000/api/settings/set?key={{item.key}}&value={{item.value}}'
+    method: POST
+    user: admin
+    password: '{{current_password}}'
+    force_basic_auth: yes
+    status_code: 204,400
+  with_items:
+    - { key: 'sonar.gitlab.url',                value: 'http://{{GitlabDNSName}}' }
+    - { key: 'sonar.gitlab.ignore_certificate', value: 'true' }
+    - { key: 'sonar.gitlab.user_token',         value: 'gitlabSonarqubeToken' }
+    - { key: 'sonar.gitlab.ping_user',          value: 'true' }
 
 - name: Changing password
   uri:
-    url: http://localhost:9000/web_api/api/users/change_password
+    url: http://localhost:9000/api/users/change_password
     method: POST
-    body:
-      login: 'admin'
-      password: '{{SonarqubeAdminPassword}}'
-      previousPassword: 'password'
-    status_code: 200
+    user: admin
+    password: '{{current_password}}'
+    force_basic_auth: yes
+    body: 'login=admin&password={{SonarqubeAdminPassword}}&previousPassword={{current_password}}'
+    status_code: 204
+  when: current_password == 'admin'
+
+- name: Setting up LDAP authentication
+  lineinfile:
+    path: /opt/sonar/conf/sonar.properties
+    regexp: '^#sonar.security.realm=.*'
+    line: 'sonar.security.realm=LDAP'
 
 - name: Enabling services
-  service:
-    name: '{{item}}'
-    state: restarted
-    enabled: yes
+  service: name='{{item}}' state=restarted enabled=yes
   with_items:
     - sonar
     
