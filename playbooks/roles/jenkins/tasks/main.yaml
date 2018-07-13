@@ -26,11 +26,11 @@
 - name: Import Jenkins Signing Key
   rpm_key: key=https://jenkins-ci.org/redhat/jenkins-ci.org.key state=present
 
-#- name: Fixing maven repository definition
-#  replace:
-#    path: /etc/yum.repos.d/epel-apache-maven.repo
-#    regexp: '\$releasever'
-#    replace: '7'
+- name: Fixing maven repository definition
+  replace:
+    path: /etc/yum.repos.d/epel-apache-maven.repo
+    regexp: '\$releasever'
+    replace: '7'
 
 - name: Creating and mounting EFS 
   include_role: name=common tasks_from=create_fs
@@ -124,9 +124,8 @@
     - { regexp: '<slaveAgentPort>.*</slaveAgentPort>', replace: '<slaveAgentPort>49817</slaveAgentPort>' }
     - { regexp: '<label>.*</label>', replace: '<label>master</label>' }
 
-- name: Validating admin credentials
-  block:
-    - name: Changing default password
+- block:
+    - name: Validating admin credentials
       jenkins_script:
         script: 'jenkins.model.Jenkins.instance.securityRealm.createAccount("admin", "{{JenkinsAdminPassword}}")'
         user: admin
