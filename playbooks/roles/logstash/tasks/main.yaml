@@ -1,0 +1,71 @@
+---
+- name: Removing obsolete packages
+  yum:
+    name: '{{item}}'
+    state: absent
+  with_items:
+    - java-1.7.0-openjdk
+
+- name: Installing default packages
+  yum:
+    name: '{{item}}'
+  with_items:
+    - jq
+    - java-1.8.0-openjdk
+    - amazon-efs-utils
+
+- name: Adding Logstash repository
+  copy: src=files/etc/yum.repos.d/logstash.repo dest=/etc/yum.repos.d/logstash.repo mode=644
+
+- name: Downloading GeoDB
+  get_url: 
+    url: http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz
+    dest: /tmp/GeoLite2-City.tar.gz
+
+- name: Creating and mounting EFS 
+  include_role: name=common tasks_from=create_fs
+
+- name: Monitoring application logs
+  blockinfile: 
+    path: /etc/awslogs/awslogs.conf
+    block: |
+      [{{item}}]
+      file = {{item}}
+      log_stream_name = {instance_id}{{item}}
+      log_group_name = {{LogGroup}}
+  with_items:
+    - /var/log/logstash-stdout.log
+    - /var/log/logstash-stderr.log
+    - /var/log/logstash/grok_failures.txt
+
+- name: Installing Logstash
+  yum: name="{{packages}}"
+  vars: 
+    packages:
+      - logstash
+
+- name: Creating init.d script for Logstash
+  shell: '/usr/share/logstash/bin/system-install /etc/logstash/startup.options sysv'
+
+- name: Configuring JVM for IPv4
+  shell: 'echo "-Djava.net.preferIPv4Stack=true" >> /etc/logstash/jvm.options'
+
+- name: Configuring Logstash to listen on IPv4 interface
+  shell: 'sed -ibckp -E "s/.*http.host.*/http.host: 0.0.0.0/" /etc/logstash/logstash.yml'
+
+- name: Get the input configuration
+  s3:
+    bucket: mybucket
+    object: ${LogstashInputConfig}
+    dest: /etc/logstash/conf.d/01-input.conf
+    mode: get
+
+#geodb=$(tar -tvf /tmp/GeoLite2-City.tar.gz | grep 'mmdb' | sed -E 's/.* ([^ ]+)$/\1/')
+#[ -d /usr/share/logstash/geolite ] || mkdir -p /usr/share/logstash/geolite
+#tar -xvzf /tmp/GeoLite2-City.tar.gz -C /usr/share/logstash/geolite $geodb
+#mv /usr/share/logstash/geolite/$geodb /usr/share/logstash/geolite/. 
+
+- name: Enabling services
+  service: name='{{item}}' state=restarted enabled=yes
+  with_items:
+    - logstash
