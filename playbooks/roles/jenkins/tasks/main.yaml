@@ -111,9 +111,18 @@
 - name: Starting Jenkins
   service: name=jenkins state=started
 
-- name: Wait for Jenkins to startup 
+- name: Wait for Jenkins self-configuration 
   wait_for:
-    path: /var/lib/jenkins/config.xml
+    path: /var/lib/jenkins/secrets/initialAdminPassword
+
+- name: Wait for Jenkins Web to startup 
+  uri:
+    url: "http://localhost:8080/login"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 1
 
 - name: Fixing config.xml
   replace:
@@ -123,11 +132,12 @@
   with_items:
     - { regexp: '<slaveAgentPort>.*</slaveAgentPort>', replace: '<slaveAgentPort>49817</slaveAgentPort>' }
     - { regexp: '<label>.*</label>', replace: '<label>master</label>' }
+    - { regexp: '.*<securityRealm .*', replace: '<securityRealm class="hudson.security.HudsonPrivateSecurityRealm">' }
 
 - block:
     - name: Validating admin credentials
       jenkins_script:
-        script: 'jenkins.model.Jenkins.instance.securityRealm.createAccount("admin", "{{JenkinsAdminPassword}}")'
+        script: 'println(Jenkins.instance.pluginManager.plugins)'
         user: admin
         password: '{{lookup("file", "/var/lib/jenkins/secrets/initialAdminPassword")}}'
       register: response
@@ -135,9 +145,14 @@
     - name: Settings default credentials 
       set_fact: current_password='{{lookup("file", "/var/lib/jenkins/secrets/initialAdminPassword")}}'
       when: response.failed == false
+    - name: Changing admin password
+      jenkins_script:
+        script: 'jenkins.model.Jenkins.instance.securityRealm.createAccount("admin", "{{JenkinsAdminPassword}}")'
+        user: admin
+        password: '{{current_password}}'
+      when: response.failed == false
     - name: Settings final credentials 
       set_fact: current_password='{{JenkinsAdminPassword}}'
-      when: response.failed == true
 
 - name: Install Jenkins plugins
   jenkins_plugin:
