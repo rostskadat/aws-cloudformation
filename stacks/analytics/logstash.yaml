@@ -241,192 +241,58 @@ Resources:
             - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
-          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
-        Bootstrap: 
+          default: [ Install ] 
+        Install: 
           packages: 
             yum: 
-              wget: []
-              htop: []
-              awslogs: []
-              yum-cron: []
-          files: 
-            '/etc/awslogs/awscli.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                Region: !Sub ${AWS::Region}
-            '/etc/awslogs/awslogs.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                LogGroup: !Sub ${LogGroup}
-            '/etc/cfn/cfn-hup.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/home/ec2-user/.bashrc': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
-              mode: '000600'
-              owner: 'ec2-user'
-              group: 'ec2-user'
-              context:
-                StackName: !Sub ${AWS::StackName}
-            '/root/tag_root_volume.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_install_aws_inspector': 
-              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
-            '02_yum_cron_hourly.conf':
-              command: "sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf"
-            '03_yum_cron.conf':
-              command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
-            '04_tag_root_volume':
-              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
-            '05_remove_ntp':
-              command: 'sudo yum erase -y ntp*'
-            '06_install_chrnoy':
-              command: 'sudo yum install -y chrony'
-          services:
-            sysvinit:
-              awslogs:
-                enabled: true
-                ensureRunning: true
-                packages:
-                  yum:
-                  - awslogs
-                files:
-                - '/etc/awslogs/awslogs.conf'
-                - '/etc/awslogs/awscli.conf'
-              cfn-hup:
-                enabled: true
-                ensureRunning: true
-                files: 
-                  - /etc/cfn/cfn-hup.conf
-                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
-              yum-cron: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/yum/yum-cron.conf
-                  - /etc/yum/yum-cron-hourly.conf
-              chronyd: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/chrony.conf
-        BootstrapApplication:
-          packages:
-            yum:
-              java-1.8.0-openjdk: []
-              amazon-efs-utils: []
-          files: 
-            '/etc/yum.repos.d/logstash.repo':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/yum.repos.d/logstash.repo'
-              mode: '000644'
-              owner: 'root'
-              group: 'root'
-            '/root/create_fs.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/monitor_log.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_alternatives_java':
-              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
-            '02_remove_jdk7':
-              command: 'sudo yum remove -y java-1.7.0-openjdk'
-            '03_rpm_import': 
-              command: 'sudo rpm --import https://artifacts.elastic.co/GPG-KEY-elasticsearch'
-            '04_create_fs':
-              command: !Sub 'sudo /root/create_fs.sh ${FileSystem}'              
-        InstallApplication: 
-          packages:
-            yum:
-              logstash: []
+              ansible: []
           files:
-            '/etc/crontab': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/etc/crontab'
-              mode: '000644'
-              owner: 'root'
-              group: 'root'
-            '/tmp/GeoLite2-City.tar.gz': 
-              source: 'http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz'
-              mode: '000644'
-              owner: 'root'
-              group: 'root'
-            '/etc/logstash/conf.d/02-elastic_output.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/logstash/conf.d/02-elastic_output.conf'
-              mode: '000644'
-              owner: 'root'
-              group: 'root'
+            '/root/playbooks/group_vars/stack.yaml':
+              content: !Sub |
+                Region: '${AWS::Region}'
+                StackName: '${AWS::StackName}'
+                LogGroup: '${AWS::StackName}'
+                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+
+                LDAPDNSName: '{{LDAPDNSName}}'
+                LDAPPort: '{{LDAPPort}}'
+                LDAPRootDC: '{{LDAPRootDC}}'
+                LDAPManagerDN: '{{LDAPManagerDN}}'
+                LDAPManagerPassword: '${LDAPManagerPassword}'
+
+                FileSystem: '${FileSystem}'
+                
+                DBEndpointAddress: '{{DBEndpointAddress}}'
+                DBEndpointPort: '{{DBEndpointPort}}'
+                DBAdminUsername: '{{DBAdminUsername}}'
+                DBAdminPassword: '${DBMasterPassword}'
+                
+                ArtifactoryAdminPassword: '${ArtifactoryAdminPassword}'
               context:
-                DomainEndpoint: !GetAtt Domain.DomainEndpoint
-                DomainPort: 443
-            '/root/logstash/s3_sync_logs.sh':  
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/s3_sync_logs.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-              context: 
-                S3LogsIncludeFilters: !Sub '${S3LogsIncludeFilters}'
-            '/root/logstash/monitor_logs.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/monitor_logs.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/logstash/configure.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/configure.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/logstash/wait.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/logstash/wait.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
+                LDAPDNSName:
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
+                LDAPPort:
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+                LDAPRootDC:
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                LDAPManagerDN:
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                DBEndpointAddress: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
+                DBEndpointPort: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
+                DBAdminUsername: 
+                  'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+              mode: '000600'
+              owner: root
+              group: root
           commands:
-            '01_monitor_logs':
-              command: !Sub 'sudo /root/logstash/monitor_logs.sh ${LogGroup}'
-            '02_logstash_configure':
-              command: !Sub 'sudo /root/logstash/configure.sh "${LogstashInputConfig}"'
-            '97_logstash_stop':
-              command: 'sudo service logstash stop'
-            '98_wait':
-              command: 'sudo /root/logstash/wait.sh'
-            '99_logstash_start':
-              command: 'sudo service logstash start'
-          services:
-            sysvinit:
-              logstash:
-                enabled: true
-                ensureRunning: true
-                packages:
-                  yum:
-                  - logstash
+            '01_get_playbook': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
+            '02_set_host': 
+              command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
+            '03_run_playbook': 
+              command: 'sudo ansible-playbook /root/playbooks/logstash.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
@@ -437,7 +303,7 @@ Resources:
       SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
         - !Ref SecurityGroupHealthCheck
-      UserData:
+      UserData: 
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
