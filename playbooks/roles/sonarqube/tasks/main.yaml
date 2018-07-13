@@ -1,4 +1,7 @@
 ---
+#
+# TODO: Check that whether the password lookup can be used to generate the DB password
+#
 - name: Removing obsolete packages
   yum:
     name: '{{item}}'
@@ -151,6 +154,12 @@
 - name: Restarting Sonar
   service: name=sonar state=restarted
 
+- name: Copy /root/add_user_to_gitlab.sh
+  copy: src='files/root/add_user_to_gitlab.sh' dest='/root/add_user_to_gitlab.sh' mode=u=rwx  
+
+- name: Creating Gitlab user for Sonarqube
+  shell: '/root/add_user_to_gitlab.sh "{{GitlabDNSName}}" "{{GitlabRootPassword}}" "{{SonarqubeAdminEmail}}" /mnt/application/gitlab_token'
+
 - name: Waiting for Sonar
   uri: url=http://localhost:9000/api/authentication/validate user=admin password='{{current_password}}' force_basic_auth=yes
   register: wait
@@ -171,7 +180,7 @@
   with_items:
     - { key: 'sonar.gitlab.url',                value: 'http://{{GitlabDNSName}}' }
     - { key: 'sonar.gitlab.ignore_certificate', value: 'true' }
-    - { key: 'sonar.gitlab.user_token',         value: 'gitlabSonarqubeToken' }
+    - { key: 'sonar.gitlab.user_token',         value: '{{ lookup("file", "/mnt/application/gitlab_token") }}' }
     - { key: 'sonar.gitlab.ping_user',          value: 'true' }
 
 - name: Changing password
