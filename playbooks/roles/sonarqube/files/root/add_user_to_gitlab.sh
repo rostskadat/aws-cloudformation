@@ -34,6 +34,7 @@ if [ -z "$user_exists" ]; then
     [ "$gitlabSonarqubeToken" == "null" ] && echo "Failed to get Gitlab for Sonarqube user" && exit 1        
     echo -n "$gitlabSonarqubeToken" > $TokenFile
     chmog go-rwx $TokenFile
+    echo "Token available in $TokenFile"
 else
     echo "User 'sonarqube' exists in gitlab, not creating."
 fi
