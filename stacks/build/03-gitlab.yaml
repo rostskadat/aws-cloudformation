@@ -43,8 +43,8 @@ Metadata:
     - Label:
         default: 'Gitlab Parameters'
       Parameters:
-      - GitlabRootEmail
-      - GitlabRootPassword
+      - GitlabAdminEmail
+      - GitlabAdminPassword
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Gitlab will reside"
@@ -78,11 +78,11 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 3
-  GitlabRootEmail: 
+  GitlabAdminEmail: 
     Description: 'The Gitlab Root email'
     Type: String
     Default: 'application-admin@example.com'
-  GitlabRootPassword: 
+  GitlabAdminPassword: 
     Description: 'The Gitlab Root password'
     Type: String
     MinLength: 1
@@ -259,8 +259,8 @@ Resources:
                 
                 ExternalUrl: '${LoadBalancer.DNSName}'
 
-                GitlabRootEmail: '${GitlabRootEmail}'
-                GitlabRootPassword: '${GitlabRootPassword}'
+                GitlabAdminEmail: '${GitlabAdminEmail}'
+                GitlabAdminPassword: '${GitlabAdminPassword}'
               mode: '000600'
               owner: root
               group: root
@@ -329,3 +329,9 @@ Outputs:
     Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
+  GitlabAdminUsername:      
+    Description: 'The Admin user name for the server'
+    Value: 'root'
+    Export:
+      Name: !Sub '${AWS::StackName}-GitlabAdminUsername'
+      
