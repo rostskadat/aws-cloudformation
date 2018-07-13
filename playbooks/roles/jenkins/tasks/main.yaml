@@ -108,23 +108,9 @@
     - /mnt/application
     - /var/lib/jenkins/.m2
 
-- name: Starting Jenkins
-  service: name=jenkins state=started
+- include_role: name=jenkins tasks_from=restart_and_wait
 
-- name: Wait for Jenkins self-configuration 
-  wait_for:
-    path: /var/lib/jenkins/secrets/initialAdminPassword
-
-- name: Wait for Jenkins Web to startup 
-  uri:
-    url: "http://localhost:8080/login"
-    status_code: 200
-  register: result
-  until: result.status == 200
-  retries: 60
-  delay: 1
-
-- name: Fixing config.xml
+- name: Configuring for direct authentication
   replace:
     path: /var/lib/jenkins/config.xml
     regexp: '{{item.regexp}}'
@@ -133,6 +119,8 @@
     - { regexp: '<slaveAgentPort>.*</slaveAgentPort>', replace: '<slaveAgentPort>49817</slaveAgentPort>' }
     - { regexp: '<label>.*</label>', replace: '<label>master</label>' }
     - { regexp: '.*<securityRealm .*', replace: '<securityRealm class="hudson.security.HudsonPrivateSecurityRealm">' }
+
+- include_role: name=jenkins tasks_from=restart_and_wait
 
 - block:
     - name: Validating admin credentials
@@ -211,17 +199,7 @@
     - workflow-aggregator
     - ws-cleanup
 
-- name: Starting Jenkins
-  service: name=jenkins state=restarted
-
-- name: Wait for Jenkins to startup 
-  uri:
-    url: "http://localhost:8080/login"
-    status_code: 200
-  register: result
-  until: result.status == 200
-  retries: 60
-  delay: 1
+- include_role: name=jenkins tasks_from=restart_and_wait
 
 # /root/jenkins/configure_sonarqube.sh
 - name: Applying configuration

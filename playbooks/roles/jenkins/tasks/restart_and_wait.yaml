@@ -1,0 +1,20 @@
+---
+- name: Restarting Jenkins
+  service: name=jenkins state=restarted
+
+- name: Wait for Jenkins self-configuration 
+  wait_for:
+    path: '{{item}}'
+  with_items:
+    - /var/lib/jenkins/secrets/initialAdminPassword
+    - /var/lib/jenkins/config.xml
+
+- name: Wait for Jenkins Web to startup 
+  uri:
+    url: "http://localhost:8080/login"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 60
+  delay: 1
+
