@@ -129,7 +129,8 @@ Resources:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
       HealthCheckGracePeriod: 300
-      HealthCheckType: ELB
+#      HealthCheckType: ELB
+      HealthCheckType: EC2
       LaunchConfigurationName: !Ref LaunchConfiguration
       MinSize: 1
       MaxSize: 1
@@ -303,301 +304,64 @@ Resources:
             - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
-          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
-        Bootstrap: 
+          default: [ Install ] 
+        Install: 
           packages: 
             yum: 
-              wget: []
-              htop: []
-              awslogs: []
-              yum-cron: []
-          files: 
-            '/etc/awslogs/awscli.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                Region: !Sub ${AWS::Region}
-            '/etc/awslogs/awslogs.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                LogGroup: !Sub ${LogGroup}
-            '/etc/cfn/cfn-hup.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/home/ec2-user/.bashrc': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
-              mode: '000600'
-              owner: 'ec2-user'
-              group: 'ec2-user'
-              context:
-                StackName: !Sub ${AWS::StackName}
-            '/root/tag_root_volume.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_install_aws_inspector': 
-              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
-            '02_yum_cron_hourly.conf':
-              command: "sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf"
-            '03_yum_cron.conf':
-              command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
-            '04_tag_root_volume':
-              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
-            '05_remove_ntp':
-              command: 'sudo yum erase -y ntp*'
-            '06_install_chrnoy':
-              command: 'sudo yum install -y chrony'
-          services:
-            sysvinit:
-              awslogs:
-                enabled: true
-                ensureRunning: true
-                packages:
-                  yum:
-                  - awslogs
-                files:
-                - '/etc/awslogs/awslogs.conf'
-                - '/etc/awslogs/awscli.conf'
-              cfn-hup:
-                enabled: true
-                ensureRunning: true
-                files: 
-                  - /etc/cfn/cfn-hup.conf
-                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
-              yum-cron: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/yum/yum-cron.conf
-                  - /etc/yum/yum-cron-hourly.conf
-              chronyd: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/chrony.conf
-        BootstrapApplication:
-          packages:
-            yum: 
-              py-bcrypt: []
-              java-1.8.0-openjdk: []
-              java-1.8.0-openjdk-devel: []
-              amazon-efs-utils: []
-          files: 
-            '/etc/yum.repos.d/epel-apache-maven.repo':
-              source: 'http://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo'
-              mode: "000644"
-              owner: "root"
-              group: "root"
-            '/etc/yum.repos.d/jenkins.repo':
-              source: 'http://pkg.jenkins-ci.org/redhat-stable/jenkins.repo'
-              mode: "000644"
-              owner: "root"
-              group: "root"
-            '/root/create_fs.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/create_fs.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/monitor_log.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/monitor_log.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_alternatives_java':
-              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
-            '02_remove_jdk7':
-              command: 'sudo yum remove -y java-1.7.0-openjdk'
-            '03_rpm_import':
-              command: 'sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key'
-            '04_create_fs':
-              command: !Sub 'sudo /root/create_fs.sh ${FileSystem}'              
-            '05_fix_repo':
-              command: 'sudo sed -i s/\$releasever/7/g /etc/yum.repos.d/epel-apache-maven.repo'              
-        InstallApplication: 
-          packages:
-            yum:
-              jq: []
-              ant: []
-              git: []
-              jenkins: []
-              apache-maven: []
+              ansible: []
           files:
-            '/var/lib/jenkins/.m2/settings.xml':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/var/lib/jenkins/.m2/settings.xml'
+            '/root/playbooks/group_vars/stack.yaml':
+              content: !Sub |
+                Region: '${AWS::Region}'
+                StackName: '${AWS::StackName}'
+                LogGroup: '${AWS::StackName}'
+                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+
+                LDAPDNSName: '{{LDAPDNSName}}'
+                LDAPPort: '{{LDAPPort}}'
+                LDAPRootDC: '{{LDAPRootDC}}'
+                LDAPManagerDN: '{{LDAPManagerDN}}'
+                LDAPManagerPassword: '${LDAPManagerPassword}'
+
+                FileSystem: '${FileSystem}'
+                
+                ArtifactoryDNSName: '{{ArtifactoryDNSName}}'
+                ArtifactoryAdminUsername: '{{ArtifactoryAdminUsername}}'
+                ArtifactoryAdminPassword: '${ArtifactoryAdminPassword}'
+                
+                SonarqubeDNSName: '{{SonarqubeDNSName}}'
+                SonarqubeAdminUsername: '{{SonarqubeAdminUsername}}'
+                SonarqubeAdminPassword: '${SonarqubeAdminPassword}'
+
+                JenkinsDNSName: '{{JenkinsDNSName}}'
+                JenkinsAdminEmail: '${JenkinsAdminEmail}'
+                JenkinsAdminPassword: '${JenkinsAdminPassword}'
               mode: '000600'
-              owner: 'jenkins'
-              group: 'jenkins'
-              context: 
-                SonarqubeDNSName:
-                  'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
-                SonarqubeUsername: 'admin'
-                SonarqubeAdminPassword: !Sub '${SonarqubeAdminPassword}'
-            '/root/jenkins/monitor_logs.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/monitor_logs.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/jenkins/plugins.txt':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/plugins.txt'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/var/lib/jenkins/hudson.tasks.Ant.xml':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.tasks.Ant.xml'
-              mode: '000644'
-              owner: 'jenkins'
-              group: 'jenkins'
-            '/var/lib/jenkins/hudson.tasks.Maven.xml':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.tasks.Maven.xml'
-              mode: '000644'
-              owner: 'jenkins'
-              group: 'jenkins'
-            '/var/lib/jenkins/hudson.plugins.git.GitTool.xml':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/hudson.plugins.git.GitTool.xml'
-              mode: '000644'
-              owner: 'jenkins'
-              group: 'jenkins'
-            '/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml'
-              mode: '000644'
-              owner: 'jenkins'
-              group: 'jenkins'
-              context: 
-                JenkinsAdminEmail: !Sub '${JenkinsAdminEmail}'
-                DNSName: !GetAtt LoadBalancer.DNSName
-            '/root/jenkins/wait.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/wait.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/jenkins/call_cli.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/call_cli.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/jenkins/install_plugins.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/install_plugins.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/jenkins/configure_jdk.groovy': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_jdk.groovy'
-              mode: '000600'
-              owner: 'root'
-              group: 'root'
-            '/root/jenkins/configure_artifactory.groovy':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_artifactory.groovy'
-              mode: '000600'
-              owner: 'root'
-              group: 'root'
+              owner: root
+              group: root
               context:
+                LDAPDNSName: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
+                LDAPPort: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+                LDAPRootDC: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
+                LDAPManagerDN: 
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
                 ArtifactoryDNSName: 
                   'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-DNSName'
                 ArtifactoryAdminUsername: 
                   'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-ArtifactoryAdminUsername'
-                ArtifactoryAdminPassword: 
-                  !Sub '${ArtifactoryAdminPassword}'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/jenkins/configure_sonarqube.groovy': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_sonarqube.groovy'
-              mode: '000600'
-              owner: 'root'
-              group: 'root'
-              context: 
                 SonarqubeDNSName:
                   'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
-            '/root/jenkins/configure_sonarqube.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_sonarqube.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/jenkins/change_default_password.sh': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/change_default_password.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-            '/root/jenkins/configure_ldap.groovy': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/jenkins/configure_ldap.groovy'
-              mode: '000600'
-              owner: 'root'
-              group: 'root'
-              context:
-                DNSName: 
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
-                LDAPPort: 
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-                RootDC: 
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                ManagerDN: 
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-                LDAPManagerPassword: 
-                  !Sub '${LDAPManagerPassword}'
-          commands: 
-            '01_alternatives_java':
-              command: 'sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java'
-            '02_monitor_logs':
-              command: !Sub 'sudo /root/jenkins/monitor_logs.sh ${LogGroup}'
-            '03_jenkins_configure_jobs_directory': 
-              command: 'sudo rm -rf /var/lib/jenkins/jobs && sudo ln -s /mnt/application/data /var/lib/jenkins/jobs'
-            '04_jenkins_chown_jenkins': 
-              command: 'sudo chown -R jenkins.jenkins /mnt/application'
-            '05_jenkins_chown_m2': 
-              command: 'sudo chown -R jenkins.jenkins /var/lib/jenkins/.m2'
-            '10_jenkins_start': 
-              command: 'sudo service jenkins start'
-            '11_jenkins_install_plugins': 
-              command: 'sudo /root/jenkins/install_plugins.sh'
-            '12_jenkins_configure_jdk': 
-              command: 'sudo /root/jenkins/call_cli.sh /root/jenkins/configure_jdk.groovy'
-            '20_jenkins_configure_artifactory': 
-              command: 'sudo /root/jenkins/call_cli.sh /root/jenkins/configure_artifactory.groovy'
-            '30_jenkins_configure_sonarqube': 
-              command: !Join
-                - ' '
-                - - 'sudo /root/jenkins/configure_sonarqube.sh'
-                  - 'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
-                  - !Sub '${SonarqubeAdminPassword}'
-                  - !Sub '${JenkinsAdminPassword}'
-            '40_jenkins_change_default_password': 
-              command: !Sub 'sudo /root/jenkins/change_default_password.sh ${JenkinsAdminPassword}'              
-            '41_jenkins_restart': 
-              command: 'sudo service jenkins restart'
-            '42_jenkins_wait':
-              command: !Sub 'sudo /root/jenkins/wait.sh "${JenkinsAdminPassword}"'  
-            '43_jenkins_configure_ldap': 
-              command: !Sub 'sudo /root/jenkins/call_cli.sh /root/jenkins/configure_ldap.groovy "${JenkinsAdminPassword}"'
-            '98_application_configured': 
-              command: 'sudo touch /mnt/application/.application_configured'
-            '99_jenkins_restart':
-              command: 'sudo service jenkins restart'
-          services: 
-            sysvinit: 
-              jenkins: 
-                enabled: true
-                ensureRunning: true
+                JenkinsDNSName: !GetAtt LoadBalancer.DNSName
+          commands:
+            '01_get_playbook': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
+            '02_set_host': 
+              command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
+            '03_run_playbook': 
+              command: 'sudo ansible-playbook /root/playbooks/jenkins.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
@@ -615,7 +379,7 @@ Resources:
           yum update -y
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+          /opt/aws/bin/cfn-signal -e 0   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
