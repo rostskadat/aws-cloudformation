@@ -1,0 +1,12 @@
+---
+- name: Restarting SonarQube
+  service: name=sonar state=restarted
+
+- name: Waiting for Sonar
+  uri: url=http://localhost:9000/api/authentication/validate user=admin password='{{current_password}}' force_basic_auth=yes
+  register: wait
+  until: 
+    - wait.status == 200
+    - wait.json is defined
+  retries: 60
+  delay: 1 

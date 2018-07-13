@@ -20,6 +20,10 @@
     - amazon-efs-utils
     - MySQL-python27
 
+- name: Install Python modules
+  pip: 
+    name: pyapi-gitlab
+
 - name: Adding Sonar repository
   get_url:
     url: http://downloads.sourceforge.net/project/sonar-pkg/rpm/sonar.repo
@@ -84,8 +88,7 @@
 - name: Starting Sonar
   service: name=sonar state=started
 
-- name: Validating admin credentials
-  block:
+- block:
     - name: Validating admin credentials
       uri: url=http://localhost:9000/api/authentication/validate user=admin password=admin force_basic_auth=yes
       register: response
@@ -145,23 +148,13 @@
   loop_control:
     loop_var: plugin
 
-- name: Restarting Sonar
-  service: name=sonar state=restarted
+- include_role: name=sonarqube tasks_from=restart_and_wait
 
 - name: Copy /root/add_user_to_gitlab.sh
   copy: src='files/root/add_user_to_gitlab.sh' dest='/root/add_user_to_gitlab.sh' mode=u=rwx  
 
 - name: Creating Gitlab user for Sonarqube
   shell: '/root/add_user_to_gitlab.sh "{{GitlabDNSName}}" "{{GitlabAdminUsername}}" "{{GitlabAdminPassword}}" "{{SonarqubeAdminEmail}}" /mnt/application/gitlab_token'
-
-- name: Waiting for Sonar
-  uri: url=http://localhost:9000/api/authentication/validate user=admin password='{{current_password}}' force_basic_auth=yes
-  register: wait
-  until: 
-    - wait.status == 200
-    - wait.json is defined
-  retries: 60
-  delay: 1 
 
 - name: Apply configuration settings
   uri:
