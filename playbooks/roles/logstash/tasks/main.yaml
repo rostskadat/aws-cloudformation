@@ -17,6 +17,9 @@
 - name: Adding Logstash repository
   copy: src=files/etc/yum.repos.d/logstash.repo dest=/etc/yum.repos.d/logstash.repo mode=644
 
+- name: Copying s3 log synchronization
+  copy: src=files/root/s3_sync_logs.sh dest=/root/s3_sync_logs.sh mode=700
+
 - name: Downloading GeoDB
   get_url: 
     url: http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz
@@ -64,6 +67,9 @@
 #[ -d /usr/share/logstash/geolite ] || mkdir -p /usr/share/logstash/geolite
 #tar -xvzf /tmp/GeoLite2-City.tar.gz -C /usr/share/logstash/geolite $geodb
 #mv /usr/share/logstash/geolite/$geodb /usr/share/logstash/geolite/. 
+
+# CRONTAB
+#*/15 * * * * root bash /root/s3_sync_logs.sh
 
 - name: Enabling services
   service: name='{{item}}' state=restarted enabled=yes
