@@ -17,28 +17,7 @@
   with_items:
     - wget
     - htop
-    - awslogs
-    - yum-cron
     - chrony
-
-- name: Creating directory /etc/cfn/hooks.d
-  file:
-    path: /etc/cfn/hooks.d
-    state: directory
-    mode: 0755
-
-- name: Creating templates
-  template:
-    src: 'templates{{item}}'
-    dest: '{{item}}'
-    owner: root
-    group: root
-    mode: 0644
-  with_items:
-    - /etc/awslogs/awscli.conf
-    - /etc/awslogs/awslogs.conf
-    - /etc/cfn/cfn-hup.conf
-    - /etc/cfn/hooks.d/cfn-auto-reloader.conf
 
 - name: Creating template .bashrc
   template:
@@ -48,50 +27,20 @@
     group: root
     mode: 0644
 
-- name: Copying /root/tag_root_volume.sh
-  copy:
-    src: files/root/tag_root_volume.sh
-    dest: /root/tag_root_volume.sh
-    owner: root
-    group: root
-    mode: 0700
+- name: Installing and configuring awslogs
+  include_role: name=common tasks_from=configure_awslogs
 
-- name: Check if AWS Inspector Agent is installed
-  yum:
-    list: AwsAgent
-  register: AwsAgentInstalled
+- name: Installing and configuring cfn-hup
+  include_role: name=common tasks_from=configure_cfn_hup
 
-- name: Downloading AWS Inspector Agent
-  get_url:
-    url: https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install
-    dest: /root/AWSInspectorAgent
-    mode: 0700
-  when: ((AwsAgentInstalled.results|length < 1) or (AwsAgentInstalled.results[0].yumstate != 'installed'))
+- name: Installing and configuring AWS Inspector Agent
+  include_role: name=common tasks_from=configure_aws_inspector_agent
 
-- name: Installing AWS Inspector Agent
-  shell: /root/AWSInspectorAgent
-  when: ((AwsAgentInstalled.results|length < 1) or (AwsAgentInstalled.results[0].yumstate != 'installed'))
+- name: Installing and configuring yum-cron
+  include_role: name=common tasks_from=configure_yum_cron
 
-- name: Configuring yum-cron-hourly (update_cmd = security)
-  lineinfile:
-    path: /etc/yum/yum-cron-hourly.conf
-    regexp: '^update_cmd.*'
-    line: 'update_cmd = security'
-
-- name: Configuring yum-cron-hourly (update_messages|download_updates|apply_updates = yes)
-  replace:
-    path: /etc/yum/yum-cron-hourly.conf
-    regexp: '^(update_messages|download_updates|apply_updates).*'
-    replace: '\1 = yes'
-
-- name: Configuring yum-cron (update_messages|download_updates|apply_updates = yes)
-  replace:
-    path: /etc/yum/yum-cron.conf
-    regexp: '^(update_messages|download_updates|apply_updates).*'
-    replace: '\1 = yes'
-
-- name: Tagging root volume
-  script: /root/tag_root_volume.sh {{Region}} {{StackName}}
+- name: Tagging EC2 Root Volume
+  include_role: name=common tasks_from=tag_ec2_root_volume
 
 - name: Enabling services
   service:
@@ -99,7 +48,4 @@
     state: started
     enabled: yes
   with_items:
-    - awslogs
-    - cfn-hup
-    - yum-cron
     - chronyd

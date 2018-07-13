@@ -1,0 +1,25 @@
+---
+- name: Creating directory /etc/cfn/hooks.d
+  file:
+    path: /etc/cfn/hooks.d
+    state: directory
+    mode: 0755
+
+- name: Creating templates
+  template:
+    src: 'templates{{item}}'
+    dest: '{{item}}'
+    owner: root
+    group: root
+    mode: 0644
+  with_items:
+    - /etc/cfn/cfn-hup.conf
+    - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+
+- name: Enabling services
+  service:
+    name: '{{item}}'
+    state: started
+    enabled: yes
+  with_items:
+    - cfn-hup

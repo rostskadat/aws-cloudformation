@@ -1,0 +1,32 @@
+---
+- name: Installing default packages
+  yum: name='{{item}}'
+  with_items:
+    - yum-cron
+
+- name: Configuring yum-cron-hourly (update_cmd = security)
+  lineinfile:
+    path: /etc/yum/yum-cron-hourly.conf
+    regexp: '^update_cmd.*'
+    line: 'update_cmd = security'
+
+- name: Configuring yum-cron-hourly (update_messages|download_updates|apply_updates = yes)
+  replace:
+    path: /etc/yum/yum-cron-hourly.conf
+    regexp: '^(update_messages|download_updates|apply_updates).*'
+    replace: '\1 = yes'
+
+- name: Configuring yum-cron (update_messages|download_updates|apply_updates = yes)
+  replace:
+    path: /etc/yum/yum-cron.conf
+    regexp: '^(update_messages|download_updates|apply_updates).*'
+    replace: '\1 = yes'
+
+- name: Enabling services
+  service:
+    name: '{{item}}'
+    state: started
+    enabled: yes
+  with_items:
+    - yum-cron
+    

@@ -1,0 +1,12 @@
+---
+- name: Copying /root/tag_root_volume.sh
+  copy:
+    src: files/root/tag_root_volume.sh
+    dest: /root/tag_root_volume.sh
+    owner: root
+    group: root
+    mode: 0700
+
+- name: Tagging root volume
+  script: /root/tag_root_volume.sh {{Region}} {{StackName}}
+

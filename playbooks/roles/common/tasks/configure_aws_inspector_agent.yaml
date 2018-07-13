@@ -1,0 +1,16 @@
+---
+#
+# This will check and install the AWSInspectorAgent
+#
+- name: Check if AWS Inspector Agent is installed
+  yum: list=AwsAgent
+  register: AwsAgentInstalled
+
+- name: Downloading AWS Inspector Agent
+  get_url: url=https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install dest=/root/AWSInspectorAgent mode=0700
+  when: ((AwsAgentInstalled.results|length < 1) or (AwsAgentInstalled.results[0].yumstate != 'installed'))
+
+- name: Installing AWS Inspector Agent
+  shell: /root/AWSInspectorAgent
+  when: ((AwsAgentInstalled.results|length < 1) or (AwsAgentInstalled.results[0].yumstate != 'installed'))
+
