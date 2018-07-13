@@ -81,9 +81,6 @@
   with_items:
     - { src: /opt/sonar/conf/sonar.properties, mode: '0600' }
 
-#- name: Adding user to gitlab
-#  shell: '/root/sonarqube/add_user_to_gitlab.sh {{GitlabDNSName}} {{GitlabRootPassword}} {{SonarqubeAdminEmail}}'
-
 - name: Starting Sonar
   service: name=sonar state=started
 
@@ -155,7 +152,7 @@
   copy: src='files/root/add_user_to_gitlab.sh' dest='/root/add_user_to_gitlab.sh' mode=u=rwx  
 
 - name: Creating Gitlab user for Sonarqube
-  shell: '/root/add_user_to_gitlab.sh "{{GitlabDNSName}}" "{{GitlabRootPassword}}" "{{SonarqubeAdminEmail}}" /mnt/application/gitlab_token'
+  shell: '/root/add_user_to_gitlab.sh "{{GitlabDNSName}}" "{{GitlabAdminUsername}}" "{{GitlabAdminPassword}}" "{{SonarqubeAdminEmail}}" /mnt/application/gitlab_token'
 
 - name: Waiting for Sonar
   uri: url=http://localhost:9000/api/authentication/validate user=admin password='{{current_password}}' force_basic_auth=yes
