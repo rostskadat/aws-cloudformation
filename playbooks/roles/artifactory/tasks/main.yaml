@@ -19,19 +19,8 @@
     dest: /etc/yum.repos.d/jfrog.repo
     mode: 644
 
-- name: Creating directory /mnt/application
-  file:
-    path: /mnt/application
-    state: directory
-    mode: 0755
-
-- name: Mounting EFS
-  mount:
-    path: /mnt/application
-    src: '{{FileSystem}}'
-    fstype: efs
-    opts: tls
-    state: mounted
+- name: Creating and mounting EFS
+  include_role: name=common tasks_from=create_fs
 
 #
 # TODO: This only changes the last block!!!

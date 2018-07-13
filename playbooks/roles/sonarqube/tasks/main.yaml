@@ -26,11 +26,8 @@
     dest: /etc/yum.repos.d/sonar.repo
     mode: 644
 
-- name: Creating directory /mnt/application
-  file: path=/mnt/application state=directory mode=0755
-
-- name: Mounting EFS
-  mount: path=/mnt/application src='{{FileSystem}}' fstype=efs opts=tls state=present
+- name: Creating and mounting EFS
+  include_role: name=common tasks_from=create_fs
 
 - name: Monitoring application logs
   blockinfile: 
