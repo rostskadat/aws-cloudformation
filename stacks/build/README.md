@@ -3,16 +3,31 @@
 ## Description
 
 These stack create a build toolchain based on 
-1. [Gitlab](https://about.gitlab.com/)
-2. [Artifactory](https://jfrog.com/artifactory/)
-3. [Sonarqube](https://www.sonarqube.org/)
-4. [Jenkins](https://jenkins.io/)
+1. [OpenLDAP](https://www.openldap.org/)
+2. [Gitlab](https://about.gitlab.com/)
+3. [Artifactory](https://jfrog.com/artifactory/)
+4. [Sonarqube](https://www.sonarqube.org/)
+5. [Jenkins](https://jenkins.io/)
 
 ![Build infrastructure](./images/build.png)
 
 ## Installation Guide
-1. These templates should be launched in order. You must have previously run the [`01-vpc.yaml`](../) templates [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=01-vpc&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/01-vpc.yaml)
-2. Launch the LDAP stack [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=01-openldap&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/01-openldap.yaml)
+
+These templates should be launched in order. 
+
+1. You must have previously run the [`01-vpc.yaml`](../) templates [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=BUILD&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/01-vpc.yaml)
+
+2. You must have previously run the [`mysql.yaml`](../db/mysql.yaml) templates [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=BUILD-MYSQL&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/db/mysql.yaml) and the [`postgresql.yaml`](../db/postgresql.yaml) [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=BUILD-POSTGRESQL&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/db/postgresql.yaml)
+
+3. Launch the LDAP stack [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=BUILD-OPENLDAP&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/01-openldap.yaml)
+
+4. Then launch the Artifactory [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=BUILD-ARTIFACTORY&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/02-artifactory.yaml)
+
+5. Then launch the Gitlab [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=BUILD-GITLAB&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/03-gitlab.yaml)
+
+6. Then launch the SonarQube [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=BUILD-SONARQUBE&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/04-sonarqube.yaml)
+
+7. Then launch the Jenkins [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=BUILD-JENKINS&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/05-jenkins.yaml)
 
 # HOWTO connect to your JENKINS master from your corporate network
 
