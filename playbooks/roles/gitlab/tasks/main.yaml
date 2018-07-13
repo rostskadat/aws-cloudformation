@@ -29,7 +29,8 @@
 
 - name: Adding Gitlab repository
   shell: /root/gitlab-ee.repo.sh
-  creates: /etc/yum.repos.d/gitlab_gitlab-ee.repo
+  args:
+    creates: /etc/yum.repos.d/gitlab_gitlab-ee.repo
 
 - name: Creating and mounting EFS
   include_role: name=common tasks_from=create_fs
@@ -62,7 +63,7 @@
     dest: /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb 
 
 - name: Configuring Gitlab
-  shell: 'GITLAB_ROOT_EMAIL="{{GitlabRootEmail}}" GITLAB_ROOT_PASSWORD="{{GitlabRootPassword}}" gitlab-ctl reconfigure'
+  shell: 'GITLAB_ROOT_EMAIL="{{GitlabAdminEmail}}" GITLAB_ROOT_PASSWORD="{{GitlabAdminPassword}}" gitlab-ctl reconfigure'
 
 - name: Obtaining token
   uri:
@@ -72,7 +73,7 @@
     body:
       grant_type: password
       username: root
-      password: '{{GitlabRootPassword}}'
+      password: '{{GitlabAdminPassword}}'
     status_code: 200
   register: response
 
