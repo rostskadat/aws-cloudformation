@@ -29,6 +29,10 @@ These templates should be launched in order.
 
 7. Then launch the Jenkins [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/new?stackName=BUILD-JENKINS&templateURL=https://raw.githubusercontent.com/rostskadat/aws-cloudformation/master/stacks/05-jenkins.yaml)
 
+# Ansible
+
+All stacks are provisioned using [Ansible](https://www.ansible.com/). You can have a look at the different [playbooks](../../playbooks) 
+
 # HOWTO connect to your JENKINS master from your corporate network
 
 In your jumping host edit your `.ssh/config` to read:
