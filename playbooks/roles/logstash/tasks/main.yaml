@@ -17,6 +17,10 @@
 - name: Adding Logstash repository
   copy: src=files/etc/yum.repos.d/logstash.repo dest=/etc/yum.repos.d/logstash.repo mode=644
 
+- name: Import Logstash Signing Key
+  rpm_key: key=https://artifacts.elastic.co/GPG-KEY-elasticsearch state=present
+
+
 - name: Copying s3 log synchronization
   copy: src=files/root/s3_sync_logs.sh dest=/root/s3_sync_logs.sh mode=700
 
