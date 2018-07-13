@@ -51,7 +51,7 @@ Metadata:
     - Label:
         default: 'Gitlab Parameters'
       Parameters:
-      - GitlabRootPassword
+      - GitlabAdminPassword
     - Label:
         default: 'Sonarqube Parameters'
       Parameters:
@@ -95,7 +95,7 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 3
-  GitlabRootPassword: 
+  GitlabAdminPassword: 
     Description: 'The Gitlab Root password'
     Type: String
     NoEcho: true
@@ -280,7 +280,8 @@ Resources:
                 DBAdminPassword: '${DBMasterPassword}'
                 
                 GitlabDNSName: '{{GitlabDNSName}}'
-                GitlabRootPassword: '${GitlabRootPassword}'
+                GitlabAdminUsername: '{{GitlabAdminUsername}}'
+                GitlabAdminPassword: '${GitlabAdminPassword}'
                 
                 SonarqubeAdminEmail: '${SonarqubeAdminEmail}'
                 SonarqubeAdminPassword: '${SonarqubeAdminPassword}'
@@ -303,6 +304,8 @@ Resources:
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                 LDAPManagerDN: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                GitlabAdminUsername: 
+                  'Fn::ImportValue': !Sub '${ParentGitlabStack}-GitlabAdminUsername'
                 GitlabDNSName: 
                   'Fn::ImportValue': !Sub '${ParentGitlabStack}-DNSName'
           commands:
@@ -355,4 +358,8 @@ Outputs:
     Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
-      
+  SonarqubeAdminUsername:      
+    Description: 'The Admin user name for the server'
+    Value: 'admin'
+    Export:
+      Name: !Sub '${AWS::StackName}-SonarqubeAdminUsername'
