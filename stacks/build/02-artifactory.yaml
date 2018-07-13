@@ -106,7 +106,8 @@ Resources:
       HealthCheckType: ELB
       LaunchConfigurationName: !Ref LaunchConfiguration
       MinSize: 1
-      MaxSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
       NotificationConfigurations:
         - TopicARN: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
@@ -134,7 +135,7 @@ Resources:
         Count: 1
     UpdatePolicy: 
       AutoScalingRollingUpdate: 
-        MinInstancesInService: 0
+        MinInstancesInService: 1
         MaxBatchSize: 1
         PauseTime: PT15M
         WaitOnResourceSignals: true
