@@ -129,7 +129,7 @@ Resources:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
       HealthCheckGracePeriod: 300
-      HealthCheckType: ELB
+      HealthCheckType: EC2
       LaunchConfigurationName: !Ref LaunchConfiguration
       MinSize: 1
       MaxSize: 2
@@ -354,6 +354,8 @@ Resources:
                   'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-ArtifactoryAdminUsername'
                 SonarqubeDNSName:
                   'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
+                SonarqubeAdminUsername: 
+                  'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-SonarqubeAdminUsername'
                 JenkinsDNSName: !GetAtt LoadBalancer.DNSName
           commands:
             '01_get_playbook': 
@@ -379,7 +381,7 @@ Resources:
           yum update -y
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+          /opt/aws/bin/cfn-signal -e 0   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
