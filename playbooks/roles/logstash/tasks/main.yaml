@@ -20,30 +20,17 @@
 - name: Import Logstash Signing Key
   rpm_key: key=https://artifacts.elastic.co/GPG-KEY-elasticsearch state=present
 
-
-- name: Copying s3 log synchronization
-  copy: src=files/root/s3_sync_logs.sh dest=/root/s3_sync_logs.sh mode=700
-
-- name: Downloading GeoDB
-  get_url: 
-    url: http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz
-    dest: /tmp/GeoLite2-City.tar.gz
-
 - name: Creating and mounting EFS 
   include_role: name=common tasks_from=create_fs
 
 - name: Monitoring application logs
-  blockinfile: 
-    path: /etc/awslogs/awslogs.conf
-    block: |
-      [{{item}}]
-      file = {{item}}
-      log_stream_name = {instance_id}{{item}}
-      log_group_name = {{LogGroup}}
-  with_items:
-    - /var/log/logstash-stdout.log
-    - /var/log/logstash-stderr.log
-    - /var/log/logstash/grok_failures.txt
+  include_role: name=common tasks_from=configure_awslogs_extra
+  with_items: 
+    - { name: 'logstash-stdout', filename: '/var/log/logstash-stdout.log' }
+    - { name: 'logstash-stderr', filename: '/var/log/logstash-stderr.log' }
+    - { name: 'grok_failures', filename: '/var/log/logstash/grok_failures.txt' }
+  loop_control:
+    loop_var: log
 
 - name: Installing Logstash
   yum: name="{{packages}}"
@@ -53,27 +40,56 @@
 
 - name: Creating init.d script for Logstash
   shell: '/usr/share/logstash/bin/system-install /etc/logstash/startup.options sysv'
+  args:
+    creates: /etc/init.d/logstash
 
 - name: Configuring JVM for IPv4
-  shell: 'echo "-Djava.net.preferIPv4Stack=true" >> /etc/logstash/jvm.options'
+  blockinfile: 
+    path: /etc/logstash/jvm.options
+    block: '-Djava.net.preferIPv4Stack=true'
 
 - name: Configuring Logstash to listen on IPv4 interface
-  shell: 'sed -ibckp -E "s/.*http.host.*/http.host: 0.0.0.0/" /etc/logstash/logstash.yml'
+  lineinfile:
+    path: /etc/logstash/logstash.yml
+    regexp: '^.*http.host.*'
+    line: "http.host: '0.0.0.0'"
 
-- name: Get the input configuration
-  s3:
-    bucket: mybucket
-    object: ${LogstashInputConfig}
-    dest: /etc/logstash/conf.d/01-input.conf
-    mode: get
+- name: Copying Logstash config
+  copy: src=files/etc/logstash/conf.d/01-input.conf dest=/etc/logstash/conf.d/01-input.conf mode=644
 
-#geodb=$(tar -tvf /tmp/GeoLite2-City.tar.gz | grep 'mmdb' | sed -E 's/.* ([^ ]+)$/\1/')
-#[ -d /usr/share/logstash/geolite ] || mkdir -p /usr/share/logstash/geolite
-#tar -xvzf /tmp/GeoLite2-City.tar.gz -C /usr/share/logstash/geolite $geodb
-#mv /usr/share/logstash/geolite/$geodb /usr/share/logstash/geolite/. 
+- name: Templating Logstash config
+  template: 
+    src: 'templates{{item.src}}'
+    dest: '{{item.src}}'
+    owner: '{{item.user}}'
+    group: '{{item.user}}'
+    mode: '{{item.mode}}'
+  with_items:
+    - { src: /root/s3_sync_logs.sh, user: root, mode: '0700' }
+    - { src: /etc/logstash/conf.d/02-elastic_output.conf, user: logstash, mode: '0644' }
 
-# CRONTAB
-#*/15 * * * * root bash /root/s3_sync_logs.sh
+- name: Creating GeoDB directory
+  file:
+    path: /usr/local/share/GeoLite2-City
+    state: directory
+    mode: 0755
+
+- name: Downloading GeoDB
+  unarchive: 
+    src: http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz
+    dest: /usr/local/share/GeoLite2-City
+    remote_src: yes
+    creates: /usr/local/share/GeoLite2-City/GeoLite2-City.mmdb
+    extra_opts:
+      - --transform
+      - 's/.*\(GeoLite2-City.mmdb\)$/\1/' 
+      - --gunzip
+
+- name: Scheduling S3 Log Synchronization
+  cron:
+    name: 'S3 Logs Synchronization'
+    minute: '15'
+    job: '/root/s3_sync_logs.sh'
 
 - name: Enabling services
   service: name='{{item}}' state=restarted enabled=yes

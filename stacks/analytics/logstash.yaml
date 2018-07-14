@@ -28,7 +28,6 @@ Metadata:
     - Label: 
         default: 'Logstash Parameters'
       Parameters:
-      - LogstashInputConfig
       - S3LogsBucketName
       - S3LogsIncludeFilters
 Parameters: 
@@ -57,10 +56,6 @@ Parameters:
     Description: 'The instance type of your ES node'
     Type: String
     Default: 'm4.large.elasticsearch' 
-  LogstashInputConfig: 
-    Description: 'The Logstash initial input config'
-    Type: String
-    Default: 's3://mybucketname/input.config'
   S3LogsBucketName: 
     Description: 'The S3 bucket name where the logs reside'
     Type: String
@@ -84,10 +79,11 @@ Resources:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
       HealthCheckGracePeriod: 300
-      HealthCheckType: ELB
+      HealthCheckType: EC2
       LaunchConfigurationName: !Ref LaunchConfiguration
       MinSize: 1
-      MaxSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
       NotificationConfigurations:
         - TopicARN: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
@@ -115,7 +111,7 @@ Resources:
         Count: 1
     UpdatePolicy: 
       AutoScalingRollingUpdate: 
-        MinInstancesInService: 0
+        MinInstancesInService: 1
         MaxBatchSize: 1
         PauseTime: PT15M
         WaitOnResourceSignals: true
@@ -254,35 +250,12 @@ Resources:
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
 
-                LDAPDNSName: '{{LDAPDNSName}}'
-                LDAPPort: '{{LDAPPort}}'
-                LDAPRootDC: '{{LDAPRootDC}}'
-                LDAPManagerDN: '{{LDAPManagerDN}}'
-                LDAPManagerPassword: '${LDAPManagerPassword}'
-
                 FileSystem: '${FileSystem}'
                 
-                DBEndpointAddress: '{{DBEndpointAddress}}'
-                DBEndpointPort: '{{DBEndpointPort}}'
-                DBAdminUsername: '{{DBAdminUsername}}'
-                DBAdminPassword: '${DBMasterPassword}'
+                ESDomainEndpoint: '${Domain.DomainEndpoint}'
+                ESDomainPort: '443'
                 
-                ArtifactoryAdminPassword: '${ArtifactoryAdminPassword}'
-              context:
-                LDAPDNSName:
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
-                LDAPPort:
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
-                LDAPRootDC:
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
-                LDAPManagerDN:
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
-                DBEndpointAddress: 
-                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
-                DBEndpointPort: 
-                  'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
-                DBAdminUsername: 
-                  'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+                S3LogsIncludeFilters: '${S3LogsIncludeFilters}'
               mode: '000600'
               owner: root
               group: root
@@ -310,7 +283,7 @@ Resources:
           yum update -y
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+          /opt/aws/bin/cfn-signal -e 0   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
