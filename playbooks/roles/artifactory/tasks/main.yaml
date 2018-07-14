@@ -22,26 +22,19 @@
 - name: Creating and mounting EFS
   include_role: name=common tasks_from=create_fs
 
-#
-# TODO: This only changes the last block!!!
-#
 - name: Monitoring application logs
-  blockinfile: 
-    path: /etc/awslogs/awslogs.conf
-    block: |
-      [{{item}}]
-      file = {{item}}
-      log_stream_name = {instance_id}{{item}}
-      log_group_name = {{LogGroup}}
-  with_items:
-    - /var/opt/jfrog/artifactory/logs/access.log
-    - /var/opt/jfrog/artifactory/logs/artifactory.log
-    - /var/opt/jfrog/artifactory/logs/catalina/catalina.out
-    - /var/opt/jfrog/artifactory/logs/event.log
-    - /var/opt/jfrog/artifactory/logs/import.export.log
-    - /var/opt/jfrog/artifactory/logs/request.log
-    - /var/opt/jfrog/artifactory/logs/request_trace.log
-    - /var/opt/jfrog/artifactory/logs/sha256_migration.log
+  include_role: name=common tasks_from=configure_awslogs_extra
+  with_items: 
+    - { name: 'access', filename: '/var/opt/jfrog/artifactory/logs/access.log' }
+    - { name: 'artifactory', filename: '/var/opt/jfrog/artifactory/logs/artifactory.log' }
+    - { name: 'catalina', filename: '/var/opt/jfrog/artifactory/logs/catalina/catalina.out' }
+    - { name: 'event', filename: '/var/opt/jfrog/artifactory/logs/event.log' }
+    - { name: 'import.export', filename: '/var/opt/jfrog/artifactory/logs/import.export.log' }
+    - { name: 'request', filename: '/var/opt/jfrog/artifactory/logs/request.log' }
+    - { name: 'request_trace', filename: '/var/opt/jfrog/artifactory/logs/request_trace.log' }
+    - { name: 'sha256_migration', filename: '/var/opt/jfrog/artifactory/logs/sha256_migration.log' }
+  loop_control:
+    loop_var: log
 
 - name: Installing Artifactory     
   yum:

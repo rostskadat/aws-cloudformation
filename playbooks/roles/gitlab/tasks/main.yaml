@@ -35,6 +35,18 @@
 - name: Creating and mounting EFS
   include_role: name=common tasks_from=create_fs
 
+- name: Monitoring application logs
+  include_role: name=common tasks_from=configure_awslogs_extra
+  with_items: 
+    - { name: 'unicorn_stdout', filename: '/var/log/gitlab/unicorn/unicorn_stdout.log' }
+    - { name: 'unicorn_stderr', filename: '/var/log/gitlab/unicorn/unicorn_stderr.log' }
+    - { name: 'gitlab-shell', filename: '/var/log/gitlab/gitlab-shell/gitlab-shell.log' }
+    - { name: 'nginx-gitlab_error', filename: '/var/log/gitlab/nginx/gitlab_error.log' }
+    - { name: 'nginx-gitlab_access', filename: '/var/log/gitlab/nginx/gitlab_access.log' }
+    - { name: 'gitlab-rails-application', filename: '/var/log/gitlab/gitlab-rails/application.log' }
+  loop_control:
+    loop_var: log
+
 - name: Installing Gitlab     
   yum:
     name: gitlab-ee

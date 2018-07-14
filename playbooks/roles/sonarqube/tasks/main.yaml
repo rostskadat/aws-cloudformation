@@ -34,19 +34,15 @@
   include_role: name=common tasks_from=create_fs
 
 - name: Monitoring application logs
-  blockinfile: 
-    path: /etc/awslogs/awslogs.conf
-    block: |
-      [{{item}}]
-      file = {{item}}
-      log_stream_name = {instance_id}{{item}}
-      log_group_name = {{LogGroup}}
-  with_items:
-    - /opt/sonar/logs/access.log 
-    - /opt/sonar/logs/ce.log 
-    - /opt/sonar/logs/es.log 
-    - /opt/sonar/logs/sonar.log 
-    - /opt/sonar/logs/web.log
+  include_role: name=common tasks_from=configure_awslogs_extra
+  with_items: 
+    - { name: 'access', filename: '/opt/sonar/logs/access.log' }
+    - { name: 'ce', filename: '/opt/sonar/logs/ce.log' }
+    - { name: 'es', filename: '/opt/sonar/logs/es.log' }
+    - { name: 'sonar', filename: '/opt/sonar/logs/sonar.log' }
+    - { name: 'web', filename: '/opt/sonar/logs/web.log' }
+  loop_control:
+    loop_var: log
 
 - name: Installing Sonarqube     
   yum: name=sonar

@@ -36,15 +36,11 @@
   include_role: name=common tasks_from=create_fs
 
 - name: Monitoring application logs
-  blockinfile: 
-    path: /etc/awslogs/awslogs.conf
-    block: |
-      [{{item}}]
-      file = {{item}}
-      log_stream_name = {instance_id}{{item}}
-      log_group_name = {{LogGroup}}
-  with_items:
-    - /var/log/jenkins/jenkins.log
+  include_role: name=common tasks_from=configure_awslogs_extra
+  with_items: 
+    - { name: 'jenkins', filename: '/var/log/jenkins/jenkins.log' }
+  loop_control:
+    loop_var: log
 
 - name: Installing Jenkins
   yum: name="{{packages}}"
