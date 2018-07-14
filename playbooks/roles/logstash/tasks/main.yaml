@@ -58,12 +58,7 @@
   copy: src=files/etc/logstash/conf.d/01-input.conf dest=/etc/logstash/conf.d/01-input.conf mode=644
 
 - name: Templating Logstash config
-  template: 
-    src: 'templates{{item.src}}'
-    dest: '{{item.src}}'
-    owner: '{{item.user}}'
-    group: '{{item.user}}'
-    mode: '{{item.mode}}'
+  template: src='templates{{item.src}}' dest='{{item.src}}' owner='{{item.user}}' group='{{item.user}}' mode='{{item.mode}}'
   with_items:
     - { src: /root/s3_sync_logs.sh, user: root, mode: '0700' }
     - { src: /etc/logstash/conf.d/02-elastic_output.conf, user: logstash, mode: '0644' }
