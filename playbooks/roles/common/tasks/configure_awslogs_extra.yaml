@@ -1,0 +1,6 @@
+---
+- name: Monitoring application log {{log.filename}}
+  template: 
+    src: templates/etc/awslogs/config/application_log.conf
+    dest: '/etc/awslogs/config/{{log.name}}.conf'
+    mode: 0644
