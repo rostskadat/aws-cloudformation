@@ -4,3 +4,6 @@
     src: templates/etc/awslogs/config/application_log.conf
     dest: '/etc/awslogs/config/{{log.name}}.conf'
     mode: 0644
+  notify: restart awslogs
+    
+    
