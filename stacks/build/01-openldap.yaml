@@ -169,13 +169,13 @@ Resources:
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
-      AWS::CloudFormation::Authentication:
-        S3AccessCredentials:
-          type: s3
-          roleName: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
-          buckets: 
-            - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
+#      AWS::CloudFormation::Authentication:
+#        S3AccessCredentials:
+#          type: s3
+#          roleName: 
+#            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
+#          buckets: 
+#            - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Install ] 
