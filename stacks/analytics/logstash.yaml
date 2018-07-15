@@ -75,6 +75,13 @@ Resources:
       ServiceToken: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-FunctionGetVariable'
 
+  #----------------------------------------------------------------------------
+  #
+  # AWS AutoScalingGroup
+  #
+  # We create the AutoScalingGroup whose job is to create and terminate instances
+  #   depending on the required capacity and the health of the instances.
+  #
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
@@ -118,6 +125,14 @@ Resources:
     DependsOn:
       - MountTargetA
       - MountTargetB
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS LoadBalancer
+  #
+  # We create the LoadBalancer used by the AutoScalingGroup to handle scaling 
+  #   event
+  #
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
@@ -165,6 +180,14 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
+      
+  #----------------------------------------------------------------------------
+  #
+  # AWS EFS
+  #
+  # We create the filesystem used by the instance to share valuable data between
+  #   scaling events
+  #
   FileSystem:
     Type: 'AWS::EFS::FileSystem'
     Properties: 
@@ -192,9 +215,189 @@ Resources:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS Cognito
+  #
+  # We create the UserPool, IdentityPool and IAM role required to allow access
+  #   to the ElasticSearch service to select user. 
+  # cf. https://docs.aws.amazon.com/elasticsearch-service/latest/developerguide/es-cognito-auth.html
+  #
+  # NOTE: The CloudFormation API does not allow the configuration of the ESDomain
+  #
+  UserPool:
+    Type: 'AWS::Cognito::UserPool'
+    Properties:
+      AdminCreateUserConfig: 
+        AllowAdminCreateUserOnly: true
+      AutoVerifiedAttributes: 
+        - email
+      UsernameAttributes: 
+        - email
+      UserPoolTags: 
+        PLATFORM:
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        Name: !Sub '${AWS::StackName}-UserPool'
+
+  UserPoolClient:
+    Type: 'AWS::Cognito::UserPoolClient'
+    Properties:
+        GenerateSecret: false
+        UserPoolId: !Ref UserPool
+
+  UserPoolGroup:
+    Type: 'AWS::Cognito::UserPoolGroup'
+    Properties:
+      Description: 'Group of user allowed to access logstash'
+      GroupName: 'logstash.elasticsearch'
+      Precedence: 0
+      RoleArn: !GetAtt RoleCognitoAccessForAmazonES.Arn
+      UserPoolId: !Ref UserPool        
+
+#  UserPoolUser:
+#    Type: "AWS::Cognito::UserPoolUser"
+#    Properties:
+#      DesiredDeliveryMediums: 
+#        - EMAIL
+#      ForceAliasCreation: true
+#      UserAttributes: 
+#        - Name: 'email'
+#          Value: 'rostskadat+aws@gmail.com'
+#      MessageAction: RESEND
+#      Username: 'demo-user'
+#      UserPoolId: !Ref UserPool 
+
+  IdentityPool: 
+    Type: 'AWS::Cognito::IdentityPool'
+    Properties:
+      AllowUnauthenticatedIdentities: false
+      DeveloperProviderName: 'login.logstash.elasticsearch'
+  
+  IdentityPoolRoleAttachment:
+    Type: 'AWS::Cognito::IdentityPoolRoleAttachment'
+    Properties:
+      IdentityPoolId: !Ref IdentityPool
+      Roles: 
+        authenticated: !GetAtt RoleCognitoIpAuthenticated.Arn
+        unauthenticated: !GetAtt RoleCognitoIpUnauthenticated.Arn
+
+  RoleConfigureCognito: 
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'ec2.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Path: '/'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonESCognitoAccess'
+
+  RoleCognitoAccessForAmazonES: 
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'es.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Path: '/'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonESCognitoAccess'
+
+  RoleCognitoIpAuthenticated: 
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Federated: 
+                - 'cognito-identity.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'cognito-identity.amazonaws.com:aud': !Ref IdentityPool
+              'ForAnyValue:StringLike': 
+                'cognito-identity.amazonaws.com:amr': 'authenticated'
+      Path: '/'
+      Policies: 
+        - PolicyName: 'AllowCognitoIpAuthenticated'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 'mobileanalytics:PutEvents'
+                  - 'cognito-sync:*'
+                  - 'cognito-identity:*'
+                Resource: '*'
+
+  RoleCognitoIpUnauthenticated: 
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Federated: 
+                - 'cognito-identity.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'cognito-identity.amazonaws.com:aud': !Ref IdentityPool
+              'ForAnyValue:StringLike': 
+                'cognito-identity.amazonaws.com:amr': 'unauthenticated'
+      Path: '/'
+      Policies: 
+        - PolicyName: 'AllowCognitoIpUnauthenticated'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 'mobileanalytics:PutEvents'
+                  - 'cognito-sync:*'
+                Resource: '*'
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS ElasticSearch
+  #
+  # We create the UserPool, IdentityPool and IAM role required to allow access
+  #   to the ElasticSearch service to select user.
+  #
+  # NOTE: the login point is configured manually because the API does yet provide
+  #   the possibility to configure it, either by CloudFormation or by AWS CLI
+  #   as of version 1.14.9 (installed in AMI)
+  #
+  # https://login-791682668801.auth.eu-west-1.amazoncognito.com
   Domain:
     Type: 'AWS::Elasticsearch::Domain'
     Properties: 
+      AccessPolicies:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal: 
+              AWS:
+                - !GetAtt RoleCognitoIpAuthenticated.Arn
+            Action: 'es:ESHttp*'
+            # TODO: How to make reference to this domain specifically?
+            Resource: !Sub 'arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/*'
       EBSOptions:
         EBSEnabled: true
         VolumeSize: !Ref ElasticSearchVolumeSize
@@ -208,23 +411,32 @@ Resources:
         Enabled: true
       SnapshotOptions:
         AutomatedSnapshotStartHour: 0
-#      VPCOptions: 
-#        SecurityGroupIds: 
-#          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
-#        SubnetIds: 
-#          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-#          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
       Tags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-Domain'
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS CloudWatch
+  #
+  # We create the LogGroup used by the instances in this stack.
+  #
   LogGroup:
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS EC2
+  #
+  # We create the LaunchConfiguration used by the AutoScalingGroup to provision
+  #   the instances in this stack
+  #
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
@@ -256,6 +468,12 @@ Resources:
                 ESDomainPort: '443'
                 
                 S3LogsIncludeFilters: '${S3LogsIncludeFilters}'
+                
+                UserPoolId: '${UserPool}'
+                IdentityPoolId: '${IdentityPool}'
+                RoleArn: '${RoleConfigureCognito.Arn}'
+                
+                ESDomainName: '${Domain}'
               mode: '000600'
               owner: root
               group: root

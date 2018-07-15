@@ -61,6 +61,7 @@
   template: src='templates{{item.src}}' dest='{{item.src}}' owner='{{item.user}}' group='{{item.user}}' mode='{{item.mode}}'
   with_items:
     - { src: /root/s3_sync_logs.sh, user: root, mode: '0700' }
+    - { src: /root/configure_es2cognito.sh, user: root, mode: '0700' }
     - { src: /etc/logstash/conf.d/02-elastic_output.conf, user: logstash, mode: '0644' }
 
 - name: Creating GeoDB directory
