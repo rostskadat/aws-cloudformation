@@ -5,6 +5,9 @@
 #
 # TODO: 
 #
+# The configuration of Cognito is still really in flux, at least up until CLI 1.14.9 
+#   (version installed by default in those AMI).
+#
 ---
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "This stack create a logstash host to parse logs and an ElasticSearch cluster"
