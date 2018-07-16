@@ -289,7 +289,7 @@ Resources:
                   'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
                 SonarqubeAdminUsername: 
                   'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-AdminUsername'
-                JenkinsDNSName: !GetAtt LoadBalancer.DNSName
+                JenkinsDNSName: !GetAtt LoadBalancer.Outputs.DNSName
           commands:
             '01_get_playbook': 
               command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
@@ -342,7 +342,7 @@ Resources:
 Outputs: 
   DNSName: 
     Description: 'Public DNS address of the internet facing ELB'
-    Value: !Sub '${LoadBalancer.DNSName}'
+    Value: !Sub '${LoadBalancer.Outputs.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
   DNSNameJNPL:

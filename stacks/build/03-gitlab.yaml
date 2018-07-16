@@ -217,7 +217,7 @@ Resources:
                 DBAdminUsername: '{{DBAdminUsername}}'
                 DBAdminPassword: '${DBMasterPassword}'
                 
-                ExternalUrl: '${LoadBalancer.DNSName}'
+                ExternalUrl: '${LoadBalancer.Outputs.DNSName}'
 
                 GitlabAdminEmail: '${GitlabAdminEmail}'
                 GitlabAdminPassword: '${GitlabAdminPassword}'
