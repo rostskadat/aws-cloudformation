@@ -22,6 +22,7 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
+      - IAMUserSSHAccess
       - InstanceType
     - Label: 
         default: 'ElasticSearch Parameters'
@@ -43,6 +44,13 @@ Parameters:
     Description: "The Instance Key Pair"
     Type: "AWS::EC2::KeyPair::KeyName"
     ConstraintDescription: "must be the name of an existing EC2 KeyPair."
+  IAMUserSSHAccess:
+    Description: 'Synchronize public keys of IAM users to enable personalized SSH access (Doc: https://cloudonaut.io/manage-aws-ec2-ssh-access-with-iam/).'
+    Type: String
+    Default: false
+    AllowedValues:
+    - true
+    - false
   InstanceType:
     Description: 'The instance type'
     Type: String
@@ -69,6 +77,7 @@ Parameters:
     Default: '*SSL_access_$(date +"%Y-%m-%d")-00_00_00.log,*ArcQueriesTrace.log,*api-backend.log'
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasIAMUserSSHAccess: !Equals [!Ref IAMUserSSHAccess, 'true']
 Resources: 
 
   FunctionGetVariable: 
@@ -457,6 +466,7 @@ Resources:
                 StackName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+                HasIAMUserSSHAccess: ${IAMUserSSHAccess}
 
                 FileSystem: '${FileSystem}'
                 

@@ -24,6 +24,7 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
+      - IAMUserSSHAccess
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Parent Stack"
@@ -35,8 +36,17 @@ Parameters:
     Type: "AWS::EC2::KeyPair::KeyName"
     MinLength: 1
     ConstraintDescription: 'must be the name of an existing Key Pair to use to log to the EC2 Instance'
+  IAMUserSSHAccess:
+    Description: 'Synchronize public keys of IAM users to enable personalized SSH access (Doc: https://cloudonaut.io/manage-aws-ec2-ssh-access-with-iam/).'
+    Type: String
+    Default: false
+    AllowedValues:
+    - true
+    - false
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasIAMUserSSHAccess: !Equals [!Ref IAMUserSSHAccess, 'true']
 Resources: 
-
   FunctionGetVariable: 
     Type: 'Custom::FunctionGetVariable'
     Version: '1.0'
@@ -44,6 +54,13 @@ Resources:
       ServiceToken: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-FunctionGetVariable'
 
+  #----------------------------------------------------------------------------
+  #
+  # AWS AutoScalingGroup
+  #
+  # We create the AutoScalingGroup whose job is to create and terminate instances
+  #   depending on the required capacity and the health of the instances.
+  #
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
@@ -65,6 +82,7 @@ Resources:
         - !Ref TargetGroup
       VPCZoneIdentifier: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
       Tags: 
         - Key: PLATFORM
           Value: 
@@ -83,6 +101,14 @@ Resources:
         MaxBatchSize: 1
         PauseTime: PT15M
         WaitOnResourceSignals: true
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS LoadBalancer
+  #
+  # We create the LoadBalancer used by the AutoScalingGroup to handle scaling 
+  #   event
+  #
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
@@ -123,21 +149,29 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: 22
       Protocol: TCP
-  LogGroup: 
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS CloudWatch
+  #
+  # We create the LogGroup used by the instances in this stack.
+  #
+  LogGroup:
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS EC2
+  #
+  # We create the LaunchConfiguration used by the AutoScalingGroup to provision
+  #   the instances in this stack
+  #
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
-      AWS::CloudFormation::Authentication:
-        S3AccessCredentials:
-          type: s3
-          roleName: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
-          buckets: 
-            - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Install ] 
@@ -152,6 +186,7 @@ Resources:
                 StackName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+                HasIAMUserSSHAccess: ${IAMUserSSHAccess}
               mode: '000600'
               owner: root
               group: root
@@ -172,7 +207,7 @@ Resources:
       SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupDMZ'
         - !Ref SecurityGroupHealthCheck
-      UserData: 
+      UserData:
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
@@ -198,10 +233,9 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
-
 Outputs: 
-  DNSName: 
-    Description: 'Public DNS address of the internet facing ELB'
+  DNSName:
+    Description: 'Hostname to use when connecting'
     Value: !Sub '${LoadBalancer.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'

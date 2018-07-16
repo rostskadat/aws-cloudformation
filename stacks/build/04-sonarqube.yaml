@@ -39,6 +39,7 @@ Metadata:
         default: 'EC2 Parameters'
       Parameters:
       - KeyName
+      - IAMUserSSHAccess
       - InstanceType
     - Label: 
         default: 'LDAP Parameter'
@@ -81,6 +82,13 @@ Parameters:
   KeyName: 
     Description: "Optional Key Pair to connect through SSH"
     Type: "AWS::EC2::KeyPair::KeyName"
+  IAMUserSSHAccess:
+    Description: 'Synchronize public keys of IAM users to enable personalized SSH access (Doc: https://cloudonaut.io/manage-aws-ec2-ssh-access-with-iam/).'
+    Type: String
+    Default: false
+    AllowedValues:
+    - true
+    - false
   InstanceType:
     Description: 'The instance type'
     Type: String
@@ -111,6 +119,7 @@ Parameters:
     NoEcho: true
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasIAMUserSSHAccess: !Equals [!Ref IAMUserSSHAccess, 'true']
 Resources: 
 
   FunctionGetVariable: 
@@ -290,6 +299,7 @@ Resources:
                 StackName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+                HasIAMUserSSHAccess: ${IAMUserSSHAccess}
 
                 LDAPDNSName: '{{LDAPDNSName}}'
                 LDAPPort: '{{LDAPPort}}'

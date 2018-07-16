@@ -208,10 +208,23 @@ Resources:
             Statement: 
               - Effect: 'Allow'
                 Action:
-                  - 'ec2:Describe*'
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:DescribeVolumes'
                   - 'ec2:CreateTags'
                 Resource: '*'
-
+        - PolicyName: 'AllowEC2GetSSHKeys'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 'iam:ListUsers'
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - 'iam:ListSSHPublicKeys'
+                  - 'iam:GetSSHPublicKey'
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:user/*'
   InstanceProfileEC2Instance:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:
