@@ -69,6 +69,13 @@ Resources:
       ServiceToken: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-FunctionGetVariable'
 
+  #----------------------------------------------------------------------------
+  #
+  # AWS AutoScalingGroup
+  #
+  # We create the AutoScalingGroup whose job is to create and terminate instances
+  #   depending on the required capacity and the health of the instances.
+  #
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
@@ -76,7 +83,8 @@ Resources:
       HealthCheckType: ELB
       LaunchConfigurationName: !Ref LaunchConfiguration
       MinSize: 1
-      MaxSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
       NotificationConfigurations:
         - TopicARN: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
@@ -104,13 +112,21 @@ Resources:
         Count: 1
     UpdatePolicy: 
       AutoScalingRollingUpdate: 
-        MinInstancesInService: 0
+        MinInstancesInService: 1
         MaxBatchSize: 1
         PauseTime: PT15M
         WaitOnResourceSignals: true
     DependsOn:
       - MountTargetA
       - MountTargetB
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS LoadBalancer
+  #
+  # We create the LoadBalancer used by the AutoScalingGroup to handle scaling 
+  #   event
+  #
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
@@ -158,6 +174,14 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
+      
+  #----------------------------------------------------------------------------
+  #
+  # AWS EFS
+  #
+  # We create the filesystem used by the instance to share valuable data between
+  #   scaling events
+  #
   FileSystem:
     Type: 'AWS::EFS::FileSystem'
     Properties: 
@@ -202,125 +226,41 @@ Resources:
             - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
-          default: [ Bootstrap, BootstrapApplication, InstallApplication ]
-        Bootstrap: 
+          default: [ Install ] 
+        Install: 
           packages: 
             yum: 
-              wget: []
-              htop: []
-              awslogs: []
-              yum-cron: []
-          files: 
-            '/etc/awslogs/awscli.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awscli.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                Region: !Sub ${AWS::Region}
-            '/etc/awslogs/awslogs.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/awslogs/awslogs.conf'
-              mode: '000644'
-              owner: root
-              group: root
-              context:
-                LogGroup: !Sub ${LogGroup}
-            '/etc/cfn/cfn-hup.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/cfn-hup.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/etc/cfn/hooks.d/cfn-auto-reloader.conf': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/etc/cfn/hooks.d/cfn-auto-reloader.conf'
-              mode: '000644' 
-              owner: 'root'
-              group: 'root'
-              context:
-                Region: !Sub ${AWS::Region}
-                StackName: !Sub ${AWS::StackName}
-            '/home/ec2-user/.bashrc': 
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/home/ec2-user/.bashrc'
-              mode: '000600'
-              owner: 'ec2-user'
-              group: 'ec2-user'
-              context:
-                StackName: !Sub ${AWS::StackName}
-            '/root/tag_root_volume.sh':
-              source: !Sub 'https://${FunctionGetVariable.S3ConfigBucketName}.s3.amazonaws.com/files/root/tag_root_volume.sh'
-              mode: '000700'
-              owner: 'root'
-              group: 'root'
-          commands:
-            '01_install_aws_inspector': 
-              command: 'wget -q -O - https://d1wk0tztpsntt1.cloudfront.net/linux/latest/install | sudo bash -s'
-            '02_yum_cron_hourly.conf':
-              command: "sudo sed -ibckp -E 's/^update_cmd.*/update_cmd = security/;s/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron-hourly.conf"
-            '03_yum_cron.conf':
-              command: "sudo sed -ibckp -E 's/^(update_messages|download_updates|apply_updates).*/\\1 = yes/' /etc/yum/yum-cron.conf"
-            '04_tag_root_volume':
-              command: !Sub 'sudo /root/tag_root_volume.sh ${AWS::Region} ${AWS::StackName}'
-            '05_remove_ntp':
-              command: 'sudo yum erase -y ntp*'
-            '06_install_chrnoy':
-              command: 'sudo yum install -y chrony'
-          services:
-            sysvinit:
-              awslogs:
-                enabled: true
-                ensureRunning: true
-                packages:
-                  yum:
-                  - awslogs
-                files:
-                - '/etc/awslogs/awslogs.conf'
-                - '/etc/awslogs/awscli.conf'
-              cfn-hup:
-                enabled: true
-                ensureRunning: true
-                files: 
-                  - /etc/cfn/cfn-hup.conf
-                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
-              yum-cron: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/yum/yum-cron.conf
-                  - /etc/yum/yum-cron-hourly.conf
-              chronyd: 
-                enabled: true
-                ensureRunning: true
-                files:
-                  - /etc/chrony.conf
-        InstallSplunk: 
-          packages: 
-            rpm: 
-              splunk: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/splunk-7.1.1-8f0ead9ec3db-linux-2.6-x86_64.rpm'
+              ansible: []
           files:
-            '/opt/splunk/etc/system/local/user-seed.conf':
+            '/root/playbooks/group_vars/stack.yaml':
               content: !Sub |
-                [user_info]
-                USERNAME = admin
-                PASSWORD = ${SplunkAdminPassword}
-              mode: "000644"
-              owner: "root"
-              group: "root"
+                Region: '${AWS::Region}'
+                StackName: '${AWS::StackName}'
+                LogGroup: '${AWS::StackName}'
+                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+
+                FileSystem: '${FileSystem}'
+                
+                SplunkAdminPassword: '${SplunkAdminPassword}'
+                ESDomainPort: '443'
+                
+                S3LogsIncludeFilters: '${S3LogsIncludeFilters}'
+                
+                UserPoolId: '${UserPool}'
+                IdentityPoolId: '${IdentityPool}'
+                RoleArn: '${RoleConfigureCognito.Arn}'
+                
+                ESDomainName: '${Domain}'
+              mode: '000600'
+              owner: root
+              group: root
           commands:
-            '01_splunk_enable':
-              command: 'sudo /opt/splunk/bin/splunk enable boot-start --accept-license -user splunk'
-              cwd: '~'
-        InstallSplunkApps: 
-          files:
-            '/opt/splunk/etc/apps/':
-              source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/nmon-performance-monitor-for-unix-and-linux-systems_1916.tgz'
-#            '/opt/splunk/etc/apps/':
-#              source: 'https://s3-eu-west-1.amazonaws.com/cloudformation-eu-west-1-791682668801/ta-nmon-technical-addon-for-nmon-performance-monitor_1333.tgz'
-        StartSplunk:              
-          commands:
-            "01_splunk_start":
-              command: 'sudo /opt/splunk/bin/splunk start'
+            '01_get_playbook': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
+            '02_set_host': 
+              command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
+            '03_run_playbook': 
+              command: 'sudo ansible-playbook /root/playbooks/splunk.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
@@ -331,7 +271,7 @@ Resources:
       SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
         - !Ref SecurityGroupHealthCheck
-      UserData:
+      UserData: 
         'Fn::Base64': !Sub |
           #!/bin/bash
           yum-config-manager --enable epel
