@@ -48,11 +48,11 @@
 
 - name: Scheduling cron for /root/openldap/update_users.sh
   cron:
+    name: 'update_users'
+    minute: "*/10"
+    job: /root/openldap/update_users.sh
     user: root
-    minute: '5'
-    cron_file: 'update_users'
-    name: 'Update LDAP Users database'
-    job: "/root/openldap/update_users.sh"
+    cron_file: update_users
 
 - name: Bootstrapping directory
   ldap_attr:
