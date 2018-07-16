@@ -109,31 +109,6 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
-  # AWS AutoScalingGroup
-  #
-  # We create the AutoScalingGroup whose job is to create and terminate instances
-  #   depending on the required capacity and the health of the instances.
-  #
-  AutoScalingGroup:
-    Type: 'AWS::CloudFormation::Stack'
-    Properties:
-      Parameters:
-        ParentVpcStack: !Sub '${ParentVpcStack}'
-        ParentStack: !Sub '${AWS::StackName}'
-        TargetGroup: !GetAtt LoadBalancer.Outputs.TargetGroup
-        LaunchConfiguration: !Ref LaunchConfiguration
-      Tags:
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-ASG'
-      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/asg.yaml'
-    DependsOn:
-      - FileSystem
-
-  #----------------------------------------------------------------------------
-  #
   # AWS LoadBalancer
   #
   # We create the LoadBalancer
@@ -174,6 +149,31 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-EFS'
       TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/efs.yaml'
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS AutoScalingGroup
+  #
+  # We create the AutoScalingGroup whose job is to create and terminate instances
+  #   depending on the required capacity and the health of the instances.
+  #
+  AutoScalingGroup:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        ParentVpcStack: !Sub '${ParentVpcStack}'
+        ParentStack: !Sub '${AWS::StackName}'
+        TargetGroup: !GetAtt LoadBalancer.Outputs.TargetGroup
+        LaunchConfiguration: !Ref LaunchConfiguration
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ASG'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/asg.yaml'
+    DependsOn:
+      - FileSystem
 
   #----------------------------------------------------------------------------
   #
@@ -243,7 +243,7 @@ Resources:
                 LDAPDNSName: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
                 LDAPPort: 
-                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-LDAPPort'
+                  'Fn::ImportValue': !Sub '${ParentLDAPStack}-Port'
                 LDAPRootDC: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                 LDAPManagerDN: 
@@ -295,12 +295,12 @@ Resources:
 Outputs: 
   DNSName: 
     Description: 'Public DNS address of the internet facing ELB'
-    Value: !Sub '${LoadBalancer.DNSName}'
+    Value: !GetAtt LoadBalancer.Outputs.DNSName
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
-  GitlabAdminUsername:      
+  AdminUsername:      
     Description: 'The Admin user name for the server'
     Value: 'root'
     Export:
-      Name: !Sub '${AWS::StackName}-GitlabAdminUsername'
+      Name: !Sub '${AWS::StackName}-AdminUsername'
       

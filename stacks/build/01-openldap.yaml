@@ -91,6 +91,27 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
+  # AWS LoadBalancer
+  #
+  # We create the LoadBalancer
+  #
+  LoadBalancer:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        ParentVpcStack: !Sub '${ParentVpcStack}'
+        HealthCheckPort: 389
+        ListenerPort: 389
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ELB'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-tcp.yaml'
+
+  #----------------------------------------------------------------------------
+  #
   # AWS AutoScalingGroup
   #
   # We create the AutoScalingGroup whose job is to create and terminate instances
@@ -111,27 +132,6 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-ASG'
       TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/asg.yaml'
-
-  #----------------------------------------------------------------------------
-  #
-  # AWS LoadBalancer
-  #
-  # We create the LoadBalancer
-  #
-  LoadBalancer:
-    Type: 'AWS::CloudFormation::Stack'
-    Properties:
-      Parameters:
-        ParentVpcStack: !Sub '${ParentVpcStack}'
-        HealthCheckPort: 389
-        ListenerPort: 389
-      Tags:
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-ELB'
-      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-tcp.yaml'
 
   #----------------------------------------------------------------------------
   #
@@ -201,7 +201,7 @@ Resources:
           yum update -y
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+#          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -223,14 +223,14 @@ Resources:
 Outputs: 
   DNSName:
     Description: 'Hostname to use when connecting'
-    Value: !Sub '${LoadBalancer.DNSName}'
+    Value: !GetAtt LoadBalancer.Outputs.DNSName
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
-  LDAPPort:
+  Port:
     Description: 'LDAP port to use when connecting'
     Value: 389
     Export:
-      Name: !Sub '${AWS::StackName}-LDAPPort'
+      Name: !Sub '${AWS::StackName}-Port'
   RootDC: 
     Description: 'LDAP URL to use when connecting'
     Value: !Sub '${RootDC}'
