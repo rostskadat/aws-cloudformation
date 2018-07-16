@@ -129,104 +129,52 @@ Resources:
       ServiceToken: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-FunctionGetVariable'
 
-  AutoScalingGroup: 
-    Type: 'AWS::AutoScaling::AutoScalingGroup'
-    Properties:
-      HealthCheckGracePeriod: 300
-      HealthCheckType: ELB
-      LaunchConfigurationName: !Ref LaunchConfiguration
-      MinSize: 1
-      MaxSize: 2
-      DesiredCapacity: 1
-      NotificationConfigurations:
-        - TopicARN: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
-          NotificationTypes:
-            - 'autoscaling:EC2_INSTANCE_LAUNCH'
-            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
-            - 'autoscaling:EC2_INSTANCE_TERMINATE'
-            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
-      TargetGroupARNs:
-        - !Ref TargetGroup
-      VPCZoneIdentifier: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-          PropagateAtLaunch: true
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-Main'
-          PropagateAtLaunch: true
-    CreationPolicy: 
-      ResourceSignal: 
-        Timeout: PT15M
-        Count: 1
-    UpdatePolicy: 
-      AutoScalingRollingUpdate: 
-        MinInstancesInService: 1
-        MaxBatchSize: 1
-        PauseTime: PT15M
-        WaitOnResourceSignals: true
-    DependsOn:
-      - MountTargetA
-      - MountTargetB
-
   #----------------------------------------------------------------------------
   #
-  # AWS LoadBalancer
+  # AWS AutoScalingGroup
   #
-  # We create the LoadBalancer used by the AutoScalingGroup to handle scaling 
-  #   event
+  # We create the AutoScalingGroup whose job is to create and terminate instances
+  #   depending on the required capacity and the health of the instances.
   #
-  LoadBalancer:
-    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+  AutoScalingGroup:
+    Type: 'AWS::CloudFormation::Stack'
     Properties:
-      Scheme: internet-facing
-      SecurityGroups:
-      - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
-      Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancer'
-  TargetGroup:
-    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
-    Properties:
-      HealthCheckIntervalSeconds: 10
-      HealthCheckPath: '/about'
-      HealthCheckTimeoutSeconds: 2
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 2
-      Matcher:
-        HttpCode: '200-299'
-      Port: 9000
-      Protocol: HTTP
+      Parameters:
+        ParentVpcStack: !Sub '${ParentVpcStack}'
+        ParentStack: !Sub '${AWS::StackName}'
+        TargetGroup: !GetAtt LoadBalancer.Outputs.TargetGroup
+        LaunchConfiguration: !Ref LaunchConfiguration
       Tags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroup'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      TargetGroupAttributes:
-        - Key: 'deregistration_delay.timeout_seconds'
-          Value: 30
-  Listener:
-    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+          Value: !Sub '${AWS::StackName}-ASG'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/asg.yaml'
+    DependsOn:
+      - FileSystem
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS LoadBalancer
+  #
+  # We create the LoadBalancer
+  #
+  LoadBalancer:
+    Type: 'AWS::CloudFormation::Stack'
     Properties:
-      DefaultActions:
-      - TargetGroupArn: !Ref TargetGroup
-        Type: forward
-      LoadBalancerArn: !Ref LoadBalancer
-      Port: 80
-      Protocol: HTTP
+      Parameters:
+        ParentVpcStack: !Sub '${ParentVpcStack}'
+        HealthCheckPath: '/about'
+        HealthCheckPort: 9000
+        ListenerPort: 80
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ELB'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-app.yaml'
 
   #----------------------------------------------------------------------------
   #
@@ -236,32 +184,18 @@ Resources:
   #   scaling events
   #
   FileSystem:
-    Type: 'AWS::EFS::FileSystem'
-    Properties: 
-      Encrypted: true
-      FileSystemTags:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        ParentVpcStack: !Sub '${ParentVpcStack}'
+        ParentStack: !Sub '${AWS::StackName}'
+      Tags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-FileSystem'
-      PerformanceMode: generalPurpose
-  MountTargetA:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SecurityGroups:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-  MountTargetB:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SecurityGroups:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+          Value: !Sub '${AWS::StackName}-EFS'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/efs.yaml'
 
   #----------------------------------------------------------------------------
   #

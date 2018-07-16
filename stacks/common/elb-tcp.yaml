@@ -1,0 +1,100 @@
+#
+# FILE: elb-app.yaml
+#
+# DESCRIPTION: This stack is a nested stack that can be used by application
+#   require a Load Balancer in conjonction with an AutoScalingGroup
+#
+---
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: 'This netsted stack create an ElasticLoadBalancer'
+
+Metadata: 
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Parent Stack'
+      Parameters:
+      - ParentVpcStack
+    - Label: 
+        default: 'Load Balancer Parameter'
+      Parameters:
+      - HealthCheckPort
+      - ListenerPort
+      - TopicArn
+      
+Parameters: 
+  ParentVpcStack: 
+    Description: 'Enter the name of the VPC Stack where the LoadBalancer will reside'
+    Type: String
+    MinLength: 1
+
+  HealthCheckPort:
+    Description: 'The port to check'
+    Type: Number
+
+  ListenerPort:
+    Description: 'The port to listen to'
+    Type: Number
+
+Resources: 
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS Application LoadBalancer
+  #
+  # We create a set of alarms for this specific load balancer, in order to alert
+  #   us if something start to go astray...
+  #
+  LoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Scheme: internal
+      Subnets: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Type: network
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-LoadBalancer'
+  TargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Port: !Ref HealthCheckPort
+      Protocol: TCP
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TargetGroup'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      TargetGroupAttributes:
+        - Key: 'deregistration_delay.timeout_seconds'
+          Value: 30
+  Listener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref TargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: !Ref ListenerPort
+      Protocol: TCP
+
+Outputs: 
+  DNSName: 
+    Description: 'The LoadBalancer DNSName'
+    Value: !Sub '${LoadBalancer.DNSName}'
+  LoadBalancer: 
+    Description: 'The LoadBalancer ARN'
+    Value: !Sub '${LoadBalancer}'
+  TargetGroup: 
+    Description: 'The TargetGroup ARN'
+    Value: !Sub '${TargetGroup}'

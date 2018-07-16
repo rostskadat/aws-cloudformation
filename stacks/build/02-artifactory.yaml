@@ -115,104 +115,57 @@ Resources:
   # We create the AutoScalingGroup whose job is to create and terminate instances
   #   depending on the required capacity and the health of the instances.
   #
-  AutoScalingGroup: 
-    Type: 'AWS::AutoScaling::AutoScalingGroup'
-    Properties:
-      HealthCheckGracePeriod: 300
-      HealthCheckType: ELB
-      LaunchConfigurationName: !Ref LaunchConfiguration
-      MinSize: 1
-      MaxSize: 2
-      DesiredCapacity: 1
-      NotificationConfigurations:
-        - TopicARN: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
-          NotificationTypes:
-            - 'autoscaling:EC2_INSTANCE_LAUNCH'
-            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
-            - 'autoscaling:EC2_INSTANCE_TERMINATE'
-            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
-      TargetGroupARNs:
-        - !Ref TargetGroup
-      VPCZoneIdentifier: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-          PropagateAtLaunch: true
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-Main'
-          PropagateAtLaunch: true
-    CreationPolicy: 
-      ResourceSignal: 
-        Timeout: PT15M
-        Count: 1
-    UpdatePolicy: 
-      AutoScalingRollingUpdate: 
-        MinInstancesInService: 1
-        MaxBatchSize: 1
-        PauseTime: PT15M
-        WaitOnResourceSignals: true
-    DependsOn:
-      - MountTargetA
-      - MountTargetB
+#  WaitConditionHandle:
+#    Type: 'AWS::CloudFormation::WaitConditionHandle'
+#    Properties: { }
+#
+#  WaitCondition: 
+#    Type: 'AWS::CloudFormation::WaitCondition'
+#    Properties: 
+#      Handle: !Ref WaitConditionHandle
+#      Timeout: 500
+#  DependsOn:
+#    - AutoScalingGroup
 
-  #----------------------------------------------------------------------------
-  #
-  # AWS LoadBalancer
-  #
-  # We create the LoadBalancer used by the AutoScalingGroup to handle scaling 
-  #   event
-  #
-  LoadBalancer:
-    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+  AutoScalingGroup:
+    Type: 'AWS::CloudFormation::Stack'
     Properties:
-      Scheme: internet-facing
-      SecurityGroups:
-      - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
-      Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
-      Tags: 
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-LoadBalancer'
-  TargetGroup:
-    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
-    Properties:
-      HealthCheckIntervalSeconds: 10
-      HealthCheckPath: '/artifactory/webapp/'
-      HealthCheckTimeoutSeconds: 2
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 2
-      Matcher:
-        HttpCode: '200-299'
-      Port: 8081
-      Protocol: HTTP
+      Parameters:
+        ParentVpcStack: !Sub '${ParentVpcStack}'
+        ParentStack: !Sub '${AWS::StackName}'
+        TargetGroup: !GetAtt LoadBalancer.Outputs.TargetGroup
+        LaunchConfiguration: !Ref LaunchConfiguration
       Tags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroup'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      TargetGroupAttributes:
-        - Key: 'deregistration_delay.timeout_seconds'
-          Value: 30
-  Listener:
-    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+          Value: !Sub '${AWS::StackName}-ASG'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/asg.yaml'
+    DependsOn:
+      - FileSystem
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS LoadBalancer
+  #
+  # We create the LoadBalancer
+  #
+  LoadBalancer:
+    Type: 'AWS::CloudFormation::Stack'
     Properties:
-      DefaultActions:
-      - TargetGroupArn: !Ref TargetGroup
-        Type: forward
-      LoadBalancerArn: !Ref LoadBalancer
-      Port: 80
-      Protocol: HTTP
+      Parameters:
+        ParentVpcStack: !Sub '${ParentVpcStack}'
+        HealthCheckPath: '/artifactory/webapp/'
+        HealthCheckPort: 8081
+        ListenerPort: 80
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ELB'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-app.yaml'
 
   #----------------------------------------------------------------------------
   #
@@ -222,32 +175,18 @@ Resources:
   #   scaling events
   #
   FileSystem:
-    Type: 'AWS::EFS::FileSystem'
-    Properties: 
-      Encrypted: true
-      FileSystemTags:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        ParentVpcStack: !Sub '${ParentVpcStack}'
+        ParentStack: !Sub '${AWS::StackName}'
+      Tags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-FileSystem'
-      PerformanceMode: generalPurpose
-  MountTargetA:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SecurityGroups:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-  MountTargetB:
-    Type: 'AWS::EFS::MountTarget'
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SecurityGroups:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
-      SubnetId: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+          Value: !Sub '${AWS::StackName}-EFS'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/efs.yaml'
 
   #----------------------------------------------------------------------------
   #
@@ -293,7 +232,7 @@ Resources:
                 LDAPManagerDN: '{{LDAPManagerDN}}'
                 LDAPManagerPassword: '${LDAPManagerPassword}'
 
-                FileSystem: '${FileSystem}'
+                FileSystem: '{{FileSystem}}'
                 
                 DBEndpointAddress: '{{DBEndpointAddress}}'
                 DBEndpointPort: '{{DBEndpointPort}}'
@@ -310,6 +249,8 @@ Resources:
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                 LDAPManagerDN:
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                FileSystem: 
+                  !GetAtt FileSystem.Outputs.FileSystem
                 DBEndpointAddress: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointAddress'
                 DBEndpointPort: 
@@ -343,7 +284,7 @@ Resources:
           yum update -y
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+#          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource ${AutoScalingGroup.Outputs.AutoScalingGroup}
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -362,11 +303,10 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
-
 Outputs: 
   DNSName: 
     Description: 'Public DNS address of the internet facing ELB'
-    Value: !Sub '${LoadBalancer.DNSName}'
+    Value: !GetAtt LoadBalancer.Outputs.DNSName
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
   ArtifactoryAdminUsername:      

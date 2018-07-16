@@ -6,6 +6,12 @@
   with_items:
     - java-1.7.0-openjdk
 
+- name: Instaling required Ruby Gems
+  gem: name='{{}}'
+  with_items:
+    - aws-sdk
+    - daemons
+
 - name: Installing default packages
   yum:
     name: '{{item}}'
@@ -49,11 +55,17 @@
       - jq
       - ant
       - git
+      - docker
       - jenkins
       - apache-maven
 
 - name: Chown on /mnt/application
   file: dest=/mnt/application owner=jenkins group=jenkins mode=u=rwX,g=rX,o=rX recurse=yes 
+
+- name: Adding jenkins to docker group
+  user:
+    name: jenkins
+    groups: jenkins,docker
 
 - name: Creating M2 directory
   file: path=/var/lib/jenkins/.m2/ state=directory owner=jenkins group=jenkins mode=0755
@@ -66,6 +78,7 @@
     group: '{{item.user}}'
     mode: '{{item.mode}}'
   with_items:
+    - { src: /opt/lifecycle-poller/poller.conf, mode: '0400', user: root }
     - { src: /root/configure_artifactory.groovy, mode: '0600', user: root }
     - { src: /root/configure_jdk.groovy, mode: '0600', user: root }
     - { src: /root/configure_ldap.groovy, mode: '0600', user: root }
@@ -84,6 +97,19 @@
     - /var/lib/jenkins/hudson.tasks.Ant.xml
     - /var/lib/jenkins/hudson.tasks.Maven.xml
     - /var/lib/jenkins/hudson.plugins.git.GitTool.xml
+
+- name: Copying Deamons files
+  copy:
+    src: 'files{{item}}'
+    dest: '{{item}}'
+    owner: root
+    group: root
+    mode: '0755'
+  with_items:
+    - /etc/init.d/lifecycle-poller.rb
+    - /opt/lifecycle-poller/daemon.rb
+    - /opt/lifecycle-poller/worker.rb
+
 
 - name: Linking Jenkins jobs directory
   file:
@@ -220,4 +246,6 @@
 - name: Enabling services
   service: name='{{item}}' state=restarted enabled=yes
   with_items:
+    - docker
     - jenkins
+    - lifecycle-poller

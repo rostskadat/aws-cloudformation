@@ -1,0 +1,78 @@
+#
+# FILE: elb-alarms.yaml
+#
+# DESCRIPTION: This nested stack is meant to be used by a parent stack with an AutoScalingGroup.
+#
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: 'This nested-stack sets up an AutoScalingGroup'
+Parameters: 
+  ParentVpcStack: 
+    Description: 'Enter the name of the VPC Stack where the AutoScalingGroup will reside'
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the VPC stack'
+  ParentStack:
+    Description: 'Enter the name of the Stack calling this nested stack'
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of the Parent stack'
+  TargetGroup:
+    Description: 'Enter the name of the TargetGroup to check for health.'
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of a valid TargetGroup'
+  LaunchConfiguration:
+    Description: 'Enter the name of the LaunchConfiguration'
+    Type: String
+    MinLength: 1
+    ConstraintDescription: 'must be the name of a valid LaunchConfiguration'
+Resources: 
+  AutoScalingGroup: 
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
+      NotificationConfigurations:
+        - TopicARN: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
+          NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH'
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+      TargetGroupARNs:
+        - !Sub '${TargetGroup}'
+      VPCZoneIdentifier: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Tags: 
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${ParentStack}-Main'
+          PropagateAtLaunch: true
+# TODO: How the instance signal the AutoScalingGroup?!?!
+#    CreationPolicy: 
+#      ResourceSignal: 
+#        Timeout: PT15M
+#        Count: 1
+    UpdatePolicy: 
+      AutoScalingRollingUpdate: 
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+
+Outputs: 
+  AutoScalingGroup: 
+    Description: 'The LoadBalancer DNSName'
+    Value: !Ref AutoScalingGroup
+#    Export:
+#      Name: !Sub '${AWS::StackName}-AutoScalingGroup'

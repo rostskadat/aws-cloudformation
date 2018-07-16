@@ -24,7 +24,6 @@ Metadata:
       Parameters:
       - AWSInspectorDLQEmail
       - UseVPCFlowLog
-      - UseTopicHealth
       - HealthNotificationEmail
 Parameters: 
   S3ConfigBucketName:
@@ -45,13 +44,6 @@ Parameters:
     AllowedValues:
     - true
     - false
-  UseTopicHealth:
-    Description: 'Create a SNS to send alert about the health of teh platform'
-    Type: String
-    Default: false
-    AllowedValues:
-    - true
-    - false
   HealthNotificationEmail:
     Description: 'Enter an email address to send Health Notification to'
     Type: String
@@ -60,7 +52,6 @@ Parameters:
     AllowedPattern: '^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}$'
 Conditions: 
   HasFlowLog: !Equals [!Ref UseVPCFlowLog, 'true']
-  HasTopicHealth: !Equals [!Ref UseTopicHealth, 'true']
 Mappings:
   # cf. files/root/create_region_map.sh
   RegionMap:
@@ -337,15 +328,15 @@ Resources:
               Service: 
                 - 'inspector.amazonaws.com'
             Action: 
-              - 'SNS:GetTopicAttributes'
-              - 'SNS:SetTopicAttributes'
-              - 'SNS:AddPermission'
-              - 'SNS:RemovePermission'
-              - 'SNS:DeleteTopic'
-              - 'SNS:Subscribe'
-              - 'SNS:ListSubscriptionsByTopic'
-              - 'SNS:Publish'
-              - 'SNS:Receive'
+              - 'sns:GetTopicAttributes'
+              - 'sns:SetTopicAttributes'
+              - 'sns:AddPermission'
+              - 'sns:RemovePermission'
+              - 'sns:DeleteTopic'
+              - 'sns:Subscribe'
+              - 'sns:ListSubscriptionsByTopic'
+              - 'sns:Publish'
+              - 'sns:Receive'
             Resource: !Ref TopicAWSInspector
           # Condition: ${AWS::AccountId}
           
@@ -428,13 +419,51 @@ Resources:
   # Health Notification
   #
   TopicHealth: 
-    Condition: HasTopicHealth
     Type: 'AWS::SNS::Topic'
     Properties: 
       DisplayName: !Sub '${AWS::StackName} - Server health notification'
       Subscription:
         - Endpoint: !Ref HealthNotificationEmail
           Protocol: 'email'
+
+  TopicPolicyHealth:
+    Type: 'AWS::SNS::TopicPolicy'
+    Properties:
+      Topics:
+        - !Ref TopicHealth
+      PolicyDocument:
+        Id: TopicPolicyHealth
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowHealthSNSPublish'
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: 'sns:Publish'
+            Resource: !Ref TopicHealth
+            Condition:
+              StringEquals:
+                'AWS:SourceOwner': !Ref 'AWS::AccountId'
+#        - PolicyName: 'AllowHealthSNSPublish'
+#          Effect: Allow
+#          Principal:
+#            Service:
+#            - 'events.amazonaws.com'
+#            - 'budgets.amazonaws.com' 
+#            - 'rds.amazonaws.com'
+#            - 's3.amazonaws.com'
+#          Action: 'sns:Publish'
+#          Resource: !Ref TopicHealth
+#        - Sid: Sid3
+#          Effect: Allow
+#          Principal:
+#            Service: 'ses.amazonaws.com' # Allow SES Notifications & Events
+#          Action: 'sns:Publish'
+#          Resource: !Ref Topic
+#          Condition:
+#            StringEquals:
+#              'AWS:Referer': !Ref 'AWS::AccountId'
+
 
   #----------------------------------------------------------------------------
   #
