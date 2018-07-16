@@ -1,3 +1,6 @@
 ---
 - name: restart awslogs
   service: name=awslogs state=restarted
+
+- name: restart sshd
+  service: name=sshd state=restarted

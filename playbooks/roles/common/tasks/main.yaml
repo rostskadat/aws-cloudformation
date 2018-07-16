@@ -39,9 +39,15 @@
 - name: Installing and configuring yum-cron
   include_role: name=common tasks_from=configure_yum_cron
 
+- name: Configuring SSH for IAM User Access
+  include_role: name=common tasks_from=configure_sshd
+  when: 
+    - HasIAMUserSSHAccess is defined
+    - HasIAMUserSSHAccess == true 
+
 - name: Tagging EC2 Root Volume
   include_role: name=common tasks_from=tag_ec2_root_volume
-
+  
 - name: Enabling services
   service:
     name: '{{item}}'

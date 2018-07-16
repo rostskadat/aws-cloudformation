@@ -1,0 +1,33 @@
+---
+#
+# This will configure the SSH deamon to check ssh public kay against IAM
+#   and also import IAM user in the host.
+#
+- name: Copying configuration files
+  copy:
+    src: 'files{{item}}'
+    dest: '{{item}}'
+    owner: root
+    group: root
+    mode: '0755'
+  with_items:
+    - /opt/import_users.sh
+    - /opt/authorized_keys_command.sh 
+
+- name: Scheduling import_users
+  cron:
+    name: 'import_users'
+    minute: "*/10"
+    job: /opt/import_users.sh
+    user: root
+    cron_file: import_users
+
+- name: Configuring SSH deamon
+  replace: 
+    path: /etc/ssh/sshd_config
+    regexp: '{{item.regexp}}'
+    replace: '{{item.replace}}'
+  with_items: 
+    - { regexp: '^#AuthorizedKeysCommand none', replace: 'AuthorizedKeysCommand /opt/authorized_keys_command.sh' } 
+    - { regexp: '^#AuthorizedKeysCommandUser nobody', replace: 'AuthorizedKeysCommandUser nobody' } 
+  notify: restart sshd
