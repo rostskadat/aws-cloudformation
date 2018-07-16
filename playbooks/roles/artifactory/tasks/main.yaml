@@ -1,4 +1,7 @@
 ---
+#
+# TODO: Check first launch, not sure the master.key appears where we're looking
+#
 - name: Removing obsolete packages
   yum: name='{{item}}' state=absent
   with_items:
@@ -154,5 +157,5 @@
     enabled: yes
   with_items:
     - artifactory
-    
+
   

@@ -4,3 +4,6 @@
 
 - name: restart sshd
   service: name=sshd state=restarted
+
+- name: retstart yum-cron
+  service: name=yum-cron state=restarted

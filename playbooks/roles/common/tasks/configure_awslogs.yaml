@@ -17,10 +17,8 @@
     - /etc/awslogs/awslogs.conf
 
 - name: Enabling services
-  service:
-    name: '{{item}}'
-    state: started
-    enabled: yes
+  service: name='{{item}}' state=started enabled=yes
   with_items:
     - awslogs
+  notify: restart awslogs
     
