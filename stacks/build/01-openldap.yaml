@@ -1,4 +1,4 @@
-#
+  #
 # FILE: 05-gitlab.yaml
 #
 # DESCRIPTION: This Stack create a OpenLDAP Host that will be used by subsequent stack to manage Identification.
@@ -102,6 +102,7 @@ Resources:
         ParentVpcStack: !Sub '${ParentVpcStack}'
         HealthCheckPort: 389
         ListenerPort: 389
+        Scheme: internal
       Tags:
         - Key: PLATFORM
           Value: 
@@ -201,7 +202,7 @@ Resources:
           yum update -y
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-#          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroup
+          /root/signal_asg.sh $? ${AWS::Region} ${AWS::StackName}
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:

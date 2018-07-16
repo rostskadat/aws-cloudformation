@@ -216,6 +216,14 @@ Resources:
                   - 'iam:ListSSHPublicKeys'
                   - 'iam:GetSSHPublicKey'
                 Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:user/*'
+        - PolicyName: 'AllowEC2CFDescribeStacks'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 'cloudformation:DescribeStacks'
+                Resource: '*'
   InstanceProfileEC2Instance:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:

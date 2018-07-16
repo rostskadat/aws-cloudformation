@@ -6,43 +6,31 @@
 #
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-
 Description: 'This netsted stack create an ElasticLoadBalancer'
-
-Metadata: 
-  'AWS::CloudFormation::Interface':
-    ParameterGroups:
-    - Label:
-        default: 'Parent Stack'
-      Parameters:
-      - ParentVpcStack
-    - Label: 
-        default: 'Load Balancer Parameter'
-      Parameters:
-      - HealthCheckPath
-      - HealthCheckPort
-      - ListenerPort
-      - TopicArn
-      
 Parameters: 
   ParentVpcStack: 
     Description: 'Enter the name of the VPC Stack where the LoadBalancer will reside'
     Type: String
     MinLength: 1
-    
   HealthCheckPath:
     Description: 'The path to check'
     Type: String
     MinLength: 1
-
   HealthCheckPort:
     Description: 'The port to check'
     Type: Number
-
   ListenerPort:
     Description: 'The port to listen to'
     Type: Number
-
+  Scheme:
+    Description: 'Whether the load balancer is internet-facing or internal'
+    Type: String
+    AllowedValues:
+      - internal
+      - internet-facing
+    Default: internet-facing
+Conditions:
+  IsPublic: !Equals [!Ref Scheme, 'internet-facing']
 Resources: 
 
   #----------------------------------------------------------------------------
@@ -55,12 +43,17 @@ Resources:
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
-      Scheme: internet-facing
-      SecurityGroups:
-      - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
-      Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+      Scheme: !Ref Scheme
+      SecurityGroups: !If
+        - IsPublic
+        - - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPublic'
+        - - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+      Subnets: !If
+        - IsPublic
+        - - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+        - - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
       Tags: 
         - Key: PLATFORM
           Value: 

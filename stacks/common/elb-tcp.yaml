@@ -6,39 +6,28 @@
 #
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-
 Description: 'This netsted stack create an ElasticLoadBalancer'
-
-Metadata: 
-  'AWS::CloudFormation::Interface':
-    ParameterGroups:
-    - Label:
-        default: 'Parent Stack'
-      Parameters:
-      - ParentVpcStack
-    - Label: 
-        default: 'Load Balancer Parameter'
-      Parameters:
-      - HealthCheckPort
-      - ListenerPort
-      - TopicArn
-      
 Parameters: 
   ParentVpcStack: 
     Description: 'Enter the name of the VPC Stack where the LoadBalancer will reside'
     Type: String
     MinLength: 1
-
   HealthCheckPort:
     Description: 'The port to check'
     Type: Number
-
   ListenerPort:
     Description: 'The port to listen to'
     Type: Number
-
+  Scheme:
+    Description: 'Whether the load balancer is internet-facing or internal'
+    Type: String
+    AllowedValues:
+      - internet-facing
+      - internal
+    Default: internet-facing
+Conditions:
+  IsPublic: !Equals [!Ref Scheme, 'internet-facing']
 Resources: 
-
   #----------------------------------------------------------------------------
   #
   # AWS Application LoadBalancer
@@ -49,10 +38,13 @@ Resources:
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
-      Scheme: internal
-      Subnets: 
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Scheme: !Ref Scheme
+      Subnets: !If
+        - IsPublic
+        - - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZA'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPublicAZB'
+        - - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+          - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
       Type: network
       Tags: 
         - Key: PLATFORM
@@ -87,7 +79,6 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: !Ref ListenerPort
       Protocol: TCP
-
 Outputs: 
   DNSName: 
     Description: 'The LoadBalancer DNSName'
