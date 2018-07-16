@@ -1,5 +1,0 @@
-<?xml version='1.1' encoding='UTF-8'?>
-<jenkins.model.JenkinsLocationConfiguration>
-  <adminAddress>{{JenkinsAdminEmail}}</adminAddress>
-  <jenkinsUrl>http://{{DNSName}}/</jenkinsUrl>
-</jenkins.model.JenkinsLocationConfiguration>

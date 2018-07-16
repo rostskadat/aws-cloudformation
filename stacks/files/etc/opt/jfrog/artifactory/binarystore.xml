@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<config version="1">
-    <chain template="file-system"/>
-    <provider id="file-system" type="file-system">
-        <baseDataDir>/mnt/application/data</baseDataDir>
-        <fileStoreDir>filestore</fileStoreDir>  
-        <tempDir>temp</tempDir>
-    </provider>                  
-</config>
