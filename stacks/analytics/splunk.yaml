@@ -209,11 +209,26 @@ Resources:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS CloudWatch
+  #
+  # We create the LogGroup used by the instances in this stack.
+  #
   LogGroup:
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS EC2
+  #
+  # We create the LaunchConfiguration used by the AutoScalingGroup to provision
+  #   the instances in this stack
+  #
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
@@ -242,15 +257,6 @@ Resources:
                 FileSystem: '${FileSystem}'
                 
                 SplunkAdminPassword: '${SplunkAdminPassword}'
-                ESDomainPort: '443'
-                
-                S3LogsIncludeFilters: '${S3LogsIncludeFilters}'
-                
-                UserPoolId: '${UserPool}'
-                IdentityPoolId: '${IdentityPool}'
-                RoleArn: '${RoleConfigureCognito.Arn}'
-                
-                ESDomainName: '${Domain}'
               mode: '000600'
               owner: root
               group: root

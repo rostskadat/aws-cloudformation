@@ -163,6 +163,14 @@ Resources:
     DependsOn:
       - MountTargetA
       - MountTargetB
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS LoadBalancer
+  #
+  # We create the LoadBalancer used by the AutoScalingGroup to handle scaling 
+  #   event
+  #
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
@@ -210,6 +218,14 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS EFS
+  #
+  # We create the filesystem used by the instance to share valuable data between
+  #   scaling events
+  #
   FileSystem:
     Type: 'AWS::EFS::FileSystem'
     Properties: 
@@ -237,21 +253,29 @@ Resources:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS CloudWatch
+  #
+  # We create the LogGroup used by the instances in this stack.
+  #
   LogGroup: 
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS EC2
+  #
+  # We create the LaunchConfiguration used by the AutoScalingGroup to provision
+  #   the instances in this stack
+  #
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
-#      AWS::CloudFormation::Authentication:
-#        S3AccessCredentials:
-#          type: s3
-#          roleName: 
-#            'Fn::ImportValue': !Sub '${ParentVpcStack}-RoleEC2Instance'
-#          buckets: 
-#            - !Sub '${FunctionGetVariable.S3ConfigBucketName}'
       AWS::CloudFormation::Init:
         configSets: 
           default: [ Install ] 
