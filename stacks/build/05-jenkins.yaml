@@ -3,23 +3,7 @@
 #
 # DESCRIPTION: This Stack create a Jenkins Host as well as an Internet facing LoadBalancer.
 #
-# NOTE: in order to create the AMI mapping you can run the following command. (needs a bit of massaging: 
-#   should extract the ami and the region name, and output everything in the YAML compatible format)
-# 
-# for region in $(aws ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text); do
-#   latest=$(aws --region $region ec2 describe-images --owners amazon \
-#     --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" \
-#               "Name=architecture,Values=x86_64" \
-#               "Name=root-device-type,Values=ebs" \
-#     --query 'Images[*].{ID:ImageLocation}' | jq '.[].ID' | sort -r | head -1 | tr -d '"')
-# done
-#
-# Reference: http://elbhostname/web_api/api/user_tokens
 # TODO: 
-# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
-# - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
-# - Should provide alert when the platform is unhealthy
-# - Allow cfn-auto-reload (cf example in jenkins2-ha.yaml)
 # - Add list of common SSH Site we want to connect to
 # - Configure SMTP server
 # - Configure Global Tool Configuration >> SonarQube Scanner

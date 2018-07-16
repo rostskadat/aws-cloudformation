@@ -1,18 +1,7 @@
   #
-# FILE: 05-gitlab.yaml
+# FILE: 01-openldap.yaml
 #
 # DESCRIPTION: This Stack create a OpenLDAP Host that will be used by subsequent stack to manage Identification.
-#
-# NOTE: in order to create the AMI mapping you can run the following command. (needs a bit of massaging: 
-#   should extract the ami and the region name, and output everything in the YAML compatible format)
-# 
-# for region in $(aws ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text); do
-#   latest_ami_name=$(aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" --query 'Images[*].Name' | sort -r | head -1 | tr -d '"' | xargs)
-#   aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=$latest_ami_name" --query 'Images[*].{AMI:ImageId}'
-# done
-#
-# TODO: 
-# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"

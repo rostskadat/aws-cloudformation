@@ -1,18 +1,9 @@
 #
-# FILE: 04-artifactory.yaml
+# FILE: 02-artifactory.yaml
 #
 # DESCRIPTION: This Stack create a Artifactory Host as well as an Internet facing LoadBalancer.
 #
-# NOTE: in order to create the AMI mapping you can run the following command. (needs a bit of massaging: 
-#   should extract the ami and the region name, and output everything in the YAML compatible format)
-# 
-# for region in $(aws --region eu-west-1 ec2 describe-regions --query 'Regions[*].{Name:RegionName}' --output text); do
-#   aws --region $region ec2 describe-images --owners amazon --filters "Name=name,Values=amzn-ami-hvm-$(date +%Y)*-gp2" "Name=architecture,Values=x86_64" "Name=root-device-type,Values=ebs" --query 'Images[*].{ID:ImageId}'
-# done
-#
 # TODO: 
-# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
-# - Should use NestedStack as described in https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-nested-stacks.html
 # - Should create a Jenkins User (only available for Artifactory PRO :s)
 #
 ---
