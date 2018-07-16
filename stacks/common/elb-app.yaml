@@ -1,8 +1,8 @@
 #
 # FILE: elb-app.yaml
 #
-# DESCRIPTION: This stack is a nested stack that can be used by application
-#   require a Load Balancer in conjonction with an AutoScalingGroup
+# DESCRIPTION: This stack an Application Load Balancer and the corresponding
+#   alarms.
 #
 ---
 AWSTemplateFormatVersion: '2010-09-09'

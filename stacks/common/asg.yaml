@@ -1,7 +1,14 @@
 #
-# FILE: elb-alarms.yaml
+# FILE: asg.yaml
 #
-# DESCRIPTION: This nested stack is meant to be used by a parent stack with an AutoScalingGroup.
+# DESCRIPTION: This nested stack creates an AutoScalingGroup and is meant to 
+#   be used by other stacks. It will create an AutoScalingGroup that will check
+#   the Health of the given TargetGroup and spin up and down instances 
+#   accordingly.
+# 
+# NOTE: The given LaunchConfiguration must signal to this resource upon 
+#   creation. In order to do that you can call the /root/signal_asg.sh from
+#   the UserData section of your LaunchConfiguration
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -13,12 +20,12 @@ Parameters:
     MinLength: 1
     ConstraintDescription: 'must be the name of the VPC stack'
   ParentStack:
-    Description: 'Enter the name of the Stack calling this nested stack'
+    Description: 'Enter the name of the Parent Stack'
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the Parent stack'
   TargetGroup:
-    Description: 'Enter the name of the TargetGroup to check for health.'
+    Description: 'Enter the name of the TargetGroup'
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of a valid TargetGroup'
@@ -27,7 +34,13 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of a valid LaunchConfiguration'
+
 Resources: 
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS AutoScalingGroup
+  #
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:

@@ -1,8 +1,8 @@
 #
 # FILE: elb-app.yaml
 #
-# DESCRIPTION: This stack is a nested stack that can be used by application
-#   require a Load Balancer in conjonction with an AutoScalingGroup
+# DESCRIPTION: This stack an Network Load Balancer and the corresponding
+#   alarms.
 #
 ---
 AWSTemplateFormatVersion: '2010-09-09'
@@ -28,6 +28,7 @@ Parameters:
 Conditions:
   IsPublic: !Equals [!Ref Scheme, 'internet-facing']
 Resources: 
+
   #----------------------------------------------------------------------------
   #
   # AWS Application LoadBalancer
@@ -79,6 +80,79 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: !Ref ListenerPort
       Protocol: TCP
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS CloudWatch Alarms
+  #
+  # We create a set of alarms for this specific load balancer, in order to alert
+  #   us if something start to go astray...
+  #
+  LoadBalancer5XXTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Application load balancer returns 5XX HTTP status codes'
+      Namespace: 'AWS/ApplicationELB'
+      MetricName: HTTPCode_ELB_5XX_Count
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 0
+      AlarmActions:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt LoadBalancer.LoadBalancerFullName
+  TargetGroup5XXTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Application load balancer receives 5XX HTTP status codes from targets'
+      Namespace: 'AWS/ApplicationELB'
+      MetricName: HTTPCode_Target_5XX_Count
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 0
+      AlarmActions:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt LoadBalancer.LoadBalancerFullName
+  LoadBalancerConnectionCountTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Application load balancer rejected connections because the load balancer had reached its maximum number of connections'
+      Namespace: 'AWS/ApplicationELB'
+      MetricName: RejectedConnectionCount
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 0
+      AlarmActions:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt LoadBalancer.LoadBalancerFullName
+  TargetGroupConnectionErrorCountTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Application load balancer could not connect to targets'
+      Namespace: 'AWS/ApplicationELB'
+      MetricName: TargetConnectionErrorCount
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 0
+      AlarmActions:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt LoadBalancer.LoadBalancerFullName
+
 Outputs: 
   DNSName: 
     Description: 'The LoadBalancer DNSName'

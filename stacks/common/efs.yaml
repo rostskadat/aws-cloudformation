@@ -1,7 +1,7 @@
 #
 # FILE: efs.yaml
 #
-# DESCRIPTION: This nested stack is meant to be used by a parent stack with an EFS FileSystem
+# DESCRIPTION: This nested stack creates an EFS FileSystem
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
@@ -17,7 +17,9 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of the Parent stack'
+
 Resources: 
+
   #----------------------------------------------------------------------------
   #
   # AWS EFS
@@ -36,7 +38,6 @@ Resources:
         - Key: Name
           Value: !Sub '${ParentStack}-FileSystem'
       PerformanceMode: generalPurpose
-
   MountTargetA:
     Type: 'AWS::EFS::MountTarget'
     Properties:
@@ -45,7 +46,6 @@ Resources:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupEFS'
       SubnetId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
-
   MountTargetB:
     Type: 'AWS::EFS::MountTarget'
     Properties:
