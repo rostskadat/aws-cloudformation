@@ -50,8 +50,13 @@ Parameters:
     Default: 'admin@example.com'
     ConstraintDescription: 'must be a valid email address'
     AllowedPattern: '^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}$'
+  HostedZoneName:
+    Description: 'Enter the name of the internal DNS that will be used inside the VPC'
+    Type: String
+    Default: 'example.com'
 Conditions: 
   HasFlowLog: !Equals [!Ref UseVPCFlowLog, 'true']
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneName, '']]
 Mappings:
   # cf. files/root/create_region_map.sh
   RegionMap:
@@ -487,8 +492,7 @@ Resources:
   #
   # First let's create the different Subnets
   #
-  LogGroupFlowLog: 
-    Condition: HasFlowLog
+  LogGroup: 
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Sub '${AWS::StackName}-FlowLog'
@@ -499,10 +503,34 @@ Resources:
     Type: 'AWS::EC2::FlowLog'
     Properties:
       DeliverLogsPermissionArn : !Ref RoleEC2Instance
-      LogGroupName : !Ref LogGroupFlowLog
+      LogGroupName : !Ref LogGroup
       ResourceId : !Ref Vpc
       ResourceType : VPC
       TrafficType : ACCEPT
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS Route53
+  #
+  # Create a private internal hosted zone
+  #
+  HostedZone:
+    Condition: HasHostedZone
+    Type: 'AWS::Route53::HostedZone'
+    Properties: 
+      HostedZoneConfig:
+        Comment: 'Note: this DNS will only be available within the VPC'
+      Name: !Ref HostedZoneName
+      QueryLoggingConfig:
+        CloudWatchLogsLogGroupArn: !GetAtt LogGroup.Arn
+      VPCs:
+        - VPCId: !Ref Vpc
+          VPCRegion: !Ref 'AWS::Region' 
+      HostedZoneTags:
+        - Key: PLATFORM
+          Value: !Sub '${AWS::StackName}'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-HostedZone'
 
   #----------------------------------------------------------------------------
   #
