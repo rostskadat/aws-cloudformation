@@ -27,16 +27,22 @@ SonarqubeAdminEmail=sonarqube@${SonarqubeAdminEmail##*@}
 url="http://${GitlabDNSName}/api/v4"
 
 echo "Checking if user 'sonarqube' exists..."
-user_exists=$(curl -s -H "Authorization: Bearer $token" "$url/users" | jq '.[] | select (.username == "sonarqube" )')
-
-if [ -z "$user_exists" ]; then
+userId=$(curl -s -H "Authorization: Bearer $token" "$url/users" | jq '.[] | select (.username == "sonarqube" ) | .id')
+if [ -z "$userId" ]; then
     echo "Creating sonarqube user in Gitlab @ $url (${SonarqubeAdminEmail})..."
     userId=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users" -F "email=${SonarqubeAdminEmail}" -F "password=$gitlabSonarqubePassword" -F "username=sonarqube" -F "name=Sonarqube" -F "admin=true" -F "skip_confirmation=true" | jq '.id')
-    gitlabSonarqubeToken=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users/$userId/impersonation_tokens" -F "name=SONARQUBE" -F "scopes[]=api" | jq -r '.token')
-    [ "$gitlabSonarqubeToken" == "null" ] && echo "Failed to get Gitlab for Sonarqube user" && exit 1        
-    echo -n "$gitlabSonarqubeToken" > $TokenFile
-    chmog go-rwx $TokenFile
-    echo "Token available in $TokenFile"
-else
+else 
     echo "User 'sonarqube' exists in gitlab, not creating."
 fi
+
+gitlabSonarqubeToken=$(curl -s --request GET -H "Authorization: Bearer $token" "$url/users/$userId/impersonation_tokens" | jq -r '.[] | select (.name == "SONARQUBE") | .token')
+if [ -z "$gitlabSonarqubeToken" ]; then
+    echo "Creating sonarqube token..."
+    gitlabSonarqubeToken=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users/$userId/impersonation_tokens" -F "name=SONARQUBE" -F "scopes[]=api" | jq -r '.token')
+    [ "$gitlabSonarqubeToken" == "null" ] && echo "Failed to get Gitlab for Sonarqube user" && exit 1
+else 
+    echo "Token 'SONARQUBE' exists in gitlab, not creating."
+fi
+echo -n "$gitlabSonarqubeToken" > $TokenFile
+chmod go-rwx $TokenFile
+echo "Token available in $TokenFile"
