@@ -495,9 +495,9 @@ Resources:
   LogGroup: 
     Type: 'AWS::Logs::LogGroup'
     Properties:
-      LogGroupName: !Sub '${AWS::StackName}-FlowLog'
+      LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
-  
+
   FlowLog: 
     Condition: HasFlowLog
     Type: 'AWS::EC2::FlowLog'
@@ -521,8 +521,6 @@ Resources:
       HostedZoneConfig:
         Comment: 'Note: this DNS will only be available within the VPC'
       Name: !Ref HostedZoneName
-      QueryLoggingConfig:
-        CloudWatchLogsLogGroupArn: !GetAtt LogGroup.Arn
       VPCs:
         - VPCId: !Ref Vpc
           VPCRegion: !Ref 'AWS::Region' 
@@ -1000,3 +998,13 @@ Outputs:
     Value: !Ref S3ConfigBucketName
     Export:
       Name: !Sub '${AWS::StackName}-S3ConfigBucketName'
+  HostedZone:
+    Description: 'The HostedZone'
+    Value: !Ref HostedZone
+    Export:
+      Name: !Sub '${AWS::StackName}-HostedZone'
+  HostedZoneName:
+    Description: 'The HostedZoneName'
+    Value: !Ref HostedZoneName
+    Export:
+      Name: !Sub '${AWS::StackName}-HostedZoneName'

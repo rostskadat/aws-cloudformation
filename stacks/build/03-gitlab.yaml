@@ -112,6 +112,7 @@ Resources:
         HealthCheckPath: '/users/sign_in'
         HealthCheckPort: 80
         ListenerPort: 80
+        SubDomainName: gitlab
       Tags:
         - Key: PLATFORM
           Value: 

@@ -25,8 +25,12 @@ Parameters:
       - internet-facing
       - internal
     Default: internet-facing
+  SubDomainName:
+    Description: 'The subdomain of the Internal DNS resolution'
+    Type: String
 Conditions:
   IsPublic: !Equals [!Ref Scheme, 'internet-facing']
+  HasSubDomainName: !Not [!Equals [!Ref SubDomainName, '']]
 Resources: 
 
   #----------------------------------------------------------------------------
@@ -83,6 +87,28 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
+  # AWS Route53
+  #
+  # We create the internal DNS RecordSet
+  #
+  RecordSet:
+    Condition: HasSubDomainName
+    Type: 'AWS::Route53::RecordSet'
+    Properties:
+      AliasTarget:
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        DNSName: !GetAtt LoadBalancer.DNSName
+      HostedZoneId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-HostedZone'
+      Name: !Sub
+      - '${SubDomainName}.${HostedZoneName}'
+      - SubDomainName: !Ref SubDomainName
+        HostedZoneName: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-HostedZoneName'
+      Type: A
+
+  #----------------------------------------------------------------------------
+  #
   # AWS CloudWatch Alarms
   #
   # We create a set of alarms for this specific load balancer, in order to alert
@@ -106,15 +132,18 @@ Resources:
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
 
 Outputs: 
-  DNSName: 
-    Description: 'The LoadBalancer DNSName'
-    Value: !Sub '${LoadBalancer.DNSName}'
   LoadBalancer: 
     Description: 'The LoadBalancer ARN'
-    Value: !Sub '${LoadBalancer}'
+    Value: !Ref LoadBalancer
+  DNSName: 
+    Description: 'The LoadBalancer DNSName'
+    Value: !GetAtt LoadBalancer.DNSName
+  CanonicalHostedZoneID:
+    Description: 'The LoadBalancer ARN'
+    Value: !GetAtt LoadBalancer.CanonicalHostedZoneID
   TargetGroup: 
     Description: 'The TargetGroup ARN'
-    Value: !Sub '${TargetGroup}'
+    Value: !Ref TargetGroup
   UnHealthyHostCountTooHighAlarmArn:
     Description: 'The Alarm ARN'
     Value: !GetAtt UnHealthyHostCountTooHighAlarm.Arn

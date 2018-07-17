@@ -92,6 +92,7 @@ Resources:
         HealthCheckPort: 389
         ListenerPort: 389
         Scheme: internal
+        SubDomainName: ldap
       Tags:
         - Key: PLATFORM
           Value: 

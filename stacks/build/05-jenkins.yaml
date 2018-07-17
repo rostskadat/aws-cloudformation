@@ -141,6 +141,7 @@ Resources:
         HealthCheckPath: '/login'
         HealthCheckPort: 8080
         ListenerPort: 80
+        SubDomainName: jenkins
       Tags:
         - Key: PLATFORM
           Value: 
@@ -148,7 +149,6 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-ELB'
       TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-app.yaml'
-
 
   #----------------------------------------------------------------------------
   #

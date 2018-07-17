@@ -113,6 +113,7 @@ Resources:
         HealthCheckPath: '/artifactory/webapp/'
         HealthCheckPort: 8081
         ListenerPort: 80
+        SubDomainName: repo
       Tags:
         - Key: PLATFORM
           Value: 

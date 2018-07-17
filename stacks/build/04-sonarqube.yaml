@@ -132,6 +132,7 @@ Resources:
         HealthCheckPath: '/about'
         HealthCheckPort: 9000
         ListenerPort: 80
+        SubDomainName: sonar
       Tags:
         - Key: PLATFORM
           Value: 
