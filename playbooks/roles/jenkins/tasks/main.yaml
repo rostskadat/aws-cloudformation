@@ -1,20 +1,11 @@
 ---
 - name: Removing obsolete packages
-  yum:
-    name: '{{item}}'
-    state: absent
+  yum: name='{{item}}' state=absent
   with_items:
     - java-1.7.0-openjdk
 
-- name: Instaling required Ruby Gems
-  gem: name='{{}}'
-  with_items:
-    - aws-sdk
-    - daemons
-
 - name: Installing default packages
-  yum:
-    name: '{{item}}'
+  yum: name='{{item}}'
   with_items:
     - jq
     - mysql56
@@ -22,6 +13,12 @@
     - java-1.8.0-openjdk
     - java-1.8.0-openjdk-devel
     - amazon-efs-utils
+
+- name: Instaling required Ruby Gems
+  gem: name='{{item}}'
+  with_items:
+    - aws-sdk
+    - daemons
 
 - name: Adding Maven repository
   get_url: url=http://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo dest=/etc/yum.repos.d/epel-apache-maven.repo mode=644
@@ -67,49 +64,37 @@
     name: jenkins
     groups: jenkins,docker
 
-- name: Creating M2 directory
-  file: path=/var/lib/jenkins/.m2/ state=directory owner=jenkins group=jenkins mode=0755
-  
-- name: Templating Jenkins configuration files
-  template: 
-    src: 'templates{{item.src}}'
-    dest: '{{item.src}}'
-    owner: '{{item.user}}'
-    group: '{{item.user}}'
-    mode: '{{item.mode}}'
+- name: Creating Directories
+  file: path='{{item.path}}' state=directory owner='{{item.owner}}' group='{{item.owner}}' mode=0755
   with_items:
-    - { src: /opt/lifecycle-poller/poller.conf, mode: '0400', user: root }
+    - { path: /opt/lifecycle-poller, owner: root }
+    - { path: /var/lib/jenkins/.m2/, owner: jenkins }
+
+- name: Templating Jenkins configuration files
+  template: src='templates{{item.src}}' dest='{{item.src}}' owner='{{item.user}}' group='{{item.user}}' mode='{{item.mode}}'
+  with_items:
     - { src: /root/configure_artifactory.groovy, mode: '0600', user: root }
     - { src: /root/configure_jdk.groovy, mode: '0600', user: root }
     - { src: /root/configure_ldap.groovy, mode: '0600', user: root }
     - { src: /root/configure_sonarqube.groovy, mode: '0600', user: root }
     - { src: /var/lib/jenkins/.m2/settings.xml, mode: '0600', user: jenkins }
     - { src: /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml, mode: '0644', user: jenkins }
+#    - { src: /opt/lifecycle-poller/poller.conf, mode: '0400', user: root }
 
 - name: Copying Jenkins configuration files
-  copy:
-    src: 'files{{item}}'
-    dest: '{{item}}'
-    owner: jenkins
-    group: jenkins
-    mode: '0644'
+  copy: src='files{{item}}' dest='{{item}}' owner=jenkins group=jenkins mode='0644'
   with_items:
     - /var/lib/jenkins/hudson.tasks.Ant.xml
     - /var/lib/jenkins/hudson.tasks.Maven.xml
     - /var/lib/jenkins/hudson.plugins.git.GitTool.xml
+    - /var/lib/jenkins/org.jenkinsci.plugins.docker.commons.tools.DockerTool.xml
 
 - name: Copying Deamons files
-  copy:
-    src: 'files{{item}}'
-    dest: '{{item}}'
-    owner: root
-    group: root
-    mode: '0755'
+  copy: src='files{{item}}' dest='{{item}}' owner=root group=root mode='0755'
   with_items:
     - /etc/init.d/lifecycle-poller.rb
     - /opt/lifecycle-poller/daemon.rb
     - /opt/lifecycle-poller/worker.rb
-
 
 - name: Linking Jenkins jobs directory
   file:
@@ -243,9 +228,25 @@
     - '{{lookup("file", "/root/configure_sonarqube.groovy")}}'
     - '{{lookup("file", "/root/configure_ldap.groovy")}}'
 
+#- name: Scheduling cloudwatch-build-active 
+#  cron:
+#    name: 'cloudwatch-build-active'
+#    env: PATH='/sbin:/bin:/usr/sbin:/usr/bin:/opt/aws/bin'
+#    job: "aws --region {{Region}} cloudwatch put-metric-data --namespace {{StackName}} --metric-name BuildActive --value $(curl -s -m 60 -u 'admin:{{JenkinsAdminPassword}}' 'http://localhost:8080/computer/api/xml?xpath=*/busyExecutors' | sed -r 's/<[/a-zA-Z]*>//g') --unit Count"
+#    user: root
+#    cron_file: cloudwatch-build-active
+#
+#- name: Scheduling cloudwatch-build-queue
+#  cron:
+#    name: 'cloudwatch-build-queue'
+#    env: PATH='/sbin:/bin:/usr/sbin:/usr/bin:/opt/aws/bin'
+#    job: "aws --region {{Region}} cloudwatch put-metric-data --namespace {{StackName}} --metric-name BuildQueue --value $(curl -s -m 60 -u 'admin:{{JenkinsAdminPassword}}' 'http://localhost:8080/jqs-monitoring/api/xml?xpath=/JQSMonitoring/buildQueue/numberOfJobs' | sed -r 's/<[/a-zA-Z]*>//g') --unit Count"
+#    user: root
+#    cron_file: cloudwatch-build-active
+
 - name: Enabling services
   service: name='{{item}}' state=restarted enabled=yes
   with_items:
     - docker
     - jenkins
-    - lifecycle-poller
+#    - lifecycle-poller

@@ -1,0 +1,5 @@
+SHELL=/bin/bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/opt/aws/bin
+MAILTO=root
+HOME=/
+* * * * * root aws --region {{Region}} cloudwatch put-metric-data --namespace {{StackName}} --metric-name BuildQueue --value $(curl -s -m 60 -u 'admin:{{JenkinsAdminPassword}}' 'http://localhost:8080/jqs-monitoring/api/xml?xpath=/JQSMonitoring/buildQueue/numberOfJobs' | sed -r 's/<[/a-zA-Z]*>//g') --unit Count
