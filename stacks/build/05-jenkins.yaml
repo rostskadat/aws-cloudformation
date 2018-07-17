@@ -46,6 +46,7 @@ Metadata:
       Parameters:
       - JenkinsAdminEmail
       - JenkinsAdminPassword
+      - AgentMaxBuildWaitTimeInSeconds
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Jenkins will reside"
@@ -106,6 +107,14 @@ Parameters:
     Type: String
     MinLength: 1
     NoEcho: true
+  AgentMaxBuildWaitTimeInSeconds:
+    Description: 'Maximum time in seconds an agent can continue with a build although it should be scaled down.'
+    Type: Number
+    Default: 600
+    ConstraintDescription: 'Must be in the range [600-7200]'
+    MinValue: 600
+    MaxValue: 7200
+    
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
   HasIAMUserSSHAccess: !Equals [!Ref IAMUserSSHAccess, 'true']
@@ -224,6 +233,67 @@ Resources:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
 
+  Dashboard: 
+    Type: 'AWS::CloudWatch::Dashboard'
+    Properties:
+      DashboardName: !Sub '${AWS::StackName}'
+      DashboardBody: !Sub '{"widgets":[{"type":"metric","x":0,"y":0,"width":6,"height":6,"properties":{"title":"LoadBalancer5XXTooHighAlarm","annotations":{"alarms":["${LoadBalancerJNPL.Outputs.UnHealthyHostCountTooHighAlarmArn}"]},"view":"timeSeries","stacked":false}}]}'
+
+  #----------------------------------------------------------------------------
+  #
+  # Agents
+  #
+  AgentTerminatingLifecycleHookQueue:
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-terminating-lifecycle-hook'
+      VisibilityTimeout: !Ref AgentMaxBuildWaitTimeInSeconds
+#      RedrivePolicy:
+#        deadLetterTargetArn: !GetAtt 'AgentTerminatingLifecycleHookDeadLetterQueue.Arn'
+#        maxReceiveCount: 5
+
+#  AgentScalingUpPolicy:
+#    Type: 'AWS::AutoScaling::ScalingPolicy'
+#    Properties:
+#      AdjustmentType: ChangeInCapacity
+#      AutoScalingGroupName: !Ref AgentASG
+#      Cooldown: 300
+#      ScalingAdjustment: 1
+#  BuildQueueHighAlarm:
+#    Type: 'AWS::CloudWatch::Alarm'
+#    Properties:
+#      EvaluationPeriods: 1
+#      Statistic: Maximum  # special rule because we scale on build queue length
+#      Threshold: 1
+#      AlarmDescription: 'Alarm if Build Queue is high.'
+#      Period: 120
+#      AlarmActions:
+#      - !Ref AgentScalingUpPolicy
+#      Namespace: !Ref 'AWS::StackName'
+#      ComparisonOperator: GreaterThanOrEqualToThreshold
+#      MetricName: BuildQueue
+#  AgentScalingDownPolicy:
+#    Type: 'AWS::AutoScaling::ScalingPolicy'
+#    Properties:
+#      AdjustmentType: ChangeInCapacity
+#      AutoScalingGroupName: !Ref AgentASG
+#      Cooldown: 300
+#      ScalingAdjustment: -1
+#  BuildActiveEmptyAlarm:
+#    Type: 'AWS::CloudWatch::Alarm'
+#    Properties:
+#      EvaluationPeriods: 5
+#      Statistic: Maximum  # special rule because we scale on build queue length
+#      Threshold: 0
+#      AlarmDescription: 'Alarm if Build Queue is empty.'
+#      Period: 120
+#      AlarmActions:
+#      - !Ref AgentScalingDownPolicy
+#      Namespace: !Ref 'AWS::StackName'
+#      ComparisonOperator: LessThanOrEqualToThreshold
+#      MetricName: BuildActive
+
+
   #----------------------------------------------------------------------------
   #
   # AWS EC2
@@ -269,6 +339,9 @@ Resources:
                 JenkinsDNSName: '{{JenkinsDNSName}}'
                 JenkinsAdminEmail: '${JenkinsAdminEmail}'
                 JenkinsAdminPassword: '${JenkinsAdminPassword}'
+                
+                AgentTerminatingLifecycleHookQueue: '${AgentTerminatingLifecycleHookQueue}'
+                AgentMaxBuildWaitTimeInSeconds: ${AgentMaxBuildWaitTimeInSeconds}
               mode: '000600'
               owner: root
               group: root
@@ -347,6 +420,6 @@ Outputs:
       Name: !Sub '${AWS::StackName}-DNSName'
   DNSNameJNPL:
     Description: 'DNS address of the JNPL ELB'
-    Value: !Sub '${LoadBalancerJNPL.DNSName}'
+    Value: !Sub '${LoadBalancerJNPL.Outputs.DNSName}'
     Export:
       Name: !Sub '${AWS::StackName}-DNSNameJNPL'
