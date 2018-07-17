@@ -100,7 +100,7 @@ Resources:
   # We create a set of alarms for this specific load balancer, in order to alert
   #   us if something start to go astray...
   #
-  HTTPCode_ELB_5XX_CountTooHighAlarm:
+  HTTPCodeELB5XXCountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
       AlarmDescription: 'Application load balancer returns 5XX HTTP status codes'
@@ -116,7 +116,7 @@ Resources:
       Dimensions:
         - Name: LoadBalancer
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
-  HTTPCode_Target_5XX_CountTooHighAlarm:
+  HTTPCodeTarget5XXCountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
       AlarmDescription: 'Application load balancer receives 5XX HTTP status codes from targets'
@@ -175,12 +175,12 @@ Outputs:
   TargetGroup: 
     Description: 'The TargetGroup ARN'
     Value: !Sub '${TargetGroup}'
-  HTTPCode_ELB_5XX_CountTooHighAlarmArn:
+  HTTPCodeELB5XXCountTooHighAlarm:
     Description: 'The Alarm ARN'
-    Value: !GetAtt HTTPCode_ELB_5XX_CountTooHighAlarm.Arn
-  HTTPCode_Target_5XX_CountTooHighAlarm:
+    Value: !GetAtt HTTPCodeELB5XXCountTooHighAlarm.Arn
+  HTTPCodeTarget5XXCountTooHighAlarm:
     Description: 'The Alarm ARN'
-    Value: !GetAtt HTTPCode_Target_5XX_CountTooHighAlarm.Arn
+    Value: !GetAtt HTTPCodeTarget5XXCountTooHighAlarm.Arn
   RejectedConnectionCountTooHighAlarm:
     Description: 'The Alarm ARN'
     Value: !GetAtt RejectedConnectionCountTooHighAlarm.Arn
