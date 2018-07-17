@@ -100,7 +100,7 @@ Resources:
   # We create a set of alarms for this specific load balancer, in order to alert
   #   us if something start to go astray...
   #
-  LoadBalancer5XXTooHighAlarm:
+  HTTPCode_ELB_5XX_CountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
       AlarmDescription: 'Application load balancer returns 5XX HTTP status codes'
@@ -116,7 +116,7 @@ Resources:
       Dimensions:
         - Name: LoadBalancer
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
-  TargetGroup5XXTooHighAlarm:
+  HTTPCode_Target_5XX_CountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
       AlarmDescription: 'Application load balancer receives 5XX HTTP status codes from targets'
@@ -132,7 +132,7 @@ Resources:
       Dimensions:
         - Name: LoadBalancer
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
-  LoadBalancerConnectionCountTooHighAlarm:
+  RejectedConnectionCountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
       AlarmDescription: 'Application load balancer rejected connections because the load balancer had reached its maximum number of connections'
@@ -148,7 +148,7 @@ Resources:
       Dimensions:
         - Name: LoadBalancer
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
-  TargetGroupConnectionErrorCountTooHighAlarm:
+  TargetConnectionErrorCountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
       AlarmDescription: 'Application load balancer could not connect to targets'
@@ -175,3 +175,15 @@ Outputs:
   TargetGroup: 
     Description: 'The TargetGroup ARN'
     Value: !Sub '${TargetGroup}'
+  HTTPCode_ELB_5XX_CountTooHighAlarmArn:
+    Description: 'The Alarm ARN'
+    Value: !GetAtt HTTPCode_ELB_5XX_CountTooHighAlarm.Arn
+  HTTPCode_Target_5XX_CountTooHighAlarm:
+    Description: 'The Alarm ARN'
+    Value: !GetAtt HTTPCode_Target_5XX_CountTooHighAlarm.Arn
+  RejectedConnectionCountTooHighAlarm:
+    Description: 'The Alarm ARN'
+    Value: !GetAtt RejectedConnectionCountTooHighAlarm.Arn
+  TargetConnectionErrorCountTooHighAlarm:
+    Description: 'The Alarm ARN'
+    Value: !GetAtt TargetConnectionErrorCountTooHighAlarm.Arn

@@ -88,61 +88,13 @@ Resources:
   # We create a set of alarms for this specific load balancer, in order to alert
   #   us if something start to go astray...
   #
-  LoadBalancer5XXTooHighAlarm:
+  UnHealthyHostCountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      AlarmDescription: 'Application load balancer returns 5XX HTTP status codes'
-      Namespace: 'AWS/ApplicationELB'
-      MetricName: HTTPCode_ELB_5XX_Count
-      Statistic: Sum
-      Period: 60
-      EvaluationPeriods: 1
-      ComparisonOperator: GreaterThanThreshold
-      Threshold: 0
-      AlarmActions:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
-      Dimensions:
-        - Name: LoadBalancer
-          Value: !GetAtt LoadBalancer.LoadBalancerFullName
-  TargetGroup5XXTooHighAlarm:
-    Type: 'AWS::CloudWatch::Alarm'
-    Properties:
-      AlarmDescription: 'Application load balancer receives 5XX HTTP status codes from targets'
-      Namespace: 'AWS/ApplicationELB'
-      MetricName: HTTPCode_Target_5XX_Count
-      Statistic: Sum
-      Period: 60
-      EvaluationPeriods: 1
-      ComparisonOperator: GreaterThanThreshold
-      Threshold: 0
-      AlarmActions:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
-      Dimensions:
-        - Name: LoadBalancer
-          Value: !GetAtt LoadBalancer.LoadBalancerFullName
-  LoadBalancerConnectionCountTooHighAlarm:
-    Type: 'AWS::CloudWatch::Alarm'
-    Properties:
-      AlarmDescription: 'Application load balancer rejected connections because the load balancer had reached its maximum number of connections'
-      Namespace: 'AWS/ApplicationELB'
-      MetricName: RejectedConnectionCount
-      Statistic: Sum
-      Period: 60
-      EvaluationPeriods: 1
-      ComparisonOperator: GreaterThanThreshold
-      Threshold: 0
-      AlarmActions:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
-      Dimensions:
-        - Name: LoadBalancer
-          Value: !GetAtt LoadBalancer.LoadBalancerFullName
-  TargetGroupConnectionErrorCountTooHighAlarm:
-    Type: 'AWS::CloudWatch::Alarm'
-    Properties:
-      AlarmDescription: 'Application load balancer could not connect to targets'
-      Namespace: 'AWS/ApplicationELB'
-      MetricName: TargetConnectionErrorCount
-      Statistic: Sum
+      AlarmDescription: 'The number of targets that are considered unhealthy.'
+      Namespace: 'AWS/NetworkELB'
+      MetricName: UnHealthyHostCount
+      Statistic: Maximum
       Period: 60
       EvaluationPeriods: 1
       ComparisonOperator: GreaterThanThreshold
@@ -163,3 +115,7 @@ Outputs:
   TargetGroup: 
     Description: 'The TargetGroup ARN'
     Value: !Sub '${TargetGroup}'
+  UnHealthyHostCountTooHighAlarmArn:
+    Description: 'The Alarm ARN'
+    Value: !GetAtt UnHealthyHostCountTooHighAlarm.Arn
+    
