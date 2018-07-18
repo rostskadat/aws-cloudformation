@@ -17,7 +17,6 @@
     - mysql56
     - py-bcrypt
     - java-1.8.0-openjdk
-    - amazon-efs-utils
     - MySQL-python27
 
 - name: Install Python modules

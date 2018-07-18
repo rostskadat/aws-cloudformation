@@ -13,7 +13,6 @@
     - mysql56
     - java-1.8.0-openjdk
     - mysql-connector-java
-    - amazon-efs-utils
     - MySQL-python27
 
 - name: Adding JFrog repository
