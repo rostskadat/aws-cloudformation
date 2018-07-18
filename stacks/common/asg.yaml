@@ -38,8 +38,27 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of a valid LaunchConfiguration'
+  MaxSize:
+    Description: 'The maximum size of the Auto Scaling group.'
+    Type: Number
+    Default: 2
+    ConstraintDescription: 'Must be >= 1'
+    MinValue: 1
+  MinSize:
+    Description: 'The minimum size of the Auto Scaling group.'
+    Type: Number
+    Default: 1
+    ConstraintDescription: 'Must be >= 0'
+    MinValue: 0
+  DesiredCapacity:
+    Description: 'The desired start size of the Auto Scaling group.'
+    Type: Number
+    Default: 1
+    ConstraintDescription: 'Must be >= 0'
+    MinValue: 0
 Conditions:
   HasTargetGroupOther: !Not [!Equals [!Ref TargetGroupOther, '']]
+  HasZeroInstances: !Equals [!Ref DesiredCapacity, '0']
 Resources: 
 
   #----------------------------------------------------------------------------
@@ -52,9 +71,9 @@ Resources:
       HealthCheckGracePeriod: 300
       HealthCheckType: ELB
       LaunchConfigurationName: !Ref LaunchConfiguration
-      MinSize: 1
-      MaxSize: 2
-      DesiredCapacity: 1
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
       NotificationConfigurations:
         - TopicARN: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
@@ -80,10 +99,10 @@ Resources:
     CreationPolicy: 
       ResourceSignal: 
         Timeout: PT20M
-        Count: 1
+        Count: !If [HasZeroInstances, 0, 1]
     UpdatePolicy: 
       AutoScalingRollingUpdate: 
-        MinInstancesInService: 1
+        MinInstancesInService: !Ref MinSize
         MaxBatchSize: 1
         PauseTime: PT20M
         WaitOnResourceSignals: true
