@@ -5,6 +5,13 @@
 # DESCRIPTION: Install and configure the OpenLDAP
 #
 #
+- name: Creating cleanup playbook
+  include_role: name=common tasks_from=cleanup 
+  with_items:
+    - files/root/playbooks/cleanup.yaml
+  loop_control:
+    loop_var: cleanup_playbook
+
 - name: Installing OpenLDAP packages
   yum:
     name: '{{item}}'
