@@ -152,6 +152,31 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
+  # AWS LoadBalancer JNPL
+  #
+  # The Agent need to access the JNPL port without the Application LoadBalancer
+  #   Messing up the request. Therefore I use a TCP LoadBalancer.
+  #
+  
+  # This must be the port that you specify for the Agents in your Jenkins Global Security Configuration
+  LoadBalancerJNPL:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        ParentVpcStack: !Sub '${ParentVpcStack}'
+        HealthCheckPort: 49817
+        ListenerPort: 49817
+        Scheme: internal
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ELBJNPL'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-tcp.yaml'
+
+  #----------------------------------------------------------------------------
+  #
   # AWS EFS
   #
   # We create the filesystem used by the instance to share valuable data between
@@ -185,6 +210,7 @@ Resources:
         ParentVpcStack: !Sub '${ParentVpcStack}'
         ParentStack: !Sub '${AWS::StackName}'
         TargetGroup: !GetAtt LoadBalancer.Outputs.TargetGroup
+        TargetGroupOther: !GetAtt LoadBalancerJNPL.Outputs.TargetGroup
         LaunchConfiguration: !Ref LaunchConfiguration
       Tags:
         - Key: PLATFORM
@@ -195,31 +221,6 @@ Resources:
       TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/asg.yaml'
     DependsOn:
       - FileSystem
-
-  #----------------------------------------------------------------------------
-  #
-  # AWS LoadBalancer JNPL
-  #
-  # The Agent need to access the JNPL port without the Application LoadBalancer
-  #		Messing up the request. Therefore I use a TCP LoadBalancer.
-  #
-  
-  # This must be the port that you specify for the Agents in your Jenkins Global Security Configuration
-  LoadBalancerJNPL:
-    Type: 'AWS::CloudFormation::Stack'
-    Properties:
-      Parameters:
-        ParentVpcStack: !Sub '${ParentVpcStack}'
-        HealthCheckPort: 49817
-        ListenerPort: 8080
-        Scheme: internal
-      Tags:
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-ELBJNPL'
-      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-tcp.yaml'
 
   #----------------------------------------------------------------------------
   #
