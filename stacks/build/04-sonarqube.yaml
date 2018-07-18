@@ -231,7 +231,7 @@ Resources:
                 LDAPManagerDN: '{{LDAPManagerDN}}'
                 LDAPManagerPassword: '${LDAPManagerPassword}'
 
-                FileSystem: '${FileSystem}'
+                FileSystem: '{{FileSystem}}'
                 
                 DBEndpointAddress: '{{DBEndpointAddress}}'
                 DBEndpointPort: '{{DBEndpointPort}}'
@@ -255,6 +255,8 @@ Resources:
                   'Fn::ImportValue': !Sub '${ParentDBStack}-EndpointPort'
                 DBAdminUsername: 
                   'Fn::ImportValue': !Sub '${ParentDBStack}-MasterUsername'
+                FileSystem:
+                  !GetAtt FileSystem.Outputs.FileSystem
                 LDAPDNSName: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-DNSName'
                 LDAPPort: 
