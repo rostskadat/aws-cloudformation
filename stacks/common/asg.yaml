@@ -79,13 +79,13 @@ Resources:
           PropagateAtLaunch: true
     CreationPolicy: 
       ResourceSignal: 
-        Timeout: PT15M
+        Timeout: PT20M
         Count: 1
     UpdatePolicy: 
       AutoScalingRollingUpdate: 
         MinInstancesInService: 1
         MaxBatchSize: 1
-        PauseTime: PT15M
+        PauseTime: PT20M
         WaitOnResourceSignals: true
 
 Outputs: 
