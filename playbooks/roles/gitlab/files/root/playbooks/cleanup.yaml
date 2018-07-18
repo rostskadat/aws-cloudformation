@@ -1,0 +1,30 @@
+---
+- hosts: all
+  gather_facts: True
+  vars_files: 
+    - vars/config.yml
+  tasks:
+    - name: Cleaning up Artifactory DB
+      mysql_db:
+        name: artifactory
+        state: absent
+        login_host: '{{DBEndpointAddress}}'
+        login_port: '{{DBEndpointPort}}'
+        login_user: '{{DBAdminUsername}}'
+        login_password: '{{DBAdminPassword}}'
+
+    - name: Cleaning up Artifactory DB User
+      mysql_user:
+        name: artifactory
+        state: absent
+        login_host: '{{DBEndpointAddress}}'
+        login_port: '{{DBEndpointPort}}'
+        login_user: '{{DBAdminUsername}}'
+        login_password: '{{DBAdminPassword}}'
+
+    - name: Cleaning up master.key
+      file: path='/mnt/application/master.key' state=absent
+
+    - name: Cleaning up master.key
+      file: path='/mnt/application/.application_configured' state=absent
+      

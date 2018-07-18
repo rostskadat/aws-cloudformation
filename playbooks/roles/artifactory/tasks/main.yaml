@@ -2,6 +2,9 @@
 #
 # TODO: Check first launch, not sure the master.key appears where we're looking
 #
+- name: Creating cleanup playbook
+  include_role: name=common tasks_from=cleanup cleanup_playbook=files/root/playbooks/cleanup.yaml
+
 - name: Removing obsolete packages
   yum: name='{{item}}' state=absent
   with_items:

@@ -1,4 +1,11 @@
 ---
+- name: Creating cleanup playbook
+  include_role: name=common tasks_from=cleanup 
+  with_items:
+    - files/root/playbooks/cleanup.yaml
+  loop_control:
+    loop_var: cleanup_playbook
+
 - name: Removing obsolete packages
   yum: name='{{item}}' state=absent
   with_items:

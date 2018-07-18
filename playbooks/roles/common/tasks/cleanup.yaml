@@ -1,0 +1,8 @@
+---
+- name: Copying cleanup Shell script
+  copy: src='files{{item}}' dest='{{item}}' owner=root group=root mode='0700'
+  with_items:
+    - /root/cleanup.sh
+
+- name: Copying cleanup playbook
+  copy: src='{{cleanup_playbook}}' dest=/root/playbooks/cleanup.yaml owner=root group=root mode='0700'
