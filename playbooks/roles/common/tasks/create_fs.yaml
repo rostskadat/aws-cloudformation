@@ -1,6 +1,9 @@
 ---
+- name: Installing default packages
+  yum: name='amazon-efs-utils'
+
 - name: Creating directory /mnt/application
   file: path=/mnt/application state=directory mode=0755
 
 - name: Mounting EFS
-  mount: path=/mnt/application src='{{FileSystem}}' fstype=efs opts=tls state=present
+  mount: path=/mnt/application src='{{FileSystem}}' fstype=efs opts=tls state=mounted
