@@ -237,6 +237,16 @@ Resources:
                 Action:
                   - 'cloudformation:DescribeStacks'
                 Resource: '*'
+        - PolicyName: 'AllowEC2SQSActions'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'sqs:DeleteMessage'
+                  - 'sqs:ReceiveMessage'
+                Resource: '*'
+                
   InstanceProfileEC2Instance:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:
