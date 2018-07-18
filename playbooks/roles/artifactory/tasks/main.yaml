@@ -48,7 +48,7 @@
     state: directory
     mode: 0700
 
-- name: Templating /etc/opt/jfrog/artifactory/db.properties
+- name: Templating Artifactory configuration files
   template: 
     src: 'templates{{item.src}}'
     dest: '{{item.src}}'
@@ -59,13 +59,17 @@
     - { src: /etc/opt/jfrog/artifactory/db.properties, mode: '0644' }
     - { src: /root/artifactory/settings.yaml, mode: '0700' }
 
-- name: Copying /etc/opt/jfrog/artifactory/binarystore.xml
+- name: Copying Artifactory configuration files
   copy:
-    src: files/etc/opt/jfrog/artifactory/binarystore.xml
-    dest: /etc/opt/jfrog/artifactory/binarystore.xml
+    src: 'files{{item.src}}'
+    dest: '{{item.src}}'
     owner: root
     group: root
-    mode: 0644
+    mode: '{{item.mode}}'
+  with_items:
+    - { src: /etc/opt/jfrog/artifactory/binarystore.xml, mode: '0644' }
+    - { src: /root/playbooks/cleanup.yaml, mode: '0700' }
+    - { src: /root/cleanup.sh, mode: '0700' }
 
 - name: Creating symlink to mysql-connector-java.jar
   file:
