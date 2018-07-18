@@ -29,12 +29,17 @@ Parameters:
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of a valid TargetGroup'
+  TargetGroupOther:
+    Description: 'Enter the name of the TargetGroup'
+    Type: String
+    Default: ''    
   LaunchConfiguration:
     Description: 'Enter the name of the LaunchConfiguration'
     Type: String
     MinLength: 1
     ConstraintDescription: 'must be the name of a valid LaunchConfiguration'
-
+Conditions:
+  HasTargetGroupOther: !Not [!Equals [!Ref TargetGroupOther, '']]
 Resources: 
 
   #----------------------------------------------------------------------------
@@ -59,7 +64,8 @@ Resources:
             - 'autoscaling:EC2_INSTANCE_TERMINATE'
             - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
       TargetGroupARNs:
-        - !Sub '${TargetGroup}'
+        - !Ref TargetGroup
+        - !If [HasTargetGroupOther, !Ref TargetGroupOther, !Ref 'AWS::NoValue']
       VPCZoneIdentifier: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
