@@ -174,7 +174,7 @@ Resources:
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 
-              command: 'sudo ansible-playbook /root/playbooks/openldap.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
+              command: 'sudo ansible-playbook /root/playbooks/openldap.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml --skip-tags "cleanup"'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      

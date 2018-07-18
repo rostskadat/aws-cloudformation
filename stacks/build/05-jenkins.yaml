@@ -327,7 +327,7 @@ Resources:
                 LDAPManagerDN: '{{LDAPManagerDN}}'
                 LDAPManagerPassword: '${LDAPManagerPassword}'
 
-                FileSystem: '${FileSystem}'
+                FileSystem: '{{FileSystem}}'
                 
                 ArtifactoryDNSName: '{{ArtifactoryDNSName}}'
                 ArtifactoryAdminUsername: '{{ArtifactoryAdminUsername}}'
@@ -355,6 +355,8 @@ Resources:
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-RootDC'
                 LDAPManagerDN: 
                   'Fn::ImportValue': !Sub '${ParentLDAPStack}-ManagerDN'
+                FileSystem:
+                  !GetAtt FileSystem.Outputs.FileSystem
                 ArtifactoryDNSName: 
                   'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-DNSName'
                 ArtifactoryAdminUsername: 
@@ -370,7 +372,7 @@ Resources:
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 
-              command: 'sudo ansible-playbook /root/playbooks/jenkins.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
+              command: 'sudo ansible-playbook /root/playbooks/jenkins.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml --skip-tags "cleanup"'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
