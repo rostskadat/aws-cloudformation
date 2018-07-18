@@ -12,7 +12,6 @@
     - py-bcrypt
     - java-1.8.0-openjdk
     - java-1.8.0-openjdk-devel
-    - amazon-efs-utils
 
 - name: Instaling required Ruby Gems
   gem: name='{{item}}'
@@ -79,7 +78,7 @@
     - { src: /root/configure_sonarqube.groovy, mode: '0600', user: root }
     - { src: /var/lib/jenkins/.m2/settings.xml, mode: '0600', user: jenkins }
     - { src: /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml, mode: '0644', user: jenkins }
-#    - { src: /opt/lifecycle-poller/poller.conf, mode: '0400', user: root }
+    - { src: /opt/lifecycle-poller/poller.conf, mode: '0400', user: root }
 
 - name: Copying Jenkins configuration files
   copy: src='files{{item}}' dest='{{item}}' owner=jenkins group=jenkins mode='0644'
@@ -92,25 +91,15 @@
 - name: Copying Deamons files
   copy: src='files{{item}}' dest='{{item}}' owner=root group=root mode='0755'
   with_items:
-    - /etc/init.d/lifecycle-poller.rb
+    - /etc/init.d/lifecycle-poller
     - /opt/lifecycle-poller/daemon.rb
     - /opt/lifecycle-poller/worker.rb
 
 - name: Linking Jenkins jobs directory
-  file:
-    src: /mnt/application
-    dest: /var/lib/jenkins/jobs
-    owner: jenkins
-    group: jenkins
-    state: link
-    force: yes
+  file: src=/mnt/application dest=/var/lib/jenkins/jobs owner=jenkins group=jenkins state=link force=yes
 
 - name: Fixing ownership on Jenkins paths
-  file:
-    path: '{{item}}'
-    owner: jenkins
-    group: jenkins
-    recurse: yes
+  file: path='{{item}}' owner=jenkins group=jenkins recurse=yes
   with_items:
     - /mnt/application
     - /var/lib/jenkins/.m2
@@ -118,10 +107,7 @@
 - include_role: name=jenkins tasks_from=restart_and_wait
 
 - name: Configuring for direct authentication
-  replace:
-    path: /var/lib/jenkins/config.xml
-    regexp: '{{item.regexp}}'
-    replace: '{{item.replace}}'
+  replace: path=/var/lib/jenkins/config.xml regexp='{{item.regexp}}' replace='{{item.replace}}'
   with_items:
     - { regexp: '<slaveAgentPort>.*</slaveAgentPort>', replace: '<slaveAgentPort>49817</slaveAgentPort>' }
     - { regexp: '<label>.*</label>', replace: '<label>master</label>' }
@@ -150,10 +136,7 @@
       set_fact: current_password='{{JenkinsAdminPassword}}'
 
 - name: Install Jenkins plugins
-  jenkins_plugin:
-    name: '{{item}}'
-    url_username: admin
-    url_password: '{{current_password}}'
+  jenkins_plugin: name='{{item}}' url_username=admin url_password='{{current_password}}'
   with_items:
     - ace-editor
     - ant
@@ -228,25 +211,23 @@
     - '{{lookup("file", "/root/configure_sonarqube.groovy")}}'
     - '{{lookup("file", "/root/configure_ldap.groovy")}}'
 
-#- name: Scheduling cloudwatch-build-active 
-#  cron:
-#    name: 'cloudwatch-build-active'
-#    env: PATH='/sbin:/bin:/usr/sbin:/usr/bin:/opt/aws/bin'
-#    job: "aws --region {{Region}} cloudwatch put-metric-data --namespace {{StackName}} --metric-name BuildActive --value $(curl -s -m 60 -u 'admin:{{JenkinsAdminPassword}}' 'http://localhost:8080/computer/api/xml?xpath=*/busyExecutors' | sed -r 's/<[/a-zA-Z]*>//g') --unit Count"
-#    user: root
-#    cron_file: cloudwatch-build-active
-#
-#- name: Scheduling cloudwatch-build-queue
-#  cron:
-#    name: 'cloudwatch-build-queue'
-#    env: PATH='/sbin:/bin:/usr/sbin:/usr/bin:/opt/aws/bin'
-#    job: "aws --region {{Region}} cloudwatch put-metric-data --namespace {{StackName}} --metric-name BuildQueue --value $(curl -s -m 60 -u 'admin:{{JenkinsAdminPassword}}' 'http://localhost:8080/jqs-monitoring/api/xml?xpath=/JQSMonitoring/buildQueue/numberOfJobs' | sed -r 's/<[/a-zA-Z]*>//g') --unit Count"
-#    user: root
-#    cron_file: cloudwatch-build-active
+- name: Scheduling cloudwatch-build-active 
+  cron:
+    name: 'cloudwatch-build-active'
+    job: "aws --region {{Region}} cloudwatch put-metric-data --namespace {{StackName}} --metric-name BuildActive --value $(curl -s -m 60 -u 'admin:{{JenkinsAdminPassword}}' 'http://localhost:8080/computer/api/json' | jq -r '.busyExecutors') --unit Count"
+    user: root
+    cron_file: cloudwatch-build-active
+
+- name: Scheduling cloudwatch-build-queue
+  cron:
+    name: 'cloudwatch-build-queue'
+    job: "aws --region {{Region}} cloudwatch put-metric-data --namespace {{StackName}} --metric-name BuildQueue --value $(curl -s -m 60 -u 'admin:{{JenkinsAdminPassword}}' 'http://localhost:8080/jqs-monitoring/api/json' | jq '.buildQueue.numberOfJobs') --unit Count"
+    user: root
+    cron_file: cloudwatch-build-active
 
 - name: Enabling services
   service: name='{{item}}' state=restarted enabled=yes
   with_items:
     - docker
     - jenkins
-#    - lifecycle-poller
+    - lifecycle-poller

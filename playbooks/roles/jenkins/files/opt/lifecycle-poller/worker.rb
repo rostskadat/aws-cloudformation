@@ -33,7 +33,7 @@ $jenkins_cli = '/var/cache/jenkins/war/WEB-INF/jenkins-cli.jar'
 #------------------------------------------------------------------------------
 def takeAgentTemporarilyOffline(agent)
   # sterr is forwarded to sdout to get the information in ruby
-  out=`java -jar #{jenkins_cli} -s http://localhost:8080 -auth 'admin:#{$conf['masterAdminPassword']}' offline-node #{agent} -m 'scale down' 2>&1`
+  out=`java -jar #{$jenkins_cli} -s http://localhost:8080 -auth 'admin:#{$conf['masterAdminPassword']}' offline-node #{agent} -m 'scale down' 2>&1`
   if $?.exitstatus == 0
     $log.info "agent #{agent} is marked as offline"
     return true
@@ -57,7 +57,7 @@ end
 #------------------------------------------------------------------------------
 def deleteAgent(agent)
   # sterr is forwarded to sdout to get the information in ruby
-  out=`java -jar #{jenkins_cli} -s http://localhost:8080 -auth 'admin:#{$conf['masterAdminPassword']}' delete-node #{agent} 2>&1`
+  out=`java -jar #{$jenkins_cli} -s http://localhost:8080 -auth 'admin:#{$conf['masterAdminPassword']}' delete-node #{agent} 2>&1`
   if $?.exitstatus == 0
     $log.info "agent #{agent} is deleted"
     return true
