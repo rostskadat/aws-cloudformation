@@ -28,6 +28,7 @@ Parameters:
   SubDomainName:
     Description: 'The subdomain of the Internal DNS resolution'
     Type: String
+    Default: ''
 Conditions:
   IsPublic: !Equals [!Ref Scheme, 'internet-facing']
   HasSubDomainName: !Not [!Equals [!Ref SubDomainName, '']]
