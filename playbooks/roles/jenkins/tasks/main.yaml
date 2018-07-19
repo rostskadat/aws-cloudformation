@@ -237,4 +237,4 @@
   with_items:
     - docker
     - jenkins
-    - lifecycle-poller
+#    - lifecycle-poller
