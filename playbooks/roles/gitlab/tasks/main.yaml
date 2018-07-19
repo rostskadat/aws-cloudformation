@@ -113,6 +113,19 @@
     - { key: 'help_page_hide_commercial_content', value: true }
     - { key: 'html_emails_enabled', value: true }
 
+- name: Creating Developers group
+  uri:
+    url: 'http://localhost:80/api/v4/groups'
+    method: POST
+    headers:
+      Authorization: 'Bearer {{token}}'
+    body_format: json
+    body:
+      name: 'Developers'
+      path: 'Developers'
+      description: 'Developers Group'
+    status_code: 201,400
+
 - name: Revoking token
   uri:
     url: 'http://localhost:80/oauth/revoke'
