@@ -131,6 +131,7 @@ Resources:
       Dimensions:
         - Name: LoadBalancer
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
+      TreatMissingData: notBreaching
 
 Outputs: 
   LoadBalancer: 

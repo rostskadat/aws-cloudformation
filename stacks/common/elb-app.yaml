@@ -143,6 +143,7 @@ Resources:
       Dimensions:
         - Name: LoadBalancer
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
+      TreatMissingData: notBreaching
   HTTPCodeTarget5XXCountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
@@ -159,6 +160,7 @@ Resources:
       Dimensions:
         - Name: LoadBalancer
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
+      TreatMissingData: notBreaching
   RejectedConnectionCountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
@@ -175,6 +177,7 @@ Resources:
       Dimensions:
         - Name: LoadBalancer
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
+      TreatMissingData: notBreaching
   TargetConnectionErrorCountTooHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
@@ -191,6 +194,7 @@ Resources:
       Dimensions:
         - Name: LoadBalancer
           Value: !GetAtt LoadBalancer.LoadBalancerFullName
+      TreatMissingData: notBreaching
 
 Outputs: 
   LoadBalancer: 
