@@ -171,6 +171,7 @@
     - extensible-choice-parameter
     - github-organization-folder
     - git-parameter
+    - gitlab-hook
     - gradle
     - greenballs
     - groovy
