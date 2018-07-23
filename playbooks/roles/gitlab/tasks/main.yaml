@@ -68,18 +68,12 @@
   with_items:
     - { src: /etc/gitlab/gitlab.rb, mode: '0700' }
 
-- name: Copying /root/config.rb.patch
-  copy:
-    src: files/root/config.rb.patch
-    dest: /root/config.rb.patch
-    owner: root
-    group: root
-    mode: 0644
-
-- name: Patching config.rb...
-  patch: 
-    src: /root/config.rb.patch
-    dest: /opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb 
+- name: Patching gitlab-hook
+  include_role: name=common tasks_from=patching_file
+  with_items: 
+    - { src: '/root/config.rb.patch', dest: '/opt/gitlab/embedded/service/gitlab-rails/ee/lib/ee/gitlab/auth/ldap/config.rb', owner: 'root', group: 'root', mode: '0644' }
+  loop_control:
+    loop_var: patch
 
 - name: Configuring Gitlab
   shell: 'GITLAB_ROOT_EMAIL="{{GitlabAdminEmail}}" GITLAB_ROOT_PASSWORD="{{GitlabAdminPassword}}" gitlab-ctl reconfigure'
