@@ -226,7 +226,13 @@
   loop_control:
     loop_var: patch
 
-# /root/jenkins/configure_sonarqube.sh
+- name: Creating DSL_GITLAB_TEMPLATE_JOB
+  jenkins_job:
+    config: "{{ lookup('file', 'templates/var/lib/jenkins/jobs/DSL_GITLAB_TEMPLATE_JOB/config.xml') }}"
+    name: DSL_GITLAB_TEMPLATE_JOB
+    user: admin
+    password: '{{current_password}}'
+
 - name: Applying configuration
   jenkins_script:
     script: '{{item}}'
@@ -236,6 +242,7 @@
     - '{{lookup("file", "/root/configure_artifactory.groovy")}}'
     - '{{lookup("file", "/root/configure_sonarqube.groovy")}}'
     - '{{lookup("file", "/root/configure_ldap.groovy")}}'
+    - '{{lookup("file", "/root/configure_gitlabhook.groovy")}}'
 
 - include_role: name=jenkins tasks_from=restart_and_wait
 
