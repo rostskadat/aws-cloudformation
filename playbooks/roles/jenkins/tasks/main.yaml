@@ -15,6 +15,7 @@
   yum: name='{{item}}'
   with_items:
     - jq
+    - patch
     - mysql56
     - py-bcrypt
     - java-1.8.0-openjdk
@@ -31,9 +32,18 @@
 
 - name: Adding Jenkins repository
   get_url: url=http://pkg.jenkins-ci.org/redhat-stable/jenkins.repo dest=/etc/yum.repos.d/jenkins.repo mode=644
-  
+
 - name: Import Jenkins Signing Key
   rpm_key: key=https://jenkins-ci.org/redhat/jenkins-ci.org.key state=present
+
+- name: Downloading Groovy
+  unarchive:
+    src: https://dl.bintray.com/groovy/maven/apache-groovy-binary-2.5.1.zip
+    dest: /opt
+    remote_src: yes
+
+- name: Installing Groovy
+  file: src=/opt/groovy-2.5.1/bin/groovy dest=/usr/bin/groovy state=link  
 
 - name: Fixing maven repository definition
   replace:
@@ -206,6 +216,14 @@
     - workflow-aggregator
     - ws-cleanup
 
+- name: Patching gitlab-hook
+  include_role: name=common tasks_from=patching_file
+  with_items: 
+    - { src: '/root/merge_request_details.rb.patch', dest: '/var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/merge_request_details.rb', owner: 'jenkins', group: 'jenkins', mode: '0644' }
+    - { src: '/root/payload_request_details.rb.patch', dest: '/var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/payload_request_details.rb', owner: 'jenkins', group: 'jenkins', mode: '0644' }
+  loop_control:
+    loop_var: patch
+
 - include_role: name=jenkins tasks_from=restart_and_wait
 
 # /root/jenkins/configure_sonarqube.sh
@@ -218,6 +236,14 @@
     - '{{lookup("file", "/root/configure_artifactory.groovy")}}'
     - '{{lookup("file", "/root/configure_sonarqube.groovy")}}'
     - '{{lookup("file", "/root/configure_ldap.groovy")}}'
+
+- name: Patching gitlab-hook
+  include_role: name=common tasks_from=patching_file
+  with_items: 
+    - { src: 'merge_request_details.rb.patch', dest: '/var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/merge_request_details.rb', owner: 'jenkins', group: 'jenkins', mode: '0644' }
+    - { src: 'payload_request_details.rb.patch', dest: '/var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/payload_request_details.rb', owner: 'jenkins', group: 'jenkins', mode: '0644' }
+  loop_control:
+    loop_var: patch
 
 - name: Scheduling cloudwatch-build-active 
   cron:

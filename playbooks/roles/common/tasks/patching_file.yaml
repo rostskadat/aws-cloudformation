@@ -1,0 +1,8 @@
+---
+- name: Copying patch {{patch.dest}}
+  copy: src='files{{patch.src}}' dest='/root/content.patch' owner='{{patch.owner}}' group='{{patch.group}}' mode='{{patch.mode}}'
+
+- name: Patching {{patch.dest}}
+  patch: src=/root/content.patch dest='{{patch.dest}}' 
+    
+    

@@ -1,0 +1,11 @@
+--- /var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/merge_request_details.rb 2018-06-26 14:53:20.531134934 +0000
++++ /root/merge_request_details.rb 2018-06-26 14:53:02.519089466 +0000
+@@ -52,7 +52,7 @@
+     end
+ 
+     def repository_url
+-      payload["source"] ? payload["source"]["ssh_url"] : extended["ssh_url_to_repo"]
++      payload["source"] ? payload["source"]["git_http_url"] : extended["ssh_url_to_repo"]
+     end
+ 
+     def repository_name

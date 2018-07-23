@@ -1,0 +1,13 @@
+--- /var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/payload_request_details.rb.rb 2018-06-26 14:53:20.531134934 +0000
++++ /root/payload_request_details.rb.rb 2018-06-26 14:53:02.519089466 +0000
+@@ -13,8 +13,8 @@
+ 
+     def repository_url
+       return "" unless payload["repository"]
+-      return "" unless payload["repository"]["url"]
+-      payload["repository"]["url"].strip
++      return "" unless payload["repository"]["git_http_url"]
++      payload["repository"]["git_http_url"].strip
+     end
+ 
+     def repository_group
