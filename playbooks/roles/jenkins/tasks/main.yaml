@@ -237,6 +237,8 @@
     - '{{lookup("file", "/root/configure_sonarqube.groovy")}}'
     - '{{lookup("file", "/root/configure_ldap.groovy")}}'
 
+- include_role: name=jenkins tasks_from=restart_and_wait
+
 - name: Scheduling cloudwatch-build-active 
   cron:
     name: 'cloudwatch-build-active'
