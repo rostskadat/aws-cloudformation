@@ -47,6 +47,12 @@ Metadata:
       Parameters:
       - SonarqubeAdminEmail
       - SonarqubeAdminPassword
+    - Label:
+        default: 'SMTP Parameters'
+      Parameters:
+      - SmtpHostname
+      - SmtpUsername
+      - SmtpPassword
 Parameters: 
   ParentVpcStack: 
     Description: "Enter the name of the VPC Stack where Sonarqube will reside"
@@ -106,9 +112,22 @@ Parameters:
     Type: String
     MinLength: 1
     NoEcho: true
+  SmtpHostname:
+    Description: 'The name of the AWS SES smtp server to use'
+    Type: String
+    Default: 'email-smtp.eu-west-1.amazonaws.com'
+  SmtpUsername:
+    Description: 'The SMTP user (you can find it in the IAM console)'
+    Type: String
+    Default: 'AKIxxxxx'
+  SmtpPassword:
+    Description: 'The SMTP password (you can find it in the IAM console)'
+    Type: String
+    NoEcho: true
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
   HasIAMUserSSHAccess: !Equals [!Ref IAMUserSSHAccess, 'true']
+  HasSMTP: !Not [!Equals [!Ref SmtpHostname, '']]
 Resources: 
 
   FunctionGetVariable: 
@@ -230,6 +249,10 @@ Resources:
                 LDAPRootDC: '{{LDAPRootDC}}'
                 LDAPManagerDN: '{{LDAPManagerDN}}'
                 LDAPManagerPassword: '${LDAPManagerPassword}'
+
+                SmtpHostname: '${SmtpHostname}'
+                SmtpUsername: '${SmtpUsername}'
+                SmtpPassword: '${SmtpPassword}'
 
                 FileSystem: '{{FileSystem}}'
                 

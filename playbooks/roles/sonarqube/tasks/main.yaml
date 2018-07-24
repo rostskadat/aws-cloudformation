@@ -171,6 +171,12 @@
     - { key: 'sonar.gitlab.ignore_certificate', value: 'true' }
     - { key: 'sonar.gitlab.user_token',         value: '{{ lookup("file", "/mnt/application/gitlab_token") }}' }
     - { key: 'sonar.gitlab.ping_user',          value: 'true' }
+    - { key: 'email.from',                           value: '{{SonarqubeAdminEmail}}' }
+    - { key: 'email.smtp_secure_connection.secured', value: 'ssl' }
+    - { key: 'email.smtp_host.secured',              value: '{{SmtpHostname}}' }
+    - { key: 'email.smtp_port.secured',              value: '465' }
+    - { key: 'email.smtp_username.secured',          value: '{{SmtpUsername}}' }
+    - { key: 'email.smtp_password.secured',          value: '{{SmtpPassword}}' }
 
 - name: Changing password
   uri:
