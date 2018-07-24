@@ -27,7 +27,7 @@ SonarqubeAdminEmail=sonarqube@${SonarqubeAdminEmail##*@}
 url="http://${GitlabDNSName}/api/v4"
 
 echo "Checking if user 'sonarqube' exists..."
-userId=$(curl -s -H "Authorization: Bearer $token" "$url/users" | jq '.[] | select (.username == "sonarqube" ) | .id')
+userId=$(curl -s -H "Authorization: Bearer $token" "$url/users?username=sonarqube" | jq '.[] | .id')
 if [ -z "$userId" ]; then
     echo "Creating sonarqube user in Gitlab @ $url (${SonarqubeAdminEmail})..."
     userId=$(curl -s --request POST -H "Authorization: Bearer $token" "$url/users" -F "email=${SonarqubeAdminEmail}" -F "password=$gitlabSonarqubePassword" -F "username=sonarqube" -F "name=Sonarqube" -F "admin=true" -F "skip_confirmation=true" | jq '.id')
