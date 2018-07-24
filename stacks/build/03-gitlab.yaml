@@ -3,9 +3,6 @@
 #
 # DESCRIPTION: This Stack create a Gitlab Host as well as an Internet facing LoadBalancer.
 #
-# TODO: 
-# - Should fine tune configuration (disable signin, etc)...
-#
 ---
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "This stack create a Gitlab host"

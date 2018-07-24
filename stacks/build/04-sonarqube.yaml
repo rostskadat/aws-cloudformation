@@ -5,7 +5,6 @@
 #
 # TODO: 
 # - LOOK AT https://docs.sonarqube.org/display/SONAR/Hardware+Recommendations
-# - Configure email for admin user: architectureemergingtechnologies@allfundsbank.com
 # - Configure webhooks for gitlab or jenkins: cf https://redirect.sonarsource.com/doc/webhooks.html
 # - Configure Jenkins CI: sonar.links.ci
 # - Configure Gitlab SCM: sonar.links.scm

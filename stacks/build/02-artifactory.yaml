@@ -3,9 +3,6 @@
 #
 # DESCRIPTION: This Stack create a Artifactory Host as well as an Internet facing LoadBalancer.
 #
-# TODO: 
-# - Should create a Jenkins User (only available for Artifactory PRO :s)
-#
 ---
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "This stack create a Artifactory host"

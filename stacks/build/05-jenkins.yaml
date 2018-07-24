@@ -5,10 +5,8 @@
 #
 # TODO: 
 # - Add list of common SSH Site we want to connect to
-# - Configure SMTP server
 # - Configure Global Tool Configuration >> SonarQube Scanner
 # - Configure Global Tool Configuration >> Docker 
-# - Configure System >> email settings usig SES 
 #
 ---
 AWSTemplateFormatVersion: "2010-09-09"
