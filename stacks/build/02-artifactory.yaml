@@ -85,7 +85,7 @@ Parameters:
     NoEcho: true
     MinLength: 3
   ArtifactoryAdminEmail:
-    Description: 'The LDAP Admin email'
+    Description: 'The Admin email'
     Type: String
     Default: 'application-admin@example.com'
   ArtifactoryAdminPassword: 
@@ -242,6 +242,7 @@ Resources:
                 DBAdminUsername: '{{DBAdminUsername}}'
                 DBAdminPassword: '${DBMasterPassword}'
                 
+                ArtifactoryAdminEmail: '${ArtifactoryAdminEmail}'
                 ArtifactoryAdminPassword: '${ArtifactoryAdminPassword}'
               context:
                 LDAPDNSName:
