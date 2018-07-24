@@ -244,10 +244,10 @@
   with_items:
     - '{{lookup("file", "/root/configure_artifactory.groovy")}}'
     - '{{lookup("file", "/root/configure_jdk.groovy")}}'
-    - '{{lookup("file", "/root/configure_ldap.groovy")}}'
     - '{{lookup("file", "/root/configure_sonarqube.groovy")}}'
     - '{{lookup("file", "/root/configure_gitlabhook.groovy")}}'
     - '{{lookup("file", "/root/configure_smtp.groovy")}}'
+    - '{{lookup("file", "/root/configure_ldap.groovy")}}'
 
 - include_role: name=jenkins tasks_from=restart_and_wait
 
