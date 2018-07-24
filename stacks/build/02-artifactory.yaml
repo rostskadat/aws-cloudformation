@@ -267,7 +267,7 @@ Resources:
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 
-              command: 'sudo ansible-playbook /root/playbooks/artifactory.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml --skip-tags "cleanup"'
+              command: 'sudo bash /root/playbooks/run_playbook.sh /root/playbooks/artifactory.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
