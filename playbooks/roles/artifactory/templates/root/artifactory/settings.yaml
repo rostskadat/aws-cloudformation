@@ -23,6 +23,68 @@ security:
       allowUserToAccessProfile: true
       autoCreateUser: true
       enabled: true
+indexer:
+  enabled: true
+  cronExp: '0 23 5 * * ?'
+  includedRepositories:
+    - 'repo'
+remoteRepositories:
+  'jboss.org':
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://repository.jboss.org/nexus/content/groups/public-jboss'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'gradle': 
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://gradle.artifactoryonline.com/gradle/libs'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'libs-jfrog.org': 
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://repo.jfrog.org/artifactory/libs-releases-local'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'plugins-jfrog.org': 
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://repo.jfrog.org/artifactory/plugins-releases-local'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'maven.org': 
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://repo1.maven.org/maven2'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'springframework.org': 
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://maven.springframework.org/release'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'wso2.org': 
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://maven.wso2.org/nexus/content/repositories/releases'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
 localRepositories: 
   'libs-releases-local': 
     type: maven
@@ -34,3 +96,46 @@ localRepositories:
     includesPattern: '**/*'
     handleReleases: false
     handleSnapshots: true
+  'plugins-releases-local': 
+    type: maven
+    includesPattern: '**/*'
+    handleReleases: true
+    handleSnapshots: false
+  'plugins-snapshots-local': 
+    type: maven
+    includesPattern: '**/*'
+    handleReleases: false
+    handleSnapshots: true
+  'ext-releases-local': 
+    type: maven
+    includesPattern: '**/*'
+    handleReleases: true
+    handleSnapshots: false
+  'ext-snapshots-local': 
+    type: maven
+    includesPattern: '**/*'
+    handleReleases: false
+    handleSnapshots: true
+
+virtualRepositories:
+  'repo':
+    type: maven
+    repositories: 
+      - 'libs-releases-local'
+      - 'libs-snapshots-local'
+      - 'plugins-releases-local'
+      - 'plugins-snapshots-local'
+      - 'ext-releases-local'
+      - 'ext-snapshots-local'
+      - 'ext-releases-local'
+      - 'ext-snapshots-local'
+      - 'ext-releases-local'
+      - 'ext-snapshots-local'
+      - 'jboss.org'
+      - 'gradle' 
+      - 'libs-jfrog.org' 
+      - 'plugins-jfrog.org' 
+      - 'maven.org'
+      - 'springframework.org' 
+      - 'wso2.org'
+    
