@@ -1,3 +1,11 @@
+mailServer:
+  enabled: true
+  host: '{{SmtpHostname}}'
+  port: 465
+  username: '{{SmtpUsername}}'
+  password: '{{SmtpPassword}}'
+  from: '{{ArtifactoryAdminEmail}}'
+  ssl: true
 security:
   anonAccessEnabled: false
   anonAccessToBuildInfosDisabled: true

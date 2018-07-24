@@ -23,10 +23,7 @@
     - MySQL-python27
 
 - name: Adding JFrog repository
-  get_url:
-    url: https://bintray.com/jfrog/artifactory-rpms/rpm
-    dest: /etc/yum.repos.d/jfrog.repo
-    mode: 644
+  get_url: url=https://bintray.com/jfrog/artifactory-rpms/rpm dest=/etc/yum.repos.d/jfrog.repo mode=644
 
 - name: Creating and mounting EFS
   include_role: name=common tasks_from=create_fs
@@ -46,33 +43,19 @@
     loop_var: log
 
 - name: Installing Artifactory     
-  yum:
-    name: jfrog-artifactory-oss
+  yum: name=jfrog-artifactory-oss
 
 - name: Creating directory /mnt/application
-  file:
-    path: /root/artifactory
-    state: directory
-    mode: 0700
+  file: path=/root/artifactory state=directory mode=0700
 
 - name: Templating Artifactory configuration files
-  template: 
-    src: 'templates{{item.src}}'
-    dest: '{{item.src}}'
-    owner: root
-    group: root
-    mode: '{{item.mode}}'
+  template: src='templates{{item.src}}' dest='{{item.src}}' owner=root group=root mode='{{item.mode}}'
   with_items:
     - { src: /etc/opt/jfrog/artifactory/db.properties, mode: '0644' }
     - { src: /root/artifactory/settings.yaml, mode: '0700' }
 
 - name: Copying Artifactory configuration files
-  copy:
-    src: 'files{{item.src}}'
-    dest: '{{item.src}}'
-    owner: root
-    group: root
-    mode: '{{item.mode}}'
+  copy: src='files{{item.src}}' dest='{{item.src}}' owner=root group=root mode='{{item.mode}}'
   with_items:
     - { src: /etc/opt/jfrog/artifactory/binarystore.xml, mode: '0644' }
     - { src: /root/playbooks/cleanup.yaml, mode: '0700' }
