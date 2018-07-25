@@ -29,11 +29,75 @@ indexer:
   includedRepositories:
     - 'repo'
 remoteRepositories:
+  'maven.org':
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://central.maven.org/maven2'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'sonatype.org':
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'https://oss.sonatype.org/content/repositories/releases'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'springframework.org': 
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://maven.springframework.org/release'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'libs-spring.io':
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://repo.spring.io/libs-release'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'plugins-spring.io':
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://repo.spring.io/plugins-release'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'atlassian.com':
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'https://maven.atlassian.com/content/repositories/atlassian-public'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'hortonworks.com':
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'http://repo.hortonworks.com/content/repositories/releases'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
   'jboss.org':
     type: maven
     handleReleases: true
     handleSnapshots: false
     url: 'http://repository.jboss.org/nexus/content/groups/public-jboss'
+    storeArtifactsLocally: true
+    fetchJarsEagerly: true
+    fetchSourcesEagerly: true
+  'apache.org':
+    type: maven
+    handleReleases: true
+    handleSnapshots: false
+    url: 'https://repository.apache.org/content/repositories/releases'
     storeArtifactsLocally: true
     fetchJarsEagerly: true
     fetchSourcesEagerly: true
@@ -58,22 +122,6 @@ remoteRepositories:
     handleReleases: true
     handleSnapshots: false
     url: 'http://repo.jfrog.org/artifactory/plugins-releases-local'
-    storeArtifactsLocally: true
-    fetchJarsEagerly: true
-    fetchSourcesEagerly: true
-  'maven.org': 
-    type: maven
-    handleReleases: true
-    handleSnapshots: false
-    url: 'http://repo1.maven.org/maven2'
-    storeArtifactsLocally: true
-    fetchJarsEagerly: true
-    fetchSourcesEagerly: true
-  'springframework.org': 
-    type: maven
-    handleReleases: true
-    handleSnapshots: false
-    url: 'http://maven.springframework.org/release'
     storeArtifactsLocally: true
     fetchJarsEagerly: true
     fetchSourcesEagerly: true
@@ -127,15 +175,16 @@ virtualRepositories:
       - 'plugins-snapshots-local'
       - 'ext-releases-local'
       - 'ext-snapshots-local'
-      - 'ext-releases-local'
-      - 'ext-snapshots-local'
-      - 'ext-releases-local'
-      - 'ext-snapshots-local'
+      - 'maven.org'
+      - 'sonatype.org'
+      - 'springframework.org' 
+      - 'libs-spring.io'
+      - 'plugins-spring.io'
+      - 'atlassian.com'
+      - 'hortonworks.com'
       - 'jboss.org'
+      - 'apache.org'
       - 'gradle' 
       - 'libs-jfrog.org' 
       - 'plugins-jfrog.org' 
-      - 'maven.org'
-      - 'springframework.org' 
-      - 'wso2.org'
-    
+      - 'wso2.org' 
