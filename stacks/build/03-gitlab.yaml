@@ -200,6 +200,12 @@ Resources:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
 
+  Dashboard: 
+    Type: 'AWS::CloudWatch::Dashboard'
+    Properties:
+      DashboardName: !Sub '${AWS::StackName}'
+      DashboardBody: !Sub '{"widgets":[{"type":"metric","x":0,"y":0,"width":9,"height":9,"properties":{"title":"HTTPCodeELB5XXCountTooHighAlarm","annotations":{"alarms":["${LoadBalancer.Outputs.HTTPCodeELB5XXCountTooHighAlarm}"]},"view":"timeSeries","stacked":false}},{"type":"metric","x":9,"y":0,"width":9,"height":9,"properties":{"title":"HTTPCodeTarget5XXCountTooHighAlarm","annotations":{"alarms":["${LoadBalancer.Outputs.HTTPCodeTarget5XXCountTooHighAlarm}"]},"view":"timeSeries","stacked":false}},{"type":"metric","x":0,"y":9,"width":9,"height":6,"properties":{"title":"TargetConnectionErrorCountTooHighAlarm","annotations":{"alarms":["${LoadBalancer.Outputs.TargetConnectionErrorCountTooHighAlarm}"]},"view":"timeSeries","stacked":false}},{"type":"metric","x":9,"y":9,"width":9,"height":6,"properties":{"title":"RejectedConnectionCountTooHighAlarm","annotations":{"alarms":["${LoadBalancer.Outputs.RejectedConnectionCountTooHighAlarm}"]},"view":"timeSeries","stacked":false}},{"type":"text","x":18,"y":0,"width":6,"height":15,"properties":{"markdown":"\n# ${AWS::StackName}\n## Overview\n\nThis is the main Gitlab. You can access it [here](${LoadBalancer.Outputs.DNSName}). \n\n## Actions\n\nThe [${AWS::StackName}](#dashboards:name=${AWS::StackName}) stack should **only** be updated from the [CloudFormation](https://eu-west-1.console.aws.amazon.com/cloudformation/home) Console.\n\nYou can: \n* Open the [Logs](#logs:group=${AWS::StackName}) \n* Open the [EC2 Console](https://console.aws.amazon.com/ec2/v2/home?region=${AWS::Region}) for this VPC\n"}}]}'
+
   #----------------------------------------------------------------------------
   #
   # AWS EC2
