@@ -136,6 +136,12 @@ Resources:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
 
+  Dashboard: 
+    Type: 'AWS::CloudWatch::Dashboard'
+    Properties:
+      DashboardName: !Sub '${AWS::StackName}'
+      DashboardBody: !Sub '{"widgets":[{"type":"metric","x":0,"y":0,"width":9,"height":9,"properties":{"title":"UnHealthyHostCountTooHighAlarmArn ","annotations":{"alarms":["${LoadBalancer.Outputs.UnHealthyHostCountTooHighAlarmArn}"]},"view":"timeSeries","stacked":false}},{"type":"text","x":18,"y":0,"width":6,"height":9,"properties":{"markdown":"\n# ${AWS::StackName}\n## Overview\n\nThis is the main LDAP. It is not accessible directly from internet. \n\n## Actions\n\nThe [${AWS::StackName}](#dashboards:name=${AWS::StackName}) stack should **only** be updated from the [CloudFormation](https://eu-west-1.console.aws.amazon.com/cloudformation/home) Console.\n\nYou can: \n* Open the [Logs](#logs:group=${AWS::StackName}) \n* Open the [EC2 Console](https://console.aws.amazon.com/ec2/v2/home?region=${AWS::Region}) for this VPC\n"}}]}'
+
   #----------------------------------------------------------------------------
   #
   # AWS EC2
