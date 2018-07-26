@@ -395,6 +395,10 @@ Resources:
       AssessmentTemplateName: !Sub 'Assessment Template for the ${AWS::StackName} Stack'
       RulesPackageArns: !FindInMap [RegionMap, !Ref 'AWS::Region', RulesPackageArns ]
 
+  #
+  # I finally need to create a CloudWatch Event that will periodically call the AssessmentTemplate.
+  # Note that it needs to have the proper permission. 
+  #
   RoleRuleAWSInspector:
     Type: 'AWS::IAM::Role'
     Properties: 
