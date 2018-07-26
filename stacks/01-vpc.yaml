@@ -395,6 +395,40 @@ Resources:
       AssessmentTemplateName: !Sub 'Assessment Template for the ${AWS::StackName} Stack'
       RulesPackageArns: !FindInMap [RegionMap, !Ref 'AWS::Region', RulesPackageArns ]
 
+  RoleRuleAWSInspector:
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: 'Allow'
+            Principal: 
+              Service: 
+                - 'events.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies: 
+        - PolicyName: 'AllowInspectorAssessment'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - Effect: 'Allow'
+                Action:
+                  - 'inspector:StartAssessmentRun'
+                Resource: '*'
+
+  RuleAWSInspector:
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: 'Scheduled AWS Inspector Assessment running every 7 day(s)'
+      ScheduleExpression: 'rate(7 days)'
+      State: ENABLED
+      Targets:
+        - Id: 'RuleAWSInspector'
+          Arn: !GetAtt AssessmentTemplate.Arn 
+          RoleArn: !GetAtt RoleRuleAWSInspector.Arn
+
   #----------------------------------------------------------------------------
   #
   # Echo Service: This function is returns the value of the key passed as 
