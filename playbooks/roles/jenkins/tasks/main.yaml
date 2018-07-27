@@ -12,9 +12,6 @@
   loop_control:
     loop_var: log
 
-- name: Chown on /mnt/application
-  file: dest=/mnt/application owner=jenkins group=jenkins mode=u=rwX,g=rX,o=rX recurse=yes 
-
 - name: Adding jenkins to docker group
   user:
     name: jenkins

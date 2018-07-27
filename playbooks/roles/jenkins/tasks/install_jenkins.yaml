@@ -28,7 +28,7 @@
   file: src=/mnt/application dest=/var/lib/jenkins/jobs owner=jenkins group=jenkins state=link force=yes
 
 - name: Fixing ownership on Jenkins paths
-  file: path='{{item}}' owner=jenkins group=jenkins recurse=yes
+  file: path='{{item}}' owner=jenkins group=jenkins mode=u=rwX,g=rX,o=rX recurse=yes
   with_items:
-    - /mnt/application
+#    - /mnt/application
     - /var/lib/jenkins/.m2
