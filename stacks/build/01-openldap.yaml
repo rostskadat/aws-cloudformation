@@ -155,10 +155,14 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
-  # AWS EC2
+  # AWS EC2 LaunchConfiguration
   #
-  # We create the LaunchConfiguration used by the AutoScalingGroup to provision
-  #   the instances in this stack
+  # The launch configuration is reduced to a minimum. All provisioning is done
+  # using ansible, which provides improved provisioning capabilities. Basically
+  # the steps are as follow:
+  # 1. Create a stack.yaml containing the stack parameters used by the playbook
+  # 2. Download the playbook folder from the S3 bucket
+  # 3. Launch the correct playbook.  
   #
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
