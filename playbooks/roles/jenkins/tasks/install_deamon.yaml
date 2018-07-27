@@ -17,8 +17,8 @@
     - /opt/lifecycle-poller/daemon.rb
     - /opt/lifecycle-poller/worker.rb
 
-- name: Enabling services
-  service: name='{{item}}' state=restarted enabled=yes
-  with_items:
-    - lifecycle-poller
+#- name: Enabling services
+#  service: name='{{item}}' state=restarted enabled=yes
+#  with_items:
+#    - lifecycle-poller
     

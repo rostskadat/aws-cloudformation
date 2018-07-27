@@ -1,0 +1,14 @@
+dn: cn=admin,ou=People,{{LDAPRootDC}}
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+userPassword: {{JenkinsAdminPassword}}
+employeeType: developer
+sn: Jenkins Administrator
+givenName: Jenkins Administrator
+displayName: Jenkins Administrator
+name: admin
+uid: admin
+mail: {{JenkinsAdminEmail}}

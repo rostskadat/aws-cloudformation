@@ -1,0 +1,32 @@
+---
+#- name: Creating LDAP admin user
+#  ldap_entry:
+#    dn: cn=admin,ou=People,{{LDAPRootDC}}
+#    objectClass:
+#      - top
+#      - person
+#      - inetOrgPerson
+#      - extensibleObject
+#      - organizationalPerson
+#    attributes:
+#      userPassword: '{{JenkinsAdminPassword}}'
+#      employeeType: developer
+#      sn: Jenkins Administrator
+#      givenName: Jenkins Administrator
+#      displayName: Jenkins Administrator
+#      name: admin
+#      uid: admin
+#      mail: '{{JenkinsAdminEmail}}'
+#    server_uri: 'ldap://{{LDAPDNSName}}:{{LDAPPort}}/'
+#    bind_dn: '{{LDAPManagerDN}}'
+#    bind_pw: '{{LDAPManagerPassword}}'
+
+- name: Templating LDAP admin user 
+  template: src='templates{{item.src}}' dest='{{item.src}}' owner='{{item.user}}' group='{{item.user}}' mode='{{item.mode}}'
+  with_items:
+    - { src: /root/create_jenkins_admin_user.sh, mode: '0700', user: root }
+    - { src: /root/admin_user.ldif, mode: '0600', user: root }
+  
+- name: Creating LDAP admin user 
+  shell: /root/create_jenkins_admin_user.sh
+

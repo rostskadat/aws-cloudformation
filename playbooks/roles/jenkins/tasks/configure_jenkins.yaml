@@ -19,10 +19,7 @@
 # BEWARE: Make sure that the last configuration is LDAP
 # 
 - name: Applying configuration
-  jenkins_script:
-    script: '{{item}}'
-    user: admin
-    password: '{{current_password}}'
+  jenkins_script: script='{{item}}' user=admin password='{{current_password}}'
   with_items:
     - '{{lookup("file", "/root/configure_artifactory.groovy")}}'
     - '{{lookup("file", "/root/configure_jdk.groovy")}}'
@@ -30,3 +27,8 @@
     - '{{lookup("file", "/root/configure_gitlabhook.groovy")}}'
     - '{{lookup("file", "/root/configure_smtp.groovy")}}'
     - '{{lookup("file", "/root/configure_ldap.groovy")}}'
+  register: applied_configuration
+
+- include_tasks: restart_and_wait.yaml
+  when: applied_configuration.changed
+    

@@ -21,14 +21,23 @@
 
 - include_tasks: install_deamon.yaml
 
+- include_tasks: configure_admin_user.yaml
+
+- block:
+  - service: name='jenkins' state=started
+  - wait_for:
+      path: '{{item}}'
+    with_items:
+      - /var/lib/jenkins/secrets/initialAdminPassword
+      - /var/lib/jenkins/config.xml
+
 - name: Configuring for direct authentication
   replace: path=/var/lib/jenkins/config.xml regexp='{{item.regexp}}' replace='{{item.replace}}'
   with_items:
     - { regexp: '<slaveAgentPort>.*</slaveAgentPort>', replace: '<slaveAgentPort>49817</slaveAgentPort>' }
     - { regexp: '<label>.*</label>', replace: '<label>master</label>' }
-    - { regexp: '.*<securityRealm .*', replace: '<securityRealm class="hudson.security.HudsonPrivateSecurityRealm">' }
-
-- include_tasks: restart_and_wait.yaml
+#    - { regexp: '.*<securityRealm .*', replace: '<securityRealm class="hudson.security.HudsonPrivateSecurityRealm">' }
+# - include_tasks: restart_and_wait.yaml
 
 - block:
     - name: Validating admin credentials
@@ -52,14 +61,7 @@
 
 - include_tasks: install_jenkins_plugins.yaml
 
-- include_tasks: restart_and_wait.yaml
-
-#
-# BEWARE: Make sure that the last configuration is LDAP
-# 
 - include_tasks: configure_jenkins.yaml
-
-- include_tasks: restart_and_wait.yaml
 
 - include_tasks: configure_jenkins_metric.yaml
 

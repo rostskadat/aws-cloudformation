@@ -62,3 +62,9 @@
     - warnings
     - workflow-aggregator
     - ws-cleanup
+  register: new_plugin_installed
+
+- include_tasks: restart_and_wait.yaml
+  when: new_plugin_installed.changed
+
+  
