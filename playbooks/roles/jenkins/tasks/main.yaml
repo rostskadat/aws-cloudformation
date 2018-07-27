@@ -1,6 +1,6 @@
 ---
 - name: Installing packages 
-  include_role: name=jenkins tasks_from=install_packages
+  include_tasks: install_packages.yaml
 
 - name: Creating and mounting EFS 
   include_role: name=common tasks_from=create_fs
@@ -17,9 +17,9 @@
     name: jenkins
     groups: jenkins,docker
 
-- include_role: name=jenkins tasks_from=install_jenkins
+- include_tasks: install_jenkins.yaml
 
-- include_role: name=jenkins tasks_from=install_deamon
+- include_tasks: install_deamon.yaml
 
 - name: Configuring for direct authentication
   replace: path=/var/lib/jenkins/config.xml regexp='{{item.regexp}}' replace='{{item.replace}}'
@@ -28,7 +28,7 @@
     - { regexp: '<label>.*</label>', replace: '<label>master</label>' }
     - { regexp: '.*<securityRealm .*', replace: '<securityRealm class="hudson.security.HudsonPrivateSecurityRealm">' }
 
-- include_role: name=jenkins tasks_from=restart_and_wait
+- include_tasks: restart_and_wait.yaml
 
 - block:
     - name: Validating admin credentials
@@ -50,20 +50,21 @@
     - name: Settings final credentials 
       set_fact: current_password='{{JenkinsAdminPassword}}'
 
-- include_role: name=jenkins tasks_from=install_jenkins_plugins
+- include_tasks: install_jenkins_plugins.yaml
 
-- include_role: name=jenkins tasks_from=restart_and_wait
+- include_tasks: restart_and_wait.yaml
 
 #
 # BEWARE: Make sure that the last configuration is LDAP
 # 
-- include_role: name=jenkins tasks_from=configure_jenkins
+- include_tasks: configure_jenkins.yaml
 
-- include_role: name=jenkins tasks_from=restart_and_wait
+- include_tasks: restart_and_wait.yaml
+
+- include_tasks: configure_jenkins_metric.yaml
 
 - name: Enabling services
   service: name='{{item}}' state=restarted enabled=yes
   with_items:
     - docker
     - jenkins
-#    - lifecycle-poller
