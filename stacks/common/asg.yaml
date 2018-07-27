@@ -112,6 +112,12 @@ Resources:
         MinInstancesInService: !Ref MinSize
         MaxBatchSize: 1
         PauseTime: PT20M
+        SuspendProcesses:
+          - HealthCheck
+          - ReplaceUnhealthy
+          - AZRebalance
+          - AlarmNotification
+          - ScheduledActions
         WaitOnResourceSignals: true
 
 Outputs: 
