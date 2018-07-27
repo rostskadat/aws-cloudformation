@@ -253,18 +253,10 @@
 - include_role: name=jenkins tasks_from=restart_and_wait
 
 - name: Scheduling cloudwatch-build-active 
-  cron:
-    name: 'cloudwatch-build-active'
-    job: "/root/put_metric_data.sh BuildActive"
-    user: root
-    cron_file: cloudwatch-build-active
-
-- name: Scheduling cloudwatch-build-queue
-  cron:
-    name: 'cloudwatch-build-queue'
-    job: "/root/put_metric_data.sh BuildQueue"
-    user: root
-    cron_file: cloudwatch-build-queue
+  cron: name='{{item.name}}' job='/root/put_metric_data.sh {{item.metric}}' user=root cron_file='{{item.name}}'
+  with_items: 
+    - { name: 'cloudwatch-build-active', metric: 'BuildActive' }
+    - { name: 'cloudwatch-build-queue',  metric: 'BuildQueue' }
 
 - name: Enabling services
   service: name='{{item}}' state=restarted enabled=yes
