@@ -65,6 +65,10 @@
   register: new_plugin_installed
 
 - include_tasks: restart_and_wait.yaml
+  with_items:
+    - restarted
+  loop_control:
+    loop_var: state
   when: new_plugin_installed.changed
 
   

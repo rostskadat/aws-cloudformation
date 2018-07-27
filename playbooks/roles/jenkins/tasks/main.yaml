@@ -23,13 +23,11 @@
 
 - include_tasks: configure_admin_user.yaml
 
-- block:
-  - service: name='jenkins' state=started
-  - wait_for:
-      path: '{{item}}'
-    with_items:
-      - /var/lib/jenkins/secrets/initialAdminPassword
-      - /var/lib/jenkins/config.xml
+- include_tasks: restart_and_wait.yaml
+  with_items:
+    - started
+  loop_control:
+    loop_var: state
 
 - name: Configuring for direct authentication
   replace: path=/var/lib/jenkins/config.xml regexp='{{item.regexp}}' replace='{{item.replace}}'

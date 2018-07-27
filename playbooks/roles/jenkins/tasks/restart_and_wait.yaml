@@ -1,6 +1,6 @@
 ---
 - name: Restarting Jenkins
-  service: name=jenkins state=restarted
+  service: name=jenkins state='{{state}}'
 
 - name: Wait for Jenkins self-configuration 
   wait_for:
