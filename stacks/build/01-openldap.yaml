@@ -71,6 +71,12 @@ Conditions:
   HasIAMUserSSHAccess: !Equals [!Ref IAMUserSSHAccess, 'true']
 Resources: 
 
+  #----------------------------------------------------------------------------
+  #
+  # FunctionGetVariable: This function is used to retrieve parameters from the
+  # Parent VPC stack without having to actually call Fn::Import. This had 2 
+  # objectives, 1) make URL retrieval more readable, and 2) use 'Custom::' type
+  #
   FunctionGetVariable: 
     Type: 'Custom::FunctionGetVariable'
     Version: '1.0'
@@ -82,7 +88,8 @@ Resources:
   #
   # AWS LoadBalancer
   #
-  # We create the LoadBalancer
+  # Note that the load balancer is internal, because the LDAP server is only 
+  # used by our local services. It is not meant to be accessible from outside. 
   #
   LoadBalancer:
     Type: 'AWS::CloudFormation::Stack'
@@ -126,9 +133,13 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
-  # AWS CloudWatch Logs
+  # AWS CloudWatch Logs and Dashboard.
   #
-  # We create the LogGroup used by the instances in this stack.
+  # We create the LogGroup used by the instances in this stack to stream their 
+  # system logs to AWS CloudWatch. Note that the associated playbook will 
+  # configure which logs will actually be streamed.
+  # We also create a Dashboard on order to present a central point for all the
+  # alarms defined for this stack.
   #
   LogGroup:
     Type: 'AWS::Logs::LogGroup'

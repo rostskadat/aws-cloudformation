@@ -108,6 +108,12 @@ Conditions:
   HasSMTP: !Not [!Equals [!Ref SmtpHostname, '']]
 Resources: 
 
+  #----------------------------------------------------------------------------
+  #
+  # FunctionGetVariable: This function is used to retrieve parameters from the
+  # Parent VPC stack without having to actually call Fn::Import. This had 2 
+  # objectives, 1) make URL retrieval more readable, and 2) use 'Custom::' type
+  #
   FunctionGetVariable: 
     Type: 'Custom::FunctionGetVariable'
     Version: '1.0'
@@ -186,9 +192,13 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
-  # AWS CloudWatch
+  # AWS CloudWatch Logs and Dashboard.
   #
-  # We create the LogGroup used by the instances in this stack.
+  # We create the LogGroup used by the instances in this stack to stream their 
+  # system logs to AWS CloudWatch. Note that the associated playbook will 
+  # configure which logs will actually be streamed.
+  # We also create a Dashboard on order to present a central point for all the
+  # alarms defined for this stack.
   #
   LogGroup: 
     Type: 'AWS::Logs::LogGroup'
