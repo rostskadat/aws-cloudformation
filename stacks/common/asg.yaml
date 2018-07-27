@@ -65,6 +65,13 @@ Resources:
   #
   # AWS AutoScalingGroup
   #
+  # We create an AutoScalingGroup. Note that all instances are launched in the 
+  # VPC private subnets. Further more all TargetGroup are optionals. This is 
+  # due to the fact that some stack migh take more time to start than the 
+  # HealthCheck interval of the ELB. This in turn has the consequence that the 
+  # instance does not have time to start before the LoadBalancer considers it
+  # unhealthy and terminate it.
+  #
   AutoScalingGroup: 
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
