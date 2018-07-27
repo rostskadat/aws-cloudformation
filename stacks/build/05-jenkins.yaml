@@ -136,6 +136,12 @@ Conditions:
   HasSMTP: !Not [!Equals [!Ref SmtpHostname, '']]
 Resources: 
 
+  #----------------------------------------------------------------------------
+  #
+  # FunctionGetVariable: This function is used to retrieve parameters from the
+  # Parent VPC stack without having to actually call Fn::Import. This had 2 
+  # objectives, 1) make URL retrieval more readable, and 2) use 'Custom::' type
+  #
   FunctionGetVariable: 
     Type: 'Custom::FunctionGetVariable'
     Version: '1.0'
@@ -191,6 +197,42 @@ Resources:
           Value: !Sub '${AWS::StackName}-ELBJNPL'
       TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-tcp.yaml'
 
+  TargetGroupAgent:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: '/'
+      HealthCheckPort: 8080
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 25
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200-299'
+      Port: 8080
+      Protocol: HTTP
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TargetGroupAgent'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
+      TargetGroupAttributes:
+        - Key: 'deregistration_delay.timeout_seconds'
+          Value: 15
+
+  ListenerAgent:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref TargetGroupAgent
+        Type: forward
+      LoadBalancerArn: !GetAtt LoadBalancer.Outputs.LoadBalancer
+      Port: 8080
+      Protocol: HTTP
+
   #----------------------------------------------------------------------------
   #
   # AWS EFS
@@ -216,8 +258,10 @@ Resources:
   #
   # AWS AutoScalingGroup
   #
-  # We create the AutoScalingGroup whose job is to create and terminate instances
-  #   depending on the required capacity and the health of the instances.
+  # We create 2 AutoScalingGroup, one for the Master whose job is to mainly 
+  # maintain at least one Master up and running at all time. The second 
+  # AutoScalingGroup is used to control the Agents that are added when the 
+  # Build jobs start to pile up.
   #
   AutoScalingGroup:
     Type: 'AWS::CloudFormation::Stack'
@@ -238,11 +282,59 @@ Resources:
     DependsOn:
       - FileSystem
 
+  AutoScalingGroupAgent:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    DependsOn: AutoScalingGroup
+    Properties:
+      LaunchConfigurationName: !Ref LaunchConfigurationAgent
+      MinSize: 0
+      MaxSize: 5
+      DesiredCapacity: 0
+      HealthCheckGracePeriod: 600
+      HealthCheckType: ELB
+      TargetGroupARNs:
+      - !Ref TargetGroupAgent
+      NotificationConfigurations:
+        - NotificationTypes:
+          - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+          - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+          TopicARN:
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
+      VPCZoneIdentifier:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
+      Tags:
+        - Key: PLATFORM
+          Value: 
+            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AutoScalingGroupAgent'
+          PropagateAtLaunch: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+        Count: 0
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        PauseTime: PT10M
+        SuspendProcesses:
+        - HealthCheck
+        - ReplaceUnhealthy
+        - AZRebalance
+        - AlarmNotification
+        - ScheduledActions
+        WaitOnResourceSignals: true
+
   #----------------------------------------------------------------------------
   #
-  # AWS CloudWatch
+  # AWS CloudWatch Logs and Dashboard.
   #
-  # We create the LogGroup used by the instances in this stack.
+  # We create the LogGroup used by the instances in this stack to stream their 
+  # system logs to AWS CloudWatch. Note that the associated playbook will 
+  # configure which logs will actually be streamed.
+  # We also create a Dashboard on order to present a central point for all the
+  # alarms defined for this stack.
   #
   LogGroup: 
     Type: 'AWS::Logs::LogGroup'
@@ -258,7 +350,10 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
-  # Agents
+  # Agents: In order to provide elasticity, Jenkins is configured to put a 
+  # metric every minute containing the current length of the queue. Two alarms 
+  # are configured on the build queue, one to scale out the number of agent and
+  # the other one to scale in
   #
   AgentTerminatingLifecycleHookQueue:
     Type: 'AWS::SQS::Queue'
@@ -269,54 +364,66 @@ Resources:
 #        deadLetterTargetArn: !GetAtt 'AgentTerminatingLifecycleHookDeadLetterQueue.Arn'
 #        maxReceiveCount: 5
 
-#  AgentScalingUpPolicy:
-#    Type: 'AWS::AutoScaling::ScalingPolicy'
-#    Properties:
-#      AdjustmentType: ChangeInCapacity
-#      AutoScalingGroupName: !Ref AgentASG
-#      Cooldown: 300
-#      ScalingAdjustment: 1
-#  BuildQueueHighAlarm:
-#    Type: 'AWS::CloudWatch::Alarm'
-#    Properties:
-#      EvaluationPeriods: 1
-#      Statistic: Maximum  # special rule because we scale on build queue length
-#      Threshold: 1
-#      AlarmDescription: 'Alarm if Build Queue is high.'
-#      Period: 120
-#      AlarmActions:
-#      - !Ref AgentScalingUpPolicy
-#      Namespace: !Ref 'AWS::StackName'
-#      ComparisonOperator: GreaterThanOrEqualToThreshold
-#      MetricName: BuildQueue
-#  AgentScalingDownPolicy:
-#    Type: 'AWS::AutoScaling::ScalingPolicy'
-#    Properties:
-#      AdjustmentType: ChangeInCapacity
-#      AutoScalingGroupName: !Ref AgentASG
-#      Cooldown: 300
-#      ScalingAdjustment: -1
-#  BuildActiveEmptyAlarm:
-#    Type: 'AWS::CloudWatch::Alarm'
-#    Properties:
-#      EvaluationPeriods: 5
-#      Statistic: Maximum  # special rule because we scale on build queue length
-#      Threshold: 0
-#      AlarmDescription: 'Alarm if Build Queue is empty.'
-#      Period: 120
-#      AlarmActions:
-#      - !Ref AgentScalingDownPolicy
-#      Namespace: !Ref 'AWS::StackName'
-#      ComparisonOperator: LessThanOrEqualToThreshold
-#      MetricName: BuildActive
+  AgentScalingUpPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref AutoScalingGroupAgent
+      Cooldown: 300
+      ScalingAdjustment: 1
+  BuildQueueHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: 1
+      Statistic: Maximum  
+      Threshold: 1
+      AlarmDescription: 'Alarm if Build Queue is high.'
+      Period: 120
+      AlarmActions:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
+#        - !Ref AgentScalingUpPolicy
+      Namespace: !Ref 'AWS::StackName'
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      MetricName: BuildQueue
+  AgentScalingDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref AutoScalingGroupAgent
+      Cooldown: 300
+      ScalingAdjustment: -1
+  BuildActiveEmptyAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: 5
+      Statistic: Maximum  # special rule because we scale on build queue length
+      Threshold: 0
+      AlarmDescription: 'Alarm if Build Queue is empty.'
+      Period: 120
+      AlarmActions:
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
+#        - !Ref AgentScalingDownPolicy
+      Namespace: !Ref 'AWS::StackName'
+      ComparisonOperator: LessThanOrEqualToThreshold
+      MetricName: BuildActive
 
 
   #----------------------------------------------------------------------------
   #
-  # AWS EC2
+  # AWS EC2 LaunchConfiguration
   #
-  # We create the LaunchConfiguration used by the AutoScalingGroup to provision
-  #   the instances in this stack
+  # The launch configuration is reduced to a minimum. All provisioning is done
+  # using ansible, which provides improved provisioning capabilities. Basically
+  # the steps are as follow:
+  # 1. Create a stack.yaml containing the stack parameters used by the playbook
+  # 2. Download the playbook folder from the S3 bucket
+  # 3. Launch the correct playbook.
+  #
+  # NOTE: Jenkins is a bit special in the sense that starting up the software 
+  #   can potentially take a long time (installing the plugin, compiling gems,
+  #   etc...). Therefore the startup procedure is split into 2 parts, one
+  #   that starts up the parts required by the LoadBalancers (HTTP+JNPL) and
+  #   a second part where all the optional stuff is done. 
   #
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
@@ -411,6 +518,54 @@ Resources:
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
           /root/signal_asg.sh $? ${AWS::Region} ${AWS::StackName}
+          
+  LaunchConfigurationAgent:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets: 
+          default: [ Install ] 
+        Install: 
+          packages: 
+            yum: 
+              ansible: []
+          files:
+            '/root/playbooks/group_vars/stack.yaml':
+              content: !Sub |
+                Region: '${AWS::Region}'
+                StackName: '${AWS::StackName}'
+                LogGroup: '${AWS::StackName}'
+                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+                HasIAMUserSSHAccess: ${IAMUserSSHAccess}
+              mode: '000600'
+              owner: root
+              group: root
+          commands:
+            '01_get_playbook': 
+              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
+            '02_set_host': 
+              command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
+            '03_run_playbook': 
+              command: 'sudo ansible-playbook /root/playbooks/jenkins_agent.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
+    Properties: 
+      IamInstanceProfile: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
+      ImageId: 
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-DefaultImageId'
+      InstanceType: t2.micro
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+      SecurityGroups: 
+        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
+        - !Ref SecurityGroupHealthCheck
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash
+          yum-config-manager --enable epel
+          yum update -y
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfigurationAgent
+          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroupAgent 
+
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
