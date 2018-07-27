@@ -9,5 +9,3 @@
   with_items: 
     - { name: 'cloudwatch-build-active', metric: 'BuildActive' }
     - { name: 'cloudwatch-build-queue',  metric: 'BuildQueue' }
-
-    
