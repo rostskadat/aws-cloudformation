@@ -14,15 +14,29 @@ LDAPUsersLdif="{{LDAPUsersLdif}}"
 echo "Downloading LDIF DB from ${LDAPUsersLdif}"
 aws s3 cp "${LDAPUsersLdif}" /root/openldap/import.ldif
 
-echo "Listing entries to remove..."
-ldapsearch -x -LLL -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" -H ldapi:/// -b "${RootDC}" 2> /dev/null | \
-awk -F": " '$1~/^\s*dn/{print $2}' > /root/openldap/to_delete.txt
-if [ -s /root/openldap/to_delete.txt ]; then
-    echo "Deleting $(cat /root/openldap/to_delete.txt)"
-    ldapdelete -r -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" -H ldapi:/// -f /root/openldap/to_delete.txt
-else
-    echo "No entries to be deleted"
-fi
+
+IFS=$'\n'
+for user in `ldapsearch -x -H ldapi:/// -b "ou=People,${RootDC}" -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" -LLL dn "(objectclass=inetOrgPerson)" 2> /dev/null`; do
+    ldapmodify -x -H ldapi:/// -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" 2>/dev/null << EOF
+${user}
+changetype: modify
+replace: employeeType
+employeeType: exdeveloper
+EOF
+
+done
+
+for user in `grep "dn:" /root/openldap/import.ldif`; do
+    ldapmodify -c -x -H ldapi:/// -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" << EOF
+${user}
+changetype: modify
+replace: employeeType
+employeeType: developer
+EOF
+
+done
+
+unset IFS
 
 echo "Adding entries from /root/openldap/import.ldif"
-ldapadd -x -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" -H ldapi:/// -f /root/openldap/import.ldif
+ldapadd -c -x -D "cn=Manager,${RootDC}" -w "${ManagerPassword}" -H ldapi:/// -f /root/openldap/import.ldif

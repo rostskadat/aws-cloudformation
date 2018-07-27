@@ -44,12 +44,7 @@
     mode: 0700
 
 - name: Creating templates
-  template:
-    src: 'templates{{item}}'
-    dest: '{{item}}'
-    owner: root
-    group: root
-    mode: 0700
+  template: src='templates{{item}}' dest='{{item}}' owner=root group=root mode=0700
   with_items:
     - /root/openldap/update_users.sh
 
