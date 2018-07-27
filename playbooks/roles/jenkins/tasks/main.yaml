@@ -100,6 +100,7 @@
     - { src: /root/configure_sonarqube.groovy, mode: '0600', user: root }
     - { src: /root/configure_gitlabhook.groovy, mode: '0600', user: root }
     - { src: /root/configure_smtp.groovy, mode: '0600', user: root }
+    - { src: /root/put_metric_data.sh, mode: '0700', user: root }
     - { src: /var/lib/jenkins/.m2/settings.xml, mode: '0600', user: jenkins }
     - { src: /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml, mode: '0644', user: jenkins }
     - { src: /opt/lifecycle-poller/poller.conf, mode: '0400', user: root }
@@ -254,16 +255,16 @@
 - name: Scheduling cloudwatch-build-active 
   cron:
     name: 'cloudwatch-build-active'
-    job: "aws --region {{Region}} cloudwatch put-metric-data --namespace {{StackName}} --metric-name BuildActive --value $(curl -s -m 60 -u 'admin:{{JenkinsAdminPassword}}' 'http://localhost:8080/computer/api/json' | jq -r '.busyExecutors') --unit Count"
+    job: "/root/put_metric_data.sh BuildActive"
     user: root
     cron_file: cloudwatch-build-active
 
 - name: Scheduling cloudwatch-build-queue
   cron:
     name: 'cloudwatch-build-queue'
-    job: "aws --region {{Region}} cloudwatch put-metric-data --namespace {{StackName}} --metric-name BuildQueue --value $(curl -s -m 60 -u 'admin:{{JenkinsAdminPassword}}' 'http://localhost:8080/jqs-monitoring/api/json' | jq '.buildQueue.numberOfJobs') --unit Count"
+    job: "/root/put_metric_data.sh BuildQueue"
     user: root
-    cron_file: cloudwatch-build-active
+    cron_file: cloudwatch-build-queue
 
 - name: Enabling services
   service: name='{{item}}' state=restarted enabled=yes
