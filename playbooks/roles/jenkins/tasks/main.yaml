@@ -1,60 +1,6 @@
 ---
-- name: Creating cleanup playbook
-  include_role: name=common tasks_from=cleanup 
-  with_items:
-    - files/root/playbooks/cleanup.yaml
-  loop_control:
-    loop_var: cleanup_playbook
-
-- name: Removing obsolete packages
-  yum: name='{{item}}' state=absent
-  with_items:
-    - java-1.7.0-openjdk
-
-- name: Installing default packages
-  yum: name='{{item}}'
-  with_items:
-    - jq
-    - patch
-    - mysql56
-    - py-bcrypt
-    - java-1.8.0-openjdk
-    - java-1.8.0-openjdk-devel
-
-- name: Instaling required Ruby Gems
-  gem: name='{{item}}'
-  with_items:
-    - aws-sdk
-    - daemons
-    
-- name: Instaling required Pip modules
-  pip: name='{{item}}'
-  with_items:
-    - python-jenkins
-
-- name: Adding Maven repository
-  get_url: url=http://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo dest=/etc/yum.repos.d/epel-apache-maven.repo mode=644
-
-- name: Adding Jenkins repository
-  get_url: url=http://pkg.jenkins-ci.org/redhat-stable/jenkins.repo dest=/etc/yum.repos.d/jenkins.repo mode=644
-
-- name: Import Jenkins Signing Key
-  rpm_key: key=https://jenkins-ci.org/redhat/jenkins-ci.org.key state=present
-
-- name: Downloading Groovy
-  unarchive:
-    src: https://dl.bintray.com/groovy/maven/apache-groovy-binary-2.5.1.zip
-    dest: /opt
-    remote_src: yes
-
-- name: Installing Groovy
-  file: src=/opt/groovy-2.5.1/bin/groovy dest=/usr/bin/groovy state=link  
-
-- name: Fixing maven repository definition
-  replace:
-    path: /etc/yum.repos.d/epel-apache-maven.repo
-    regexp: '\$releasever'
-    replace: '7'
+- name: Installing packages 
+  include_role: name=jenkins tasks_from=install_packages
 
 - name: Creating and mounting EFS 
   include_role: name=common tasks_from=create_fs
@@ -66,17 +12,6 @@
   loop_control:
     loop_var: log
 
-- name: Installing Jenkins
-  yum: name="{{packages}}"
-  vars: 
-    packages:
-      - jq
-      - ant
-      - git
-      - docker
-      - jenkins
-      - apache-maven
-
 - name: Chown on /mnt/application
   file: dest=/mnt/application owner=jenkins group=jenkins mode=u=rwX,g=rX,o=rX recurse=yes 
 
@@ -85,51 +20,9 @@
     name: jenkins
     groups: jenkins,docker
 
-- name: Creating Directories
-  file: path='{{item.path}}' state=directory owner='{{item.owner}}' group='{{item.owner}}' mode=0755
-  with_items:
-    - { path: /opt/lifecycle-poller, owner: root }
-    - { path: /var/lib/jenkins/.m2/, owner: jenkins }
+- include_role: name=jenkins tasks_from=install_jenkins
 
-- name: Templating Jenkins configuration files
-  template: src='templates{{item.src}}' dest='{{item.src}}' owner='{{item.user}}' group='{{item.user}}' mode='{{item.mode}}'
-  with_items:
-    - { src: /root/configure_artifactory.groovy, mode: '0600', user: root }
-    - { src: /root/configure_jdk.groovy, mode: '0600', user: root }
-    - { src: /root/configure_ldap.groovy, mode: '0600', user: root }
-    - { src: /root/configure_sonarqube.groovy, mode: '0600', user: root }
-    - { src: /root/configure_gitlabhook.groovy, mode: '0600', user: root }
-    - { src: /root/configure_smtp.groovy, mode: '0600', user: root }
-    - { src: /root/put_metric_data.sh, mode: '0700', user: root }
-    - { src: /var/lib/jenkins/.m2/settings.xml, mode: '0600', user: jenkins }
-    - { src: /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml, mode: '0644', user: jenkins }
-    - { src: /opt/lifecycle-poller/poller.conf, mode: '0400', user: root }
-
-- name: Copying Jenkins configuration files
-  copy: src='files{{item}}' dest='{{item}}' owner=jenkins group=jenkins mode='0644'
-  with_items:
-    - /var/lib/jenkins/hudson.tasks.Ant.xml
-    - /var/lib/jenkins/hudson.tasks.Maven.xml
-    - /var/lib/jenkins/hudson.plugins.git.GitTool.xml
-    - /var/lib/jenkins/org.jenkinsci.plugins.docker.commons.tools.DockerTool.xml
-
-- name: Copying Deamons files
-  copy: src='files{{item}}' dest='{{item}}' owner=root group=root mode='0755'
-  with_items:
-    - /etc/init.d/lifecycle-poller
-    - /opt/lifecycle-poller/daemon.rb
-    - /opt/lifecycle-poller/worker.rb
-
-- name: Linking Jenkins jobs directory
-  file: src=/mnt/application dest=/var/lib/jenkins/jobs owner=jenkins group=jenkins state=link force=yes
-
-- name: Fixing ownership on Jenkins paths
-  file: path='{{item}}' owner=jenkins group=jenkins recurse=yes
-  with_items:
-    - /mnt/application
-    - /var/lib/jenkins/.m2
-
-- include_role: name=jenkins tasks_from=restart_and_wait
+- include_role: name=jenkins tasks_from=install_deamon
 
 - name: Configuring for direct authentication
   replace: path=/var/lib/jenkins/config.xml regexp='{{item.regexp}}' replace='{{item.replace}}'
@@ -160,103 +53,16 @@
     - name: Settings final credentials 
       set_fact: current_password='{{JenkinsAdminPassword}}'
 
-- name: Install Jenkins plugins
-  jenkins_plugin: name='{{item}}' url_username=admin url_password='{{current_password}}'
-  with_items:
-    - ace-editor
-    - ant
-    - antisamy-markup-formatter
-    - artifactory
-    - build-pipeline-plugin
-    - build-timeout
-    - categorized-view
-    - checkstyle
-    - cloudbees-folder
-    - cobertura
-    - compact-columns
-    - conditional-buildstep
-    - config-file-provider
-    - configure-job-column-plugin
-    - copyartifact
-    - credentials-binding
-    - docker-workflow
-    - downstream-buildview
-    - email-ext
-    - emailext-template
-    - embeddable-build-status
-    - envinject
-    - envinject
-    - extensible-choice-parameter
-    - github-organization-folder
-    - git-parameter
-    - gitlab-hook
-    - gradle
-    - greenballs
-    - groovy
-    - groovy-postbuild
-    - htmlpublisher
-    - http_request
-    - javadoc
-    - jenkins-multijob-plugin
-    - jira
-    - job-dsl
-    - jqs-monitoring
-    - junit
-    - ldap
-    - mailer
-    - matrix-auth
-    - parameterized-trigger
-    - pipeline-aws
-    - pipeline-maven
-    - pipeline-stage-view
-    - publish-over-ssh
-    - rebuild
-    - sonar
-    - ssh
-    - ssh-agent
-    - ssh-slaves
-    - subversion
-    - swarm
-    - timestamper
-    - token-macro
-    - view-job-filters
-    - warnings
-    - workflow-aggregator
-    - ws-cleanup
+- include_role: name=jenkins tasks_from=install_jenkins_plugins
 
 - include_role: name=jenkins tasks_from=restart_and_wait
 
-- name: Patching gitlab-hook
-  include_role: name=common tasks_from=patching_file
-  with_items: 
-    - { src: '/root/merge_request_details.rb.patch', dest: '/var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/merge_request_details.rb', owner: 'jenkins', group: 'jenkins', mode: '0644' }
-    - { src: '/root/payload_request_details.rb.patch', dest: '/var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/payload_request_details.rb', owner: 'jenkins', group: 'jenkins', mode: '0644' }
-  loop_control:
-    loop_var: patch
-
-#- name: Creating DSL_GITLAB_TEMPLATE_JOB
-#  jenkins_job: config="{{ lookup('file', 'templates/var/lib/jenkins/jobs/DSL_GITLAB_TEMPLATE_JOB/config.xml') }}" name=DSL_GITLAB_TEMPLATE_JOB user=admin password='{{current_password}}'
-
-- name: Applying configuration
-  jenkins_script:
-    script: '{{item}}'
-    user: admin
-    password: '{{current_password}}'
-  with_items:
-    - '{{lookup("file", "/root/configure_artifactory.groovy")}}'
-    - '{{lookup("file", "/root/configure_jdk.groovy")}}'
-    - '{{lookup("file", "/root/configure_sonarqube.groovy")}}'
-    - '{{lookup("file", "/root/configure_gitlabhook.groovy")}}'
-    - '{{lookup("file", "/root/configure_smtp.groovy")}}'
-    - '{{lookup("file", "/root/configure_ldap.groovy")}}'
+#
+# BEWARE: Make sure that the last configuration is LDAP
+# 
+- include_role: name=jenkins tasks_from=configure_jenkins
 
 - include_role: name=jenkins tasks_from=restart_and_wait
-
-- name: Scheduling cloudwatch-build-active 
-  cron: name='{{item.name}}' job='/root/put_metric_data.sh {{item.metric}}' user=root cron_file='{{item.name}}'
-  with_items: 
-    - { name: 'cloudwatch-build-active', metric: 'BuildActive' }
-    - { name: 'cloudwatch-build-queue',  metric: 'BuildQueue' }
 
 - name: Enabling services
   service: name='{{item}}' state=restarted enabled=yes

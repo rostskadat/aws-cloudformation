@@ -1,0 +1,13 @@
+---
+- name: Templating Jenkins Metric Data
+  template: src='templates{{item.src}}' dest='{{item.src}}' owner='{{item.user}}' group='{{item.user}}' mode='{{item.mode}}'
+  with_items:
+    - { src: /root/put_metric_data.sh, mode: '0700', user: root }
+
+- name: Scheduling CloudWatch Metric crons
+  cron: name='{{item.name}}' job='/root/put_metric_data.sh {{item.metric}}' user=root cron_file='{{item.name}}'
+  with_items: 
+    - { name: 'cloudwatch-build-active', metric: 'BuildActive' }
+    - { name: 'cloudwatch-build-queue',  metric: 'BuildQueue' }
+
+    

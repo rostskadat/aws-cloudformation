@@ -1,0 +1,18 @@
+---
+- name: Creating Directories
+  file: path='{{item.path}}' state=directory owner='{{item.owner}}' group='{{item.owner}}' mode=0755
+  with_items:
+    - { path: /opt/lifecycle-poller, owner: root }
+
+- name: Templating deamon configuration files
+  template: src='templates{{item.src}}' dest='{{item.src}}' owner='{{item.user}}' group='{{item.user}}' mode='{{item.mode}}'
+  with_items:
+    - { src: /root/put_metric_data.sh, mode: '0700', user: root }
+    - { src: /opt/lifecycle-poller/poller.conf, mode: '0400', user: root }
+
+- name: Copying Deamons files
+  copy: src='files{{item}}' dest='{{item}}' owner=root group=root mode='0755'
+  with_items:
+    - /etc/init.d/lifecycle-poller
+    - /opt/lifecycle-poller/daemon.rb
+    - /opt/lifecycle-poller/worker.rb

@@ -1,0 +1,34 @@
+---
+- name: Creating Directories
+  file: path='{{item.path}}' state=directory owner='{{item.owner}}' group='{{item.owner}}' mode=0755
+  with_items:
+    - { path: /var/lib/jenkins/.m2/, owner: jenkins }
+
+- name: Templating Jenkins configuration files
+  template: src='templates{{item.src}}' dest='{{item.src}}' owner='{{item.user}}' group='{{item.user}}' mode='{{item.mode}}'
+  with_items:
+    - { src: /root/configure_artifactory.groovy, mode: '0600', user: root }
+    - { src: /root/configure_jdk.groovy, mode: '0600', user: root }
+    - { src: /root/configure_ldap.groovy, mode: '0600', user: root }
+    - { src: /root/configure_sonarqube.groovy, mode: '0600', user: root }
+    - { src: /root/configure_gitlabhook.groovy, mode: '0600', user: root }
+    - { src: /root/configure_smtp.groovy, mode: '0600', user: root }
+    - { src: /var/lib/jenkins/.m2/settings.xml, mode: '0600', user: jenkins }
+    - { src: /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml, mode: '0644', user: jenkins }
+
+- name: Copying Jenkins configuration files
+  copy: src='files{{item}}' dest='{{item}}' owner=jenkins group=jenkins mode='0644'
+  with_items:
+    - /var/lib/jenkins/hudson.tasks.Ant.xml
+    - /var/lib/jenkins/hudson.tasks.Maven.xml
+    - /var/lib/jenkins/hudson.plugins.git.GitTool.xml
+    - /var/lib/jenkins/org.jenkinsci.plugins.docker.commons.tools.DockerTool.xml
+
+- name: Linking Jenkins jobs directory
+  file: src=/mnt/application dest=/var/lib/jenkins/jobs owner=jenkins group=jenkins state=link force=yes
+
+- name: Fixing ownership on Jenkins paths
+  file: path='{{item}}' owner=jenkins group=jenkins recurse=yes
+  with_items:
+    - /mnt/application
+    - /var/lib/jenkins/.m2

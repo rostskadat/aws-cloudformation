@@ -1,0 +1,32 @@
+---
+- name: Patching gitlab-hook
+  include_role: name=common tasks_from=patching_file
+  with_items: 
+    - { src: '/root/merge_request_details.rb.patch', dest: '/var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/merge_request_details.rb', owner: 'jenkins', group: 'jenkins', mode: '0644' }
+    - { src: '/root/payload_request_details.rb.patch', dest: '/var/lib/jenkins/plugins/gitlab-hook/WEB-INF/classes/models/values/payload_request_details.rb', owner: 'jenkins', group: 'jenkins', mode: '0644' }
+  loop_control:
+    loop_var: patch
+
+- block:
+    - name: Templating DSL_GITLAB_TEMPLATE_JOB
+      template: src='templates{{item.src}}' dest='' owner='{{item.user}}' group='{{item.user}}' mode='{{item.mode}}'
+    - name: Creating Jenkins job
+      debug: msg='Using jenkins_job config(lookup)'
+  with_items:
+    - { src: /var/lib/jenkins/jobs/DSL_GITLAB_TEMPLATE_JOB/config.xml, mode: '0600', user: root }
+
+#
+# BEWARE: Make sure that the last configuration is LDAP
+# 
+- name: Applying configuration
+  jenkins_script:
+    script: '{{item}}'
+    user: admin
+    password: '{{current_password}}'
+  with_items:
+    - '{{lookup("file", "/root/configure_artifactory.groovy")}}'
+    - '{{lookup("file", "/root/configure_jdk.groovy")}}'
+    - '{{lookup("file", "/root/configure_sonarqube.groovy")}}'
+    - '{{lookup("file", "/root/configure_gitlabhook.groovy")}}'
+    - '{{lookup("file", "/root/configure_smtp.groovy")}}'
+    - '{{lookup("file", "/root/configure_ldap.groovy")}}'
