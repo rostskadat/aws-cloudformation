@@ -195,4 +195,7 @@ Outputs:
   UnHealthyHostCountTooHighAlarmArn:
     Description: 'The Alarm ARN'
     Value: !GetAtt UnHealthyHostCountTooHighAlarm.Arn
+  TargetGroupOther: 
+    Description: 'The TargetGroup ARN'
+    Value: !Ref TargetGroupOther
     

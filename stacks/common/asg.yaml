@@ -28,7 +28,15 @@ Parameters:
     Description: 'Enter the name of the TargetGroup'
     Type: String
     Default: ''
-  TargetGroupOther:
+  TargetGroup2:
+    Description: 'Enter the name of the TargetGroup'
+    Type: String
+    Default: ''
+  TargetGroup3:
+    Description: 'Enter the name of the TargetGroup'
+    Type: String
+    Default: ''
+  TargetGroup4:
     Description: 'Enter the name of the TargetGroup'
     Type: String
     Default: ''
@@ -56,8 +64,10 @@ Parameters:
     ConstraintDescription: 'Must be >= 0'
     MinValue: 0
 Conditions:
-  HasTargetGroup: !Not [!Equals [!Ref TargetGroup, '']]
-  HasTargetGroupOther: !Not [!Equals [!Ref TargetGroupOther, '']]
+  HasTargetGroup1: !Not [!Equals [!Ref TargetGroup, '']]
+  HasTargetGroup2: !Not [!Equals [!Ref TargetGroup2, '']]
+  HasTargetGroup3: !Not [!Equals [!Ref TargetGroup3, '']]
+  HasTargetGroup4: !Not [!Equals [!Ref TargetGroup4, '']]
   HasZeroInstances: !Equals [!Ref DesiredCapacity, '0']
 Resources: 
 
@@ -90,8 +100,10 @@ Resources:
             - 'autoscaling:EC2_INSTANCE_TERMINATE'
             - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
       TargetGroupARNs:
-        - !If [HasTargetGroup, !Ref TargetGroup, !Ref 'AWS::NoValue']
-        - !If [HasTargetGroupOther, !Ref TargetGroupOther, !Ref 'AWS::NoValue']
+        - !If [HasTargetGroup1, !Ref TargetGroup,  !Ref 'AWS::NoValue']
+        - !If [HasTargetGroup2, !Ref TargetGroup2, !Ref 'AWS::NoValue']
+        - !If [HasTargetGroup3, !Ref TargetGroup3, !Ref 'AWS::NoValue']
+        - !If [HasTargetGroup4, !Ref TargetGroup4, !Ref 'AWS::NoValue']
       VPCZoneIdentifier: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZA'
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SubnetPrivateAZB'
