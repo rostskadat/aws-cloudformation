@@ -103,6 +103,14 @@ def isAgentIdle(agent)
     return false
   end
 end
+
+#------------------------------------------------------------------------------
+# 
+# FUNCTION: awaitAgentIdle
+#
+# DESCRIPTION: 
+#
+#------------------------------------------------------------------------------
 def awaitAgentIdle(agent)
   endTime = Time.now.to_i + $conf['maxWaitInSeconds']
   while Time.now.to_i < endTime do
@@ -115,6 +123,14 @@ def awaitAgentIdle(agent)
   $log.error "agent #{agent} is not idle, but wait time elapsed"
   return false
 end
+
+#------------------------------------------------------------------------------
+# 
+# FUNCTION: completeLifecycleAction
+#
+# DESCRIPTION: 
+#
+#------------------------------------------------------------------------------
 def completeLifecycleAction(token, hook, asg)
   begin
     autoscaling = Aws::AutoScaling::Client.new()

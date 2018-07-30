@@ -29,4 +29,6 @@
   
 - name: Creating LDAP admin user 
   shell: /root/create_jenkins_admin_user.sh
+  register: result
 
+- debug: var=result

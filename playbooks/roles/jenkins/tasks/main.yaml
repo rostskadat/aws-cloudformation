@@ -19,7 +19,7 @@
 
 - include_tasks: install_jenkins.yaml
 
-- include_tasks: install_deamon.yaml
+#- include_tasks: install_deamon.yaml
 
 - include_tasks: configure_admin_user.yaml
 

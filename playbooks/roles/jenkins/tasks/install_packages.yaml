@@ -22,12 +22,6 @@
     - java-1.8.0-openjdk
     - java-1.8.0-openjdk-devel
 
-- name: Instaling required Ruby Gems
-  gem: name='{{item}}'
-  with_items:
-    - aws-sdk
-    - daemons
-    
 - name: Instaling required Pip modules
   pip: name='{{item}}'
   with_items:

@@ -1,12 +1,12 @@
 ---
-- name: Restarting Jenkins
+- name: 'Ensuring Jenkins is in state {{state}}' 
   service: name=jenkins state='{{state}}'
 
 - name: Wait for Jenkins self-configuration 
   wait_for:
     path: '{{item}}'
   with_items:
-    - /var/lib/jenkins/secrets/initialAdminPassword
+#    - /var/lib/jenkins/secrets/initialAdminPassword
     - /var/lib/jenkins/config.xml
 
 - name: Wait for Jenkins Web to startup 

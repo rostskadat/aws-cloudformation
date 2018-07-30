@@ -1,4 +1,10 @@
 ---
+- name: Instaling required Ruby Gems
+  gem: name='{{item}}'
+  with_items:
+    - aws-sdk
+    - daemons
+
 - name: Creating Directories
   file: path='{{item.path}}' state=directory owner='{{item.owner}}' group='{{item.owner}}' mode=0755
   with_items:
