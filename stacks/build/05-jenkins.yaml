@@ -337,8 +337,7 @@ Resources:
       AlarmDescription: 'Alarm if Build Queue is high.'
       Period: 120
       AlarmActions:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
-#        - !Ref SwarmScalingOutPolicy
+        - !Ref SwarmScalingOutPolicy
       Namespace: !Ref 'AWS::StackName'
       ComparisonOperator: GreaterThanOrEqualToThreshold
       MetricName: BuildQueue
@@ -358,8 +357,7 @@ Resources:
       AlarmDescription: 'Alarm if Build Queue is empty.'
       Period: 120
       AlarmActions:
-        - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
-#        - !Ref SwarmScalingInPolicy
+        - !Ref SwarmScalingInPolicy
       Namespace: !Ref 'AWS::StackName'
       ComparisonOperator: LessThanOrEqualToThreshold
       MetricName: BuildActive
