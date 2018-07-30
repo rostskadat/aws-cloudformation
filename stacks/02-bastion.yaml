@@ -133,6 +133,7 @@ Resources:
               content: !Sub |
                 Region: '${AWS::Region}'
                 StackName: '${AWS::StackName}'
+                PromptName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
