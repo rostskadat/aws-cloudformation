@@ -18,12 +18,14 @@ Parameters:
   HealthCheckPortOther:    
     Description: 'The port to check'
     Type: Number
+    Default: -1
   ListenerPort:
     Description: 'The port to listen to'
     Type: Number
   ListenerPortOther:
     Description: 'The port to listen to'
     Type: Number
+    Default: -1
   Scheme:
     Description: 'Whether the load balancer is internet-facing or internal'
     Type: String
@@ -38,8 +40,8 @@ Parameters:
 Conditions:
   IsPublic: !Equals [!Ref Scheme, 'internet-facing']
   HasSubDomainName: !Not [!Equals [!Ref SubDomainName, '']]
-  HasMultipleListener: !Not [!Equals [!Ref ListenerPortOther, '']]
-  HasMultipleTargetGroup: !Not [!Equals [!Ref HealthCheckPortOther, '']]
+  HasMultipleListener: !Not [!Equals [!Ref ListenerPortOther, -1]]
+  HasMultipleTargetGroup: !Not [!Equals [!Ref HealthCheckPortOther, -1]]
 Resources: 
 
   #----------------------------------------------------------------------------
