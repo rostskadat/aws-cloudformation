@@ -255,9 +255,9 @@ Resources:
     DependsOn: AutoScalingGroup
     Properties:
       LaunchConfigurationName: !Ref LaunchConfigurationSwarm
-      MinSize: 1
+      MinSize: 0
       MaxSize: 5
-      DesiredCapacity: 1
+      DesiredCapacity: 0
       HealthCheckGracePeriod: 600
       HealthCheckType: EC2
       NotificationConfigurations:
