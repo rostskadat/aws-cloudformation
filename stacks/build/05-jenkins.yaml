@@ -44,7 +44,9 @@ Metadata:
       Parameters:
       - JenkinsAdminEmail
       - JenkinsAdminPassword
-      - AgentMaxBuildWaitTimeInSeconds
+      - SwarmMinSize
+      - SwarmMaxSize
+      - DesiredCapacity
     - Label:
         default: 'SMTP Parameters'
       Parameters:
@@ -111,13 +113,24 @@ Parameters:
     Type: String
     MinLength: 1
     NoEcho: true
-  AgentMaxBuildWaitTimeInSeconds:
-    Description: 'Maximum time in seconds an agent can continue with a build although it should be scaled down.'
+  SwarmMinSize:
+    Description: 'The minimum size of the Swarm'
     Type: Number
-    Default: 600
-    ConstraintDescription: 'Must be in the range [600-7200]'
-    MinValue: 600
-    MaxValue: 7200
+    Default: 1
+    ConstraintDescription: 'Must be >= 0'
+    MinValue: 0
+  SwarmMaxSize:
+    Description: 'The maximum size of the Swarm'
+    Type: Number
+    Default: 2
+    ConstraintDescription: 'Must be >= 1'
+    MinValue: 1
+  DesiredCapacity:
+    Description: 'The desired start size of the Swarm'
+    Type: Number
+    Default: 1
+    ConstraintDescription: 'Must be >= 0'
+    MinValue: 0
   SmtpHostname:
     Description: 'The name of the AWS SES smtp server to use'
     Type: String
@@ -255,9 +268,9 @@ Resources:
     DependsOn: AutoScalingGroup
     Properties:
       LaunchConfigurationName: !Ref LaunchConfigurationSwarm
-      MinSize: 0
-      MaxSize: 5
-      DesiredCapacity: 0
+      MinSize: !Ref SwarmMinSize
+      MaxSize: !Ref SwarmMaxSize
+      DesiredCapacity: !Ref SwarmDesiredCapacity
       HealthCheckGracePeriod: 600
       HealthCheckType: EC2
       NotificationConfigurations:
@@ -424,7 +437,6 @@ Resources:
                 JenkinsAdminEmail: '${JenkinsAdminEmail}'
                 JenkinsAdminPassword: '${JenkinsAdminPassword}'
                 
-                AgentMaxBuildWaitTimeInSeconds: ${AgentMaxBuildWaitTimeInSeconds}
               mode: '000600'
               owner: root
               group: root
