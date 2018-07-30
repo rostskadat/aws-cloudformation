@@ -46,7 +46,7 @@ Metadata:
       - JenkinsAdminPassword
       - SwarmMinSize
       - SwarmMaxSize
-      - DesiredCapacity
+      - SwarmDesiredCapacity
     - Label:
         default: 'SMTP Parameters'
       Parameters:
@@ -125,7 +125,7 @@ Parameters:
     Default: 2
     ConstraintDescription: 'Must be >= 1'
     MinValue: 1
-  DesiredCapacity:
+  SwarmDesiredCapacity:
     Description: 'The desired start size of the Swarm'
     Type: Number
     Default: 1
