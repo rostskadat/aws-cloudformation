@@ -153,7 +153,7 @@ Resources:
   #
   # AWS LoadBalancer
   #
-  # We create the LoadBalancer
+  # We create the main, internet-facing LoadBalancer
   #
   LoadBalancer:
     Type: 'AWS::CloudFormation::Stack'
@@ -179,15 +179,18 @@ Resources:
   # The Agent need to access the JNPL port without the Application LoadBalancer
   #   Messing up the request. Therefore I use a TCP LoadBalancer.
   #
-  
-  # This must be the port that you specify for the Agents in your Jenkins Global Security Configuration
+  # NOTE: It is important to keep the Agent port in sync with the one defined
+  # in the playbook
+  #
   LoadBalancerJNPL:
     Type: 'AWS::CloudFormation::Stack'
     Properties:
       Parameters:
         ParentVpcStack: !Sub '${ParentVpcStack}'
-        HealthCheckPort: 49817
-        ListenerPort: 49817
+        HealthCheckPort: 8080
+        HealthCheckPortOther: 49817
+        ListenerPort: 8080
+        ListenerPortOther: 49817
         Scheme: internal
       Tags:
         - Key: PLATFORM
@@ -196,42 +199,6 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-ELBJNPL'
       TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-tcp.yaml'
-
-  TargetGroupAgent:
-    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
-    Properties:
-      HealthCheckIntervalSeconds: 30
-      HealthCheckPath: '/'
-      HealthCheckPort: 8080
-      HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 25
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 2
-      Matcher:
-        HttpCode: '200-299'
-      Port: 8080
-      Protocol: HTTP
-      Tags:
-        - Key: PLATFORM
-          Value: 
-            'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupAgent'
-      VpcId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
-      TargetGroupAttributes:
-        - Key: 'deregistration_delay.timeout_seconds'
-          Value: 15
-
-  ListenerAgent:
-    Type: 'AWS::ElasticLoadBalancingV2::Listener'
-    Properties:
-      DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupAgent
-        Type: forward
-      LoadBalancerArn: !GetAtt LoadBalancer.Outputs.LoadBalancer
-      Port: 8080
-      Protocol: HTTP
 
   #----------------------------------------------------------------------------
   #
@@ -270,7 +237,8 @@ Resources:
         ParentVpcStack: !Sub '${ParentVpcStack}'
         ParentStack: !Sub '${AWS::StackName}'
         TargetGroup: !GetAtt LoadBalancer.Outputs.TargetGroup
-        TargetGroupOther: !GetAtt LoadBalancerJNPL.Outputs.TargetGroup
+        TargetGroup2: !GetAtt LoadBalancerJNPL.Outputs.TargetGroup
+        TargetGroup3: !GetAtt LoadBalancerJNPL.Outputs.TargetGroupOther
         LaunchConfiguration: !Ref LaunchConfiguration
       Tags:
         - Key: PLATFORM
@@ -282,18 +250,16 @@ Resources:
     DependsOn:
       - FileSystem
 
-  AutoScalingGroupAgent:
+  AutoScalingGroupSwarm:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     DependsOn: AutoScalingGroup
     Properties:
-      LaunchConfigurationName: !Ref LaunchConfigurationAgent
-      MinSize: 0
+      LaunchConfigurationName: !Ref LaunchConfigurationSwarm
+      MinSize: 1
       MaxSize: 5
-      DesiredCapacity: 0
+      DesiredCapacity: 1
       HealthCheckGracePeriod: 600
-      HealthCheckType: ELB
-      TargetGroupARNs:
-      - !Ref TargetGroupAgent
+      HealthCheckType: EC2
       NotificationConfigurations:
         - NotificationTypes:
           - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
@@ -309,7 +275,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
           PropagateAtLaunch: true
         - Key: Name
-          Value: !Sub '${AWS::StackName}-AutoScalingGroupAgent'
+          Value: !Sub '${AWS::StackName}-AutoScalingGroupSwarm'
           PropagateAtLaunch: true
     CreationPolicy:
       ResourceSignal:
@@ -355,20 +321,11 @@ Resources:
   # are configured on the build queue, one to scale out the number of agent and
   # the other one to scale in
   #
-  AgentTerminatingLifecycleHookQueue:
-    Type: 'AWS::SQS::Queue'
-    Properties:
-      QueueName: !Sub '${AWS::StackName}-terminating-lifecycle-hook'
-      VisibilityTimeout: !Ref AgentMaxBuildWaitTimeInSeconds
-#      RedrivePolicy:
-#        deadLetterTargetArn: !GetAtt 'AgentTerminatingLifecycleHookDeadLetterQueue.Arn'
-#        maxReceiveCount: 5
-
-  AgentScalingUpPolicy:
+  SwarmScalingOutPolicy:
     Type: 'AWS::AutoScaling::ScalingPolicy'
     Properties:
       AdjustmentType: ChangeInCapacity
-      AutoScalingGroupName: !Ref AutoScalingGroupAgent
+      AutoScalingGroupName: !Ref AutoScalingGroupSwarm
       Cooldown: 300
       ScalingAdjustment: 1
   BuildQueueHighAlarm:
@@ -381,15 +338,15 @@ Resources:
       Period: 120
       AlarmActions:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
-#        - !Ref AgentScalingUpPolicy
+#        - !Ref SwarmScalingOutPolicy
       Namespace: !Ref 'AWS::StackName'
       ComparisonOperator: GreaterThanOrEqualToThreshold
       MetricName: BuildQueue
-  AgentScalingDownPolicy:
+  SwarmScalingInPolicy:
     Type: 'AWS::AutoScaling::ScalingPolicy'
     Properties:
       AdjustmentType: ChangeInCapacity
-      AutoScalingGroupName: !Ref AutoScalingGroupAgent
+      AutoScalingGroupName: !Ref AutoScalingGroupSwarm
       Cooldown: 300
       ScalingAdjustment: -1
   BuildActiveEmptyAlarm:
@@ -402,7 +359,7 @@ Resources:
       Period: 120
       AlarmActions:
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-TopicHealth'
-#        - !Ref AgentScalingDownPolicy
+#        - !Ref SwarmScalingInPolicy
       Namespace: !Ref 'AWS::StackName'
       ComparisonOperator: LessThanOrEqualToThreshold
       MetricName: BuildActive
@@ -440,6 +397,7 @@ Resources:
               content: !Sub |
                 Region: '${AWS::Region}'
                 StackName: '${AWS::StackName}'
+                PromptName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
@@ -468,7 +426,6 @@ Resources:
                 JenkinsAdminEmail: '${JenkinsAdminEmail}'
                 JenkinsAdminPassword: '${JenkinsAdminPassword}'
                 
-                AgentTerminatingLifecycleHookQueue: '${AgentTerminatingLifecycleHookQueue}'
                 AgentMaxBuildWaitTimeInSeconds: ${AgentMaxBuildWaitTimeInSeconds}
               mode: '000600'
               owner: root
@@ -517,9 +474,9 @@ Resources:
           yum update -y
           yum install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfiguration
-          /root/signal_asg.sh $? ${AWS::Region} ${AWS::StackName}
+          /root/signal_asg.sh $? ${AWS::Region} ${AWS::StackName} "ASG" "AutoScalingGroup"
           
-  LaunchConfigurationAgent:
+  LaunchConfigurationSwarm:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
       AWS::CloudFormation::Init:
@@ -534,19 +491,26 @@ Resources:
               content: !Sub |
                 Region: '${AWS::Region}'
                 StackName: '${AWS::StackName}'
+                PromptName: '${AWS::StackName}-SWARM'
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
+                
+                JenkinsJNPLDNSName: '{{JenkinsJNPLDNSName}}'
+                JenkinsAdminUsername: 'admin'
+                JenkinsAdminPassword: '${JenkinsAdminPassword}'
               mode: '000600'
               owner: root
               group: root
+              context:
+                JenkinsJNPLDNSName: !GetAtt LoadBalancerJNPL.Outputs.DNSName
           commands:
             '01_get_playbook': 
               command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 
-              command: 'sudo ansible-playbook /root/playbooks/jenkins_agent.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
+              command: 'sudo bash /root/playbooks/run_playbook.sh /root/playbooks/jenkins_agent.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
@@ -563,8 +527,8 @@ Resources:
           yum-config-manager --enable epel
           yum update -y
           yum install -y aws-cfn-bootstrap
-          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfigurationAgent
-          /opt/aws/bin/cfn-signal -e $?   --region ${AWS::Region} --stack ${AWS::StackName} --resource AutoScalingGroupAgent 
+          /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack ${AWS::StackName} --resource LaunchConfigurationSwarm
+          /root/signal_asg.sh $? ${AWS::Region} ${AWS::StackName} "AutoScalingGroupSwarm" "AutoScalingGroupSwarm"
 
   SecurityGroupHealthCheck:
     Type: 'AWS::EC2::SecurityGroup'
