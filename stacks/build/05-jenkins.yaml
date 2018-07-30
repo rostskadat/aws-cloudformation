@@ -496,6 +496,14 @@ Resources:
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 
+                ArtifactoryDNSName: '{{ArtifactoryDNSName}}'
+                ArtifactoryAdminUsername: '{{ArtifactoryAdminUsername}}'
+                ArtifactoryAdminPassword: '${ArtifactoryAdminPassword}'
+                
+                SonarqubeDNSName: '{{SonarqubeDNSName}}'
+                SonarqubeAdminUsername: '{{SonarqubeAdminUsername}}'
+                SonarqubeAdminPassword: '${SonarqubeAdminPassword}'
+
                 JenkinsJNPLDNSName: '{{JenkinsJNPLDNSName}}'
                 JenkinsAdminUsername: 'admin'
                 JenkinsAdminPassword: '${JenkinsAdminPassword}'
@@ -503,6 +511,14 @@ Resources:
               owner: root
               group: root
               context:
+                ArtifactoryDNSName: 
+                  'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-DNSName'
+                ArtifactoryAdminUsername: 
+                  'Fn::ImportValue': !Sub '${ParentArtifactoryStack}-ArtifactoryAdminUsername'
+                SonarqubeDNSName:
+                  'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
+                SonarqubeAdminUsername: 
+                  'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-AdminUsername'
                 JenkinsJNPLDNSName: !GetAtt LoadBalancerJNPL.Outputs.DNSName
           commands:
             '01_get_playbook': 
