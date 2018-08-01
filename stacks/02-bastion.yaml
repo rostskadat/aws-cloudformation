@@ -48,6 +48,12 @@ Conditions:
   HasIAMUserSSHAccess: !Equals [!Ref IAMUserSSHAccess, 'true']
 Resources: 
 
+  #----------------------------------------------------------------------------
+  #
+  # FunctionGetVariable: This function is used to retrieve parameters from the
+  # Parent VPC stack without having to actually call Fn::Import. This had 2 
+  # objectives, 1) make URL retrieval more readable, and 2) use 'Custom::' type
+  #
   FunctionGetVariable: 
     Type: 'Custom::FunctionGetVariable'
     Version: '1.0'
@@ -59,7 +65,7 @@ Resources:
   #
   # AWS LoadBalancer
   #
-  # We create the LoadBalancer
+  # We create the TCP load balancer
   #
   LoadBalancer:
     Type: 'AWS::CloudFormation::Stack'
@@ -146,7 +152,7 @@ Resources:
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 
-              command: 'sudo ansible-playbook /root/playbooks/bastion.yaml --extra-vars=@/root/playbooks/group_vars/stack.yaml'
+              command: 'sudo bash /root/playbooks/run_playbook.sh /root/playbooks/bastion.yaml'
     Properties: 
       IamInstanceProfile: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
@@ -186,7 +192,7 @@ Resources:
 Outputs: 
   DNSName:
     Description: 'Hostname to use when connecting'
-    Value: !Sub '${LoadBalancer.DNSName}'
+    Value: !GetAtt LoadBalancer.Outputs.DNSName
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
     
