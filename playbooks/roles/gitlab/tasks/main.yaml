@@ -24,9 +24,10 @@
     - patch
     
 - name: Install pip modules
-  pip:
-    name: psycopg2-binary
-    name: pyapi-gitlab
+  pip: name='{{item}}'
+  with_items:
+    - psycopg2-binary
+    - pyapi-gitlab
 
 - name: Downloading Gitlab repository
   get_url:
