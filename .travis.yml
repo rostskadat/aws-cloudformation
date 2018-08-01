@@ -8,5 +8,6 @@ before_script:
   - sudo apt-get install ansible -y
   - sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"
 script:
+  - ansible-playbook --version
   - ansible-playbook --syntax-check playbooks/*.yaml
 #  - ansible-lint playbooks/*.yaml
