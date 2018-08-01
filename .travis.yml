@@ -5,7 +5,8 @@ cache:
     - $HOME/.cache/pip
 before_script:
   - sudo apt-get update -qq
-  - sudo apt-get install ansible-lint -y
+  - sudo apt-get install ansible -y
+#  - sudo apt-get install ansible-lint -y
 script:
   - ansible-playbook --syntax-check playbooks/*.yaml
-  - ansible-lint playbooks/*.yaml
+#  - ansible-lint playbooks/*.yaml
