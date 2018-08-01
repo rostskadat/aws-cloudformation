@@ -8,5 +8,5 @@ before_script:
   - sudo apt-get install ansible -y
 #  - sudo apt-get install ansible-lint -y
 script:
-  - ansible-playbook --syntax-check playbooks/*.yaml
+  - ansible-playbook --connection=local --syntax-check playbooks/*.yaml
 #  - ansible-lint playbooks/*.yaml
