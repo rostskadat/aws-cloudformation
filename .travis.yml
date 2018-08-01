@@ -6,8 +6,7 @@ cache:
 before_script:
   - sudo apt-get update -qq
   - sudo apt-get install ansible -y
-  - echo $(uname -n) ansible_connection=local > /etc/ansible/hosts
-#  - sudo apt-get install ansible-lint -y
+  - sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"
 script:
   - ansible-playbook --syntax-check playbooks/*.yaml
 #  - ansible-lint playbooks/*.yaml
