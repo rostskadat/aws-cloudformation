@@ -1,12 +1,12 @@
+[![Build Status](https://travis-ci.org/rostskadat/aws-cloudformation.svg?branch=master)](https://travis-ci.org/rostskadat/aws-cloudformation)
+
 # aws-cloudformation
 
-## Ansible
-
-NOTE: that the provisioning of the platform is done using Ansible
+You will find a series of [AWS CloudFormation](https://console.aws.amazon.com/cloudformation/home) stacks and their respective Ansible playbooks.
 
 ## BUILD
 
-You can find more details about the BUILD stacks [here](stacks/build)
+You can find more details about the BUILD stacks [here](stacks/build).
 
 ## ANALYTICS
 

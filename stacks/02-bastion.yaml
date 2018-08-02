@@ -195,4 +195,3 @@ Outputs:
     Value: !GetAtt LoadBalancer.Outputs.DNSName
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
-    
