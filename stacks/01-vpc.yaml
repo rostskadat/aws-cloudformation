@@ -569,8 +569,8 @@ Resources:
   #
   # AWS SSM & EFS  
   #
-  # We create the infraestructure for backup. It consist in a EFS where the 
-  # backups will be stored and a SSM Document to be called for periodically 
+  # We create the infraestructure for backup. It consist of an EFS where the 
+  # backups will be stored and an SSM Document to be called for periodically.
   #
   BackupFileSystem:
     Condition: HasBackup
@@ -620,7 +620,7 @@ Resources:
           aws:runShellScript:
             properties:
               runCommand:
-                - 'sudo /root/backup_efs.sh {{BackupFileSystem}} {{Interval}} {{Retain}}'
+                - 'sudo /root/efs-backup.sh {{BackupFileSystem}} {{Interval}} {{Retain}}'
 
   #----------------------------------------------------------------------------
   #

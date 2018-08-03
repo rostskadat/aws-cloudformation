@@ -27,10 +27,10 @@
 exec > >(tee -a "/var/log/efs-backup.log") 2> >(tee -a "/var/log/efs-backup.log")
 
 # Input arguments
-SourceEFS="{{SourceEFS}}"
-BackupEFS="$2"
-Interval="$3"
-Retain="$4"
+SourceEFS="{{FileSystem}}"
+BackupEFS="$1"
+Interval="$2"
+Retain="$3"
 
 [ -z "$SourceEFS" ] && echo "Invalid SourceEFS" && exit 1
 [ -z "$BackupEFS" ] && echo "Invalid BackupEFS" && exit 1
