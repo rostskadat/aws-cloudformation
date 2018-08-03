@@ -327,26 +327,6 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-SecurityGroupHealthCheck'
 
-  #----------------------------------------------------------------------------
-  #
-  # AWS SSM Associations
-  #
-  # We associate the target group with the 
-  #
-  AssociationBackup:
-    Type: 'AWS::SSM::Association'
-    Properties: 
-      Name: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-BackupDocument'
-      Parameters:
-        Interval: [ daily ]
-        Retain: [ 7 ]
-      ScheduleExpression: 'cron(0 1 * * ? *)'
-      Targets:
-        - Key: 'Tag:Name'
-          # BEWARE: this is the tag defined in the asg.yaml nested stack
-          Values: [ !Sub '${AWS::StackName}-Main' ]
-
 Outputs: 
   DNSName: 
     Description: 'Public DNS address of the internet facing ELB'

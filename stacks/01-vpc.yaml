@@ -623,7 +623,19 @@ Resources:
           aws:runShellScript:
             properties:
               runCommand:
-                - 'sudo /root/efs-backup.sh {{BackupFileSystem}} {{Interval}} {{Retain}}'
+                - 'sudo /root/run_playbook_backup.sh {{BackupFileSystem}} {{Interval}} {{Retain}}'
+
+  BackupAssociation:
+    Type: 'AWS::SSM::Association'
+    Properties: 
+      Name: !Ref BackupDocument
+      Parameters:
+        Interval: [ daily ]
+        Retain: [ 7 ]
+      ScheduleExpression: 'cron(0 1 * * ? *)'
+      Targets:
+        - Key: 'Tag:PLATFORM'
+          Values: [ !Sub '${AWS::StackName}' ]
 
   #----------------------------------------------------------------------------
   #
