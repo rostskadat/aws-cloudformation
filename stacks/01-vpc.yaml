@@ -25,6 +25,7 @@ Metadata:
       - AWSInspectorDLQEmail
       - UseVPCFlowLog
       - HealthNotificationEmail
+      - UseBackup
 Parameters: 
   S3ConfigBucketName:
     Description: 'Enter the name of the S3 bucket name where to find the configuration files'
@@ -50,6 +51,13 @@ Parameters:
     Default: 'admin@example.com'
     ConstraintDescription: 'must be a valid email address'
     AllowedPattern: '^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}$'
+  UseBackup:
+    Description: 'Allow the creation of an EFS backup FS to be used by instances'
+    Type: String
+    Default: true
+    AllowedValues:
+    - true
+    - false
   HostedZoneName:
     Description: 'Enter the name of the internal DNS that will be used inside the VPC'
     Type: String
@@ -57,6 +65,7 @@ Parameters:
 Conditions: 
   HasFlowLog: !Equals [!Ref UseVPCFlowLog, 'true']
   HasHostedZone: !Not [!Equals [!Ref HostedZoneName, '']]
+  HasBackup: !Equals [!Ref UseBackup, 'true']
 Mappings:
   # cf. files/root/create_region_map.sh
   RegionMap:
@@ -555,6 +564,63 @@ Resources:
       ResourceId : !Ref Vpc
       ResourceType : VPC
       TrafficType : ACCEPT
+
+  #----------------------------------------------------------------------------
+  #
+  # AWS SSM & EFS  
+  #
+  # We create the infraestructure for backup. It consist in a EFS where the 
+  # backups will be stored and a SSM Document to be called for periodically 
+  #
+  BackupFileSystem:
+    Condition: HasBackup
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        ParentVpcStack: !Sub '${AWS::StackName}'
+        ParentStack: !Sub '${AWS::StackName}-BACKUP'
+      Tags:
+        - Key: PLATFORM
+          Value: !Sub '${AWS::StackName}'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-BackupFileSystem'
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${S3ConfigBucketName}/stacks/common/efs.yaml'
+
+  BackupDocument:
+    Condition: HasBackup
+    Type: 'AWS::SSM::Document'
+    Properties: 
+      Tags:
+        - Key: PLATFORM
+          Value: !Sub '${AWS::StackName}'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-BackupDocument'
+      Content: 
+        schemaVersion: '1.2'
+        description: 'Executing the command to backup the instance EFS'
+        parameters: 
+          BackupFileSystem: 
+            type: 'String'
+            description: 'The EFS (i.e. fs-fac48033) to backup to'
+            default: !GetAtt BackupFileSystem.Outputs.FileSystem
+          Interval: 
+            type: 'String'
+            description: 'The backup interval'
+            default: daily
+            allowedValues:
+              - daily
+              - weekly
+              - monthly
+              - yearly
+          Retain: 
+            type: 'String'
+            default: '7'
+            description: 'The number of backup to retain for that interval'
+        runtimeConfig:
+          aws:runShellScript:
+            properties:
+              runCommand:
+                - 'sudo /root/backup_efs.sh {{BackupFileSystem}} {{Interval}} {{Retain}}'
 
   #----------------------------------------------------------------------------
   #
