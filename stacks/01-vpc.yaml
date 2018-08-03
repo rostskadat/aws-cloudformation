@@ -664,26 +664,26 @@ Resources:
       Parameters:
         Interval: [ monthly ]
         Retain: [ 12 ]
-      ScheduleExpression: 'cron(0 3 1 * ? *)'
+      ScheduleExpression: 'cron(0 3 1 ? * * *)'
       Targets:
         - Key: 'Tag:PLATFORM'
           Values: [ !Sub '${AWS::StackName}' ]
 
   # Backup every 1st January at 04:00 UTC
-  AssociationYearlyBackup:
-    Condition: HasBackup
-    Type: 'AWS::SSM::Association'
-    Properties: 
-      Name: !Ref DocumentBackup
-      Parameters:
-        Interval: [ yearly ]
-        Retain: [ 5 ]
-      ScheduleExpression: 'cron(0 4 1 1 ? *)'
-      Targets:
-        - Key: 'Tag:PLATFORM'
-          Values: [ !Sub '${AWS::StackName}' ]
+#  AssociationYearlyBackup:
+#    Condition: HasBackup
+#    Type: 'AWS::SSM::Association'
+#    Properties: 
+#      Name: !Ref DocumentBackup
+#      Parameters:
+#        Interval: [ yearly ]
+#        Retain: [ 5 ]
+#      ScheduleExpression: 'cron(0 4 1 ? * * *)'
+#      Targets:
+#        - Key: 'Tag:PLATFORM'
+#          Values: [ !Sub '${AWS::StackName}' ]
 
-  InstallDocument:
+  DocumentInstall:
     Type: 'AWS::SSM::Document'
     Properties: 
       Tags:
@@ -699,6 +699,15 @@ Resources:
             properties:
               runCommand:
                 - 'sudo /root/run_playbook_insall.sh'
+                
+#  AssociationRunInstallPlaybook:
+#    Condition: HasBackup
+#    Type: 'AWS::SSM::Association'
+#    Properties: 
+#      Name: !Ref DocumentInstall
+#      Targets:
+#        - Key: 'Tag:PLATFORM'
+#          Values: [ !Sub '${AWS::StackName}' ]
 
   #----------------------------------------------------------------------------
   #
