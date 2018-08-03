@@ -7,3 +7,10 @@
 
 - name: Mounting EFS
   mount: path=/mnt/application src='{{FileSystem}}' fstype=efs opts=tls state=mounted
+
+- name: Copying backup scripts
+  copy: src='files{{item}}' dest='{{item}}' owner=root group=root mode='0700'
+  with_items:
+    - /root/efs-backup.sh
+    - /root/efs-restore.sh
+  
