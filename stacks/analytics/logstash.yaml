@@ -406,6 +406,7 @@ Resources:
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/logstash.yaml
+                PlaybookBackup: /root/playbooks/backup.yaml
 
                 FileSystem: '${FileSystem}'
                 

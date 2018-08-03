@@ -243,6 +243,7 @@ Resources:
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/artifactory.yaml
+                PlaybookBackup: /root/playbooks/backup.yaml
 
                 LDAPDNSName: '{{LDAPDNSName}}'
                 LDAPPort: '{{LDAPPort}}'

@@ -184,6 +184,7 @@ Resources:
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/openldap.yaml
+                PlaybookBackup: /root/playbooks/backup.yaml
                 
                 RootDC: '${RootDC}'
                 ManagerPassword: '${ManagerPassword}'

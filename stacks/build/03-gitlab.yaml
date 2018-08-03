@@ -242,6 +242,7 @@ Resources:
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/gitlab.yaml
+                PlaybookBackup: /root/playbooks/backup.yaml
 
                 LDAPDNSName: '{{LDAPDNSName}}'
                 LDAPPort: '{{LDAPPort}}'

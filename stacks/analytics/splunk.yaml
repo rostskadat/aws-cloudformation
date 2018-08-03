@@ -195,6 +195,7 @@ Resources:
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/splunk.yaml
+                PlaybookBackup: /root/playbooks/backup.yaml
 
                 FileSystem: '${FileSystem}'
                 
