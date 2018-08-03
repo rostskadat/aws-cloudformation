@@ -35,11 +35,6 @@ Metadata:
       - GitlabAdminEmail
       - GitlabAdminPassword
     - Label:
-        default: 'Sonarqube Parameters'
-      Parameters:
-      - SonarqubeAdminEmail
-      - SonarqubeAdminPassword
-    - Label:
         default: 'SMTP Parameters'
       Parameters:
       - SmtpHostname
