@@ -48,7 +48,9 @@ BackupDir=/mnt/backups
 # MAIN PROGRAM SECTION.
 # 
 #==============================================================================
-[ -d "$SourceDir" ] && echo "Application does not seem to be mounted on $SourceDir"
+[ ! -d "$SourceDir" ] && echo "Application does not seem to be mounted on $SourceDir" && exit 1
+
+echo "Backing up EFS for stack {{StackName}}. Please, stand by..."
 
 yum -y install amazon-efs-utils
 #mkdir -p $SourceDir

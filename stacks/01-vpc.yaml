@@ -572,6 +572,9 @@ Resources:
   # We create the infraestructure for backup. It consist of an EFS where the 
   # backups will be stored and an SSM Document to be called for periodically.
   #
+  # BEWARE: You will need to manually create the association since CloudFormation
+  #  AWS::EC2::Instance::SsmAssociations only allow one association
+  #
   BackupFileSystem:
     Condition: HasBackup
     Type: 'AWS::CloudFormation::Stack'
@@ -597,7 +600,7 @@ Resources:
           Value: !Sub '${AWS::StackName}-BackupDocument'
       Content: 
         schemaVersion: '1.2'
-        description: 'Executing the command to backup the instance EFS'
+        description: 'Document to backup an EFS filesystem mounted on an EC2 instance'
         parameters: 
           BackupFileSystem: 
             type: 'String'
@@ -1122,3 +1125,9 @@ Outputs:
     Value: !Ref HostedZoneName
     Export:
       Name: !Sub '${AWS::StackName}-HostedZoneName'
+  BackupDocument:
+    Description: 'The BackupDocument'
+    Value: !Ref BackupDocument
+    Export:
+      Name: !Sub '${AWS::StackName}-BackupDocument'
+    

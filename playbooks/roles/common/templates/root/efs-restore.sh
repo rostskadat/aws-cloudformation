@@ -1,11 +1,23 @@
 #!/bin/bash
+#
+# FILE: efs-restore.sh
+#
+# DESCRIPTION: This script restore a specific efs backup
+#
 # Modified from https://github.com/aws-samples/data-pipeline-samples/tree/master/samples/EFSBackup
-BASE_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. $BASE_DIR/efs-lib.sh
-exec > >(tee -a "/var/log/efs-backup.log") 2> >(tee -a "/var/log/efs-backup.log")
+#
+#------------------------------------------------------------------------------
+exec > >(tee -a "/var/log/efs-restore.log") 2> >(tee -a "/var/log/efs-restore.log")
 
 
 # Input arguments
+# Input arguments
+SourceEFS="{{FileSystem}}"
+BackupEFS="$1"
+Interval="$2"
+Retain="$3"
+
+
 source=$1
 destination=$2
 interval=$3
