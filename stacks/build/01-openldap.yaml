@@ -183,6 +183,7 @@ Resources:
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
+                PlaybookInstall: /root/playbooks/openldap.yaml
                 
                 RootDC: '${RootDC}'
                 ManagerPassword: '${ManagerPassword}'

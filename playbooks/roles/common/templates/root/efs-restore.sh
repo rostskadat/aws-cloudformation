@@ -17,6 +17,7 @@ BackupEFS="$1"
 Interval="$2"
 Retain="$3"
 
+echo "Playing restaure playbook..."
 
 source=$1
 destination=$2

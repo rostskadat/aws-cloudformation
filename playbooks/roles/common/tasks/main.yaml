@@ -32,6 +32,9 @@
     group: root
     mode: 0644
 
+- name: Installing and configuring ansible playbooks
+  include_role: name=common tasks_from=configure_playbooks
+
 - name: Installing and configuring awslogs
   include_role: name=common tasks_from=configure_awslogs
 

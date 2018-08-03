@@ -405,6 +405,7 @@ Resources:
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
+                PlaybookInstall: /root/playbooks/logstash.yaml
 
                 FileSystem: '${FileSystem}'
                 

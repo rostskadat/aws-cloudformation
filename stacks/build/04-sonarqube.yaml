@@ -263,6 +263,7 @@ Resources:
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
+                PlaybookInstall: /root/playbooks/sonarqube.yaml
 
                 LDAPDNSName: '{{LDAPDNSName}}'
                 LDAPPort: '{{LDAPPort}}'

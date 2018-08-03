@@ -52,6 +52,11 @@ BackupDir=/mnt/backups
 
 echo "Backing up EFS for stack {{StackName}}. Please, stand by..."
 
+echo "Playing backup playbook..."
+#aws autoscaling suspend-processes --auto-scaling-group-name my-asg
+echo "Stoping services..."
+#aws autoscaling suspend-processes --auto-scaling-group-name my-asg
+
 yum -y install amazon-efs-utils
 #mkdir -p $SourceDir
 mkdir -p $BackupDir

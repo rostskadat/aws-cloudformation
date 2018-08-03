@@ -143,6 +143,7 @@ Resources:
                 LogGroup: '${AWS::StackName}'
                 S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
+                PlaybookInstall: /root/playbooks/bastion.yaml
               mode: '000600'
               owner: root
               group: root
