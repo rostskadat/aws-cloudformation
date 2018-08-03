@@ -3,3 +3,5 @@
   template: src='templates{{item}}' dest='{{item}}' owner=root group=root mode='0700'
   with_items:
     - /root/run_playbook_install.sh
+    - /root/run_playbook_backup.sh
+    
