@@ -574,6 +574,8 @@ Resources:
   #
   # BEWARE: You will need to manually create the association since CloudFormation
   #  AWS::EC2::Instance::SsmAssociations only allow one association
+  # 
+  # C.f.: https://docs.aws.amazon.com/systems-manager/latest/userguide/reference-cron-and-rate-expressions.html#reference-cron-and-rate-expressions-intro
   #
   BackupFileSystem:
     Condition: HasBackup
@@ -589,7 +591,7 @@ Resources:
           Value: !Sub '${AWS::StackName}-BackupFileSystem'
       TemplateURL: !Sub 'https://s3.amazonaws.com/${S3ConfigBucketName}/stacks/common/efs.yaml'
 
-  BackupDocument:
+  DocumentBackup:
     Condition: HasBackup
     Type: 'AWS::SSM::Document'
     Properties: 
@@ -625,10 +627,12 @@ Resources:
               runCommand:
                 - 'sudo /root/run_playbook_backup.sh {{BackupFileSystem}} {{Interval}} {{Retain}}'
 
-  BackupAssociation:
+  # Backup everyday at 01:00 UTC 
+  AssociationDailyBackup:
+    Condition: HasBackup
     Type: 'AWS::SSM::Association'
     Properties: 
-      Name: !Ref BackupDocument
+      Name: !Ref DocumentBackup
       Parameters:
         Interval: [ daily ]
         Retain: [ 7 ]
@@ -636,6 +640,65 @@ Resources:
       Targets:
         - Key: 'Tag:PLATFORM'
           Values: [ !Sub '${AWS::StackName}' ]
+
+  # Backup every Sunday at 02:00 UTC
+  AssociationWeeklyBackup:
+    Condition: HasBackup
+    Type: 'AWS::SSM::Association'
+    Properties: 
+      Name: !Ref DocumentBackup
+      Parameters:
+        Interval: [ weekly ]
+        Retain: [ 4 ]
+      ScheduleExpression: 'cron(0 2 ? * SUN *)'
+      Targets:
+        - Key: 'Tag:PLATFORM'
+          Values: [ !Sub '${AWS::StackName}' ]
+
+  # Backup every 1st day of the month at 03:00 UTC
+  AssociationMonthlyBackup:
+    Condition: HasBackup
+    Type: 'AWS::SSM::Association'
+    Properties: 
+      Name: !Ref DocumentBackup
+      Parameters:
+        Interval: [ monthly ]
+        Retain: [ 12 ]
+      ScheduleExpression: 'cron(0 3 1 * ? *)'
+      Targets:
+        - Key: 'Tag:PLATFORM'
+          Values: [ !Sub '${AWS::StackName}' ]
+
+  # Backup every 1st January at 04:00 UTC
+  AssociationYearlyBackup:
+    Condition: HasBackup
+    Type: 'AWS::SSM::Association'
+    Properties: 
+      Name: !Ref DocumentBackup
+      Parameters:
+        Interval: [ yearly ]
+        Retain: [ 5 ]
+      ScheduleExpression: 'cron(0 4 1 1 ? *)'
+      Targets:
+        - Key: 'Tag:PLATFORM'
+          Values: [ !Sub '${AWS::StackName}' ]
+
+  InstallDocument:
+    Type: 'AWS::SSM::Document'
+    Properties: 
+      Tags:
+        - Key: PLATFORM
+          Value: !Sub '${AWS::StackName}'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-InstallDocument'
+      Content: 
+        schemaVersion: '1.2'
+        description: 'Document to run the Ansible Install playbook'
+        runtimeConfig:
+          aws:runShellScript:
+            properties:
+              runCommand:
+                - 'sudo /root/run_playbook_insall.sh'
 
   #----------------------------------------------------------------------------
   #
@@ -1137,9 +1200,3 @@ Outputs:
     Value: !Ref HostedZoneName
     Export:
       Name: !Sub '${AWS::StackName}-HostedZoneName'
-  BackupDocument:
-    Description: 'The BackupDocument'
-    Value: !Ref BackupDocument
-    Export:
-      Name: !Sub '${AWS::StackName}-BackupDocument'
-    
