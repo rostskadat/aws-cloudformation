@@ -1,5 +1,5 @@
 #
-# FILE: elb-app.yaml
+# FILE: elb-tcp.yaml
 #
 # DESCRIPTION: This stack an Network Load Balancer and the corresponding
 #   alarms.
