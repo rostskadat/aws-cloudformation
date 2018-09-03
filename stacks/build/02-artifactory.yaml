@@ -115,22 +115,22 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
-  # FunctionGetVariable: This function is used to retrieve parameters from the
+  # GetConfig: This function is used to retrieve parameters from the
   # Parent VPC stack without having to actually call Fn::Import. This had 2 
   # objectives, 1) make URL retrieval more readable, and 2) use 'Custom::' type
   #
-  FunctionGetVariable: 
-    Type: 'Custom::FunctionGetVariable'
-    Version: '1.0'
+  GetConfig: 
+    Type: 'Custom::GetConfig'
     Properties: 
       ServiceToken: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-FunctionGetVariable'
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-GetConfig'
 
   #----------------------------------------------------------------------------
   #
   # AWS LoadBalancer
   #
-  # We create the LoadBalancer
+  # Note that the load balancer is internal, because the LDAP server is only 
+  # used by our local services. It is not meant to be accessible from outside. 
   #
   LoadBalancer:
     Type: 'AWS::CloudFormation::Stack'
@@ -147,7 +147,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-ELB'
-      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-app.yaml'
+      TemplateURL: !Sub '${GetConfig.S3ConfigBucketHTTPSUrl}/stacks/common/elb-app.yaml'
 
   #----------------------------------------------------------------------------
   #
@@ -168,7 +168,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-EFS'
-      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/efs.yaml'
+      TemplateURL: !Sub '${GetConfig.S3ConfigBucketHTTPSUrl}/stacks/common/efs.yaml'
 
   #----------------------------------------------------------------------------
   #
@@ -191,7 +191,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-ASG'
-      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/asg.yaml'
+      TemplateURL: !Sub '${GetConfig.S3ConfigBucketHTTPSUrl}/stacks/common/asg.yaml'
     DependsOn:
       - FileSystem
 
@@ -245,7 +245,7 @@ Resources:
                 StackName: '${AWS::StackName}'
                 PromptName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
-                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+                S3ConfigBucketName: '${GetConfig.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/artifactory.yaml
                 PlaybookBackup: /root/playbooks/backup.yaml
@@ -291,7 +291,7 @@ Resources:
               group: root
           commands:
             '01_get_playbook': 
-              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
+              command: !Sub 'sudo aws s3 sync ${GetConfig.S3ConfigBucketS3Url}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 

@@ -1,12 +1,10 @@
 #
 # FILE: 02-bastion.yaml
 #
-# DESCRIPTION: This Stack create a Bastion Host in the DMZ of the Parent VPC stack. The Bastion Host is necessary in 
-#   order to access other instances within the VPC.
+# DESCRIPTION: This Stack create a Bastion Host in the DMZ of the Parent VPC stack. 
+#   The Bastion Host is necessary in order to access other instances within the VPC.
 #
 # TODO: 
-# - Should use https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
-# - Should provide alert when the platform is unhealthy
 # - disable SSH root logins, set **PermitRootLogin** to "no" in **/etc/ssh/sshd_config**
 # - was listening on TCP port(s) 111, 37001, 44147, 51981
 #
@@ -50,22 +48,25 @@ Resources:
 
   #----------------------------------------------------------------------------
   #
-  # FunctionGetVariable: This function is used to retrieve parameters from the
+  # GetConfig: This function is used to retrieve parameters from the
   # Parent VPC stack without having to actually call Fn::Import. This had 2 
   # objectives, 1) make URL retrieval more readable, and 2) use 'Custom::' type
   #
-  FunctionGetVariable: 
-    Type: 'Custom::FunctionGetVariable'
-    Version: '1.0'
+  GetConfig: 
+    Type: 'Custom::GetConfig'
     Properties: 
       ServiceToken: 
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-FunctionGetVariable'
+        'Fn::ImportValue': !Sub '${ParentVpcStack}-GetConfig'
 
   #----------------------------------------------------------------------------
   #
   # AWS LoadBalancer
   #
-  # We create the TCP load balancer
+  # We create a public TCP load balancer in order to access the underlying 
+  # BASTION host. This nested stack will create:
+  # - a Load Balancer 
+  # - a unhealthy alarm
+  # - a record set to be able to access the load balancer with a friendly name
   #
   LoadBalancer:
     Type: 'AWS::CloudFormation::Stack'
@@ -82,7 +83,7 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-ELB'
-      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/elb-tcp.yaml'
+      TemplateURL: !Sub '${GetConfig.S3ConfigBucketHTTPSUrl}/stacks/common/elb-tcp.yaml'
 
   #----------------------------------------------------------------------------
   #
@@ -105,13 +106,17 @@ Resources:
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
           Value: !Sub '${AWS::StackName}-ASG'
-      TemplateURL: !Sub 'https://s3.amazonaws.com/${FunctionGetVariable.S3ConfigBucketName}/stacks/common/asg.yaml'
+      TemplateURL: !Sub '${GetConfig.S3ConfigBucketHTTPSUrl}/stacks/common/asg.yaml'
 
   #----------------------------------------------------------------------------
   #
-  # AWS CloudWatch
+  # AWS CloudWatch Logs and Dashboard.
   #
-  # We create the LogGroup used by the instances in this stack.
+  # We create the LogGroup used by the instances in this stack to stream their 
+  # system logs to AWS CloudWatch. Note that the associated playbook will 
+  # configure which logs will actually be streamed.
+  # We also create a Dashboard on order to present a central point for all the
+  # alarms defined for this stack.
   #
   LogGroup:
     Type: 'AWS::Logs::LogGroup'
@@ -119,12 +124,22 @@ Resources:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
 
+  Dashboard: 
+    Type: 'AWS::CloudWatch::Dashboard'
+    Properties:
+      DashboardName: !Sub '${AWS::StackName}'
+      DashboardBody: !Sub '{"widgets":[{"type":"metric","x":0,"y":0,"width":9,"height":9,"properties":{"title":"UnHealthyHostCountTooHighAlarmArn ","annotations":{"alarms":["${LoadBalancer.Outputs.UnHealthyHostCountTooHighAlarmArn}"]},"view":"timeSeries","stacked":false}},{"type":"text","x":18,"y":0,"width":6,"height":9,"properties":{"markdown":"\n# ${AWS::StackName}\n## Overview\n\nThis is the main LDAP. It is not accessible directly from internet. \n\n## Actions\n\nThe [${AWS::StackName}](#dashboards:name=${AWS::StackName}) stack should **only** be updated from the [CloudFormation](https://eu-west-1.console.aws.amazon.com/cloudformation/home) Console.\n\nYou can: \n* Open the [Logs](#logs:group=${AWS::StackName}) \n* Open the [EC2 Console](https://console.aws.amazon.com/ec2/v2/home?region=${AWS::Region}) for this VPC\n"}}]}'
+
   #----------------------------------------------------------------------------
   #
-  # AWS EC2
+  # AWS EC2 LaunchConfiguration
   #
-  # We create the LaunchConfiguration used by the AutoScalingGroup to provision
-  #   the instances in this stack
+  # The launch configuration is reduced to a minimum. All provisioning is done
+  # using ansible, which provides improved provisioning capabilities. Basically
+  # the steps are as follow:
+  # 1. Create a stack.yaml containing the stack parameters used by the playbook
+  # 2. Download the playbook folder from the S3 bucket
+  # 3. Launch the correct playbook.  
   #
   LaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
@@ -143,7 +158,7 @@ Resources:
                 StackName: '${AWS::StackName}'
                 PromptName: '${AWS::StackName}'
                 LogGroup: '${AWS::StackName}'
-                S3ConfigBucketName: '${FunctionGetVariable.S3ConfigBucketName}'
+                S3ConfigBucketName: '${GetConfig.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/bastion.yaml
                 PlaybookBackup: /root/playbooks/backup.yaml
@@ -152,7 +167,7 @@ Resources:
               group: root
           commands:
             '01_get_playbook': 
-              command: !Sub 'sudo aws s3 sync s3://${FunctionGetVariable.S3ConfigBucketName}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
+              command: !Sub 'sudo aws s3 sync ${GetConfig.S3ConfigBucketS3Url}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
             '02_set_host': 
               command: 'sudo bash -c "echo $(uname -n) ansible_connection=local > /etc/ansible/hosts"'
             '03_run_playbook': 

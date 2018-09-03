@@ -59,9 +59,17 @@ Parameters:
     - true
     - false
   HostedZoneName:
-    Description: 'Enter the name of the internal DNS that will be used inside the VPC'
+    Description: 'Enter the name of the private HostedZone to create'
     Type: String
     Default: 'example.com'
+  ExistingHostedZoneId:
+    Description: 'Enter the name of the public HostedZone to reuse'
+    Type: String
+    Default: ''
+  ExistingHostedZoneName:
+    Description: 'Enter the name of the public HostedZone to reuse'
+    Type: String
+    Default: ''
 Conditions: 
   HasFlowLog: !Equals [!Ref UseVPCFlowLog, 'true']
   HasHostedZone: !Not [!Equals [!Ref HostedZoneName, '']]
@@ -472,8 +480,11 @@ Resources:
         ZipFile: !Sub |
           var response = require('cfn-response');
           exports.handler = function(event, context) {
-            var responseData = { 'S3ConfigBucketName': '${S3ConfigBucketName}' };
-            response.send(event, context, response.SUCCESS, responseData);
+            var data = {};
+            data['S3ConfigBucketName'] = '${S3ConfigBucketName}'; 
+            data['S3ConfigBucketS3Url'] = 's3://${S3ConfigBucketName}'; 
+            data['S3ConfigBucketHTTPSUrl'] = 'https://s3.amazonaws.com/${S3ConfigBucketName}';
+            response.send(event, context, response.SUCCESS, data);
           };
       Description: 'Function to get a specific variable'
       Handler: index.handler
@@ -599,7 +610,7 @@ Resources:
         - Key: PLATFORM
           Value: !Sub '${AWS::StackName}'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-BackupDocument'
+          Value: !Sub '${AWS::StackName}-DocumentBackup'
       Content: 
         schemaVersion: '1.2'
         description: 'Document to backup an EFS filesystem mounted on an EC2 instance'
@@ -634,6 +645,7 @@ Resources:
     Properties: 
       Name: !Ref DocumentBackup
       Parameters:
+        BackupFileSystem: [ !GetAtt BackupFileSystem.Outputs.FileSystem ]
         Interval: [ daily ]
         Retain: [ 7 ]
       ScheduleExpression: 'cron(0 1 * * ? *)'
@@ -648,6 +660,7 @@ Resources:
     Properties: 
       Name: !Ref DocumentBackup
       Parameters:
+        BackupFileSystem: [ !GetAtt BackupFileSystem.Outputs.FileSystem ]
         Interval: [ weekly ]
         Retain: [ 4 ]
       ScheduleExpression: 'cron(0 2 ? * SUN *)'
@@ -662,6 +675,7 @@ Resources:
     Properties: 
       Name: !Ref DocumentBackup
       Parameters:
+        BackupFileSystem: [ !GetAtt BackupFileSystem.Outputs.FileSystem ]
         Interval: [ monthly ]
         Retain: [ 12 ]
       ScheduleExpression: 'cron(0 3 1 ? * * *)'
@@ -676,6 +690,7 @@ Resources:
 #    Properties: 
 #      Name: !Ref DocumentBackup
 #      Parameters:
+#        BackupFileSystem: [ !GetAtt BackupFileSystem.Outputs.FileSystem ]
 #        Interval: [ yearly ]
 #        Retain: [ 5 ]
 #      ScheduleExpression: 'cron(0 4 1 ? * * *)'
@@ -686,28 +701,21 @@ Resources:
   DocumentInstall:
     Type: 'AWS::SSM::Document'
     Properties: 
+      DocumentType: Command
+      Content: 
+        schemaVersion: '2.0'
+        description: 'Document to run the Ansible Install playbook'
+        mainSteps:
+        - action: aws:runShellScript
+          name: runShellScript
+          inputs:
+            runCommand: 
+              - sudo /root/run_playbook_install.sh
       Tags:
         - Key: PLATFORM
           Value: !Sub '${AWS::StackName}'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-InstallDocument'
-      Content: 
-        schemaVersion: '1.2'
-        description: 'Document to run the Ansible Install playbook'
-        runtimeConfig:
-          aws:runShellScript:
-            properties:
-              runCommand:
-                - 'sudo /root/run_playbook_insall.sh'
-                
-#  AssociationRunInstallPlaybook:
-#    Condition: HasBackup
-#    Type: 'AWS::SSM::Association'
-#    Properties: 
-#      Name: !Ref DocumentInstall
-#      Targets:
-#        - Key: 'Tag:PLATFORM'
-#          Values: [ !Sub '${AWS::StackName}' ]
+          Value: !Sub '${AWS::StackName}-DocumentInstall'
 
   #----------------------------------------------------------------------------
   #
@@ -1189,22 +1197,24 @@ Outputs:
     Value: !FindInMap [RegionMap, !Ref 'AWS::Region', ImageId]
     Export:
       Name: !Sub '${AWS::StackName}-DefaultImageId'
-  FunctionGetVariable:
+  GetConfig:
     Description: 'The ARN of the FunctionGetVariable Lambda function'
     Value: !GetAtt FunctionGetVariable.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-FunctionGetVariable'
+      Name: !Sub '${AWS::StackName}-GetConfig'
   S3ConfigBucketName:
     Description: 'The config bucket name'
     Value: !Ref S3ConfigBucketName
     Export:
       Name: !Sub '${AWS::StackName}-S3ConfigBucketName'
   HostedZone:
+    Condition: HasHostedZone
     Description: 'The HostedZone'
     Value: !Ref HostedZone
     Export:
       Name: !Sub '${AWS::StackName}-HostedZone'
   HostedZoneName:
+    Condition: HasHostedZone
     Description: 'The HostedZoneName'
     Value: !Ref HostedZoneName
     Export:
