@@ -74,6 +74,8 @@ Resources:
         ParentVpcStack: !Sub '${ParentVpcStack}'
         HealthCheckPort: 22
         ListenerPort: 22
+        SubDomainName: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
       Tags:
         - Key: PLATFORM
           Value: 
