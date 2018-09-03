@@ -22,6 +22,11 @@ Parameters:
   ListenerPort:
     Description: 'The port to listen to'
     Type: Number
+    Default: 443
+  CertificateArn:
+    Description: 'The HTTPS certificate to use (cf. ACM)'
+    Type: String
+    Default: ''
   Scheme:
     Description: 'Whether the load balancer is internet-facing or internal'
     Type: String
@@ -36,6 +41,8 @@ Parameters:
 Conditions:
   IsPublic: !Equals [!Ref Scheme, 'internet-facing']
   HasSubDomainName: !Not [!Equals [!Ref SubDomainName, '']]
+  UseHTTP: !Not [!Equals [!Ref ListenerPort, 443]]
+  UseHTTPS: !Equals [!Ref ListenerPort, 443]
 Resources: 
 
   #----------------------------------------------------------------------------
@@ -86,7 +93,8 @@ Resources:
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
-  Listener:
+  ListenerHTTP:
+    Condition: UseHTTP
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
     Properties:
       DefaultActions:
@@ -95,6 +103,18 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: !Ref ListenerPort
       Protocol: HTTP
+  ListenerHTTPS:
+    Condition: UseHTTPS
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      Certificates:
+      - CertificateArn: !Ref CertificateArn
+      DefaultActions:
+      - TargetGroupArn: !Ref TargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: !Ref ListenerPort
+      Protocol: HTTPS
 
   #----------------------------------------------------------------------------
   #

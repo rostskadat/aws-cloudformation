@@ -21,6 +21,7 @@ Metadata:
       - KeyName
       - IAMUserSSHAccess
       - InstanceType
+      - CertificateArn
     - Label: 
         default: 'LDAP Parameter'
       Parameters:
@@ -70,6 +71,10 @@ Parameters:
     Description: 'The instance type'
     Type: String
     Default: 'c5.large'    
+  CertificateArn:
+    Description: 'The HTTPS certificate to use (cf. ACM)'
+    Type: String
+    Default: ''
   LDAPManagerPassword: 
     Description: 'The LDAP Manager password'
     Type: String
@@ -133,8 +138,8 @@ Resources:
         ParentVpcStack: !Sub '${ParentVpcStack}'
         HealthCheckPath: '/users/sign_in'
         HealthCheckPort: 80
-        ListenerPort: 80
         SubDomainName: gitlab
+        CertificateArn: !Ref CertificateArn
       Tags:
         - Key: PLATFORM
           Value: 
