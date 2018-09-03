@@ -15,14 +15,14 @@ Parameters:
   HealthCheckPort:
     Description: 'The port to check'
     Type: Number
-  HealthCheckPortOther:    
+  HealthCheckPort2:
     Description: 'The port to check'
     Type: Number
     Default: -1
   ListenerPort:
     Description: 'The port to listen to'
     Type: Number
-  ListenerPortOther:
+  ListenerPort2:
     Description: 'The port to listen to'
     Type: Number
     Default: -1
@@ -40,8 +40,7 @@ Parameters:
 Conditions:
   IsPublic: !Equals [!Ref Scheme, 'internet-facing']
   HasSubDomainName: !Not [!Equals [!Ref SubDomainName, '']]
-  HasMultipleListener: !Not [!Equals [!Ref ListenerPortOther, -1]]
-  HasMultipleTargetGroup: !Not [!Equals [!Ref HealthCheckPortOther, -1]]
+  HasTargetGroup2: !Not [!Equals [!Ref HealthCheckPort2, -1]]
 Resources: 
 
   #----------------------------------------------------------------------------
@@ -101,33 +100,33 @@ Resources:
       Protocol: TCP
 
   # The second TargetGroup/Listener group
-  TargetGroupOther:
+  TargetGroup2:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
-    Condition: HasMultipleTargetGroup
+    Condition: HasTargetGroup2
     Properties:
-      Port: !Ref HealthCheckPortOther
+      Port: !Ref HealthCheckPort2
       Protocol: TCP
       Tags:
         - Key: PLATFORM
           Value: 
             'Fn::ImportValue': !Sub '${ParentVpcStack}-StackName'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-TargetGroupOther'
+          Value: !Sub '${AWS::StackName}-TargetGroup2'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-Vpc'
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
 
-  ListenerOther:
+  Listener2:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
-    Condition: HasMultipleListener
+    Condition: HasTargetGroup2
     Properties:
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroupOther
+      - TargetGroupArn: !Ref TargetGroup2
         Type: forward
       LoadBalancerArn: !Ref LoadBalancer
-      Port: !Ref ListenerPortOther
+      Port: !Ref ListenerPort2
       Protocol: TCP
 
   #----------------------------------------------------------------------------
@@ -190,10 +189,10 @@ Outputs:
   TargetGroup: 
     Description: 'The TargetGroup ARN'
     Value: !Ref TargetGroup
-  TargetGroupOther:
-    Condition: HasMultipleTargetGroup
+  TargetGroup2:
+    Condition: HasTargetGroup2
     Description: 'The TargetGroup ARN'
-    Value: !Ref TargetGroupOther
+    Value: !Ref TargetGroup2
   UnHealthyHostCountTooHighAlarmArn:
     Description: 'The Alarm ARN'
     Value: !GetAtt UnHealthyHostCountTooHighAlarm.Arn

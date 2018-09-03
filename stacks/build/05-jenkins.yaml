@@ -201,9 +201,9 @@ Resources:
       Parameters:
         ParentVpcStack: !Sub '${ParentVpcStack}'
         HealthCheckPort: 8080
-        HealthCheckPortOther: 49817
+        HealthCheckPort2: 49817
         ListenerPort: 8080
-        ListenerPortOther: 49817
+        ListenerPort2: 49817
         Scheme: internal
       Tags:
         - Key: PLATFORM
@@ -251,7 +251,7 @@ Resources:
         ParentStack: !Sub '${AWS::StackName}'
         TargetGroup: !GetAtt LoadBalancer.Outputs.TargetGroup
         TargetGroup2: !GetAtt LoadBalancerJNPL.Outputs.TargetGroup
-        TargetGroup3: !GetAtt LoadBalancerJNPL.Outputs.TargetGroupOther
+        TargetGroup3: !GetAtt LoadBalancerJNPL.Outputs.TargetGroup2
         LaunchConfiguration: !Ref LaunchConfiguration
       Tags:
         - Key: PLATFORM
