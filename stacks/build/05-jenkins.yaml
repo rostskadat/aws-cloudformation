@@ -512,7 +512,7 @@ Resources:
                 S3ConfigBucketName: '${GetConfig.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/jenkins_agent.yaml
-                PlaybookBackup: /root/playbooks/backup.yaml
+                PlaybookBackup: /root/playbooks/noop.yaml
                 
                 ArtifactoryDNSName: '{{ArtifactoryDNSName}}'
                 ArtifactoryAdminUsername: '{{ArtifactoryAdminUsername}}'

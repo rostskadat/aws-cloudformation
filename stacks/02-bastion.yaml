@@ -161,7 +161,7 @@ Resources:
                 S3ConfigBucketName: '${GetConfig.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/bastion.yaml
-                PlaybookBackup: /root/playbooks/backup.yaml
+                PlaybookBackup: /root/playbooks/noop.yaml
               mode: '000600'
               owner: root
               group: root
