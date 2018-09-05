@@ -79,7 +79,7 @@
 
 - name: Downloading GeoDB
   unarchive: 
-    src: http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz
+    src: https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz
     dest: /usr/local/share/GeoLite2-City
     remote_src: yes
     creates: /usr/local/share/GeoLite2-City/GeoLite2-City.mmdb

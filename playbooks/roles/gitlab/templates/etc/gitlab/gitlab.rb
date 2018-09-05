@@ -1,4 +1,4 @@
-external_url 'http://{{ExternalUrl}}'
+external_url 'https://{{ExternalUrl}}'
 git_data_dirs({
     'default': {
         'path': '/mnt/application/data'

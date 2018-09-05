@@ -10,7 +10,7 @@ jenkinsAdminEmail="$3"
 [ -z "$jenkinsAdminEmail" ] && echo "Invalid jenkinsAdminEmail" && exit 1
 # First create a user 
 sonarqubeDNSName=${sonarqubeDNSName,,}
-apiUrl="http://$sonarqubeDNSName/api"
+apiUrl="https://$sonarqubeDNSName/api"
 jenkinsPassword=$(echo -n "$jenkinsAdminEmail" | md5sum | cut -d ' ' -f 1)
 sonarqubeUserEmail=jenkins@${jenkinsAdminEmail##*@}
 

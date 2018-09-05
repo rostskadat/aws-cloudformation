@@ -5,7 +5,7 @@
     - java-1.7.0-openjdk
 
 - name: Adding Maven repository
-  get_url: url=http://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo dest=/etc/yum.repos.d/epel-apache-maven.repo mode=644
+  get_url: url=https://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo dest=/etc/yum.repos.d/epel-apache-maven.repo mode=644
 
 - name: Fixing maven repository definition
   replace:

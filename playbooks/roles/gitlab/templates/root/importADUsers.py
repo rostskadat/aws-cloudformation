@@ -20,7 +20,7 @@ from ldif import LDIFParser, LDIFWriter
 import ldap.modlist as modlist
 
 GITLAB_HEADERS = { 'PRIVATE-TOKEN' : '{{GITLAB_PRIVATETOKEN}}' }
-GITLAB_API_URI = 'http://{{}}/api/v4'
+GITLAB_API_URI = 'http://{{GitlabDNSName}}/api/v4'
 
 LDAP_URI = 'ldap://{{LDAPDNSName}}'
 LDAP_SEARCH_BASE = 'ou=People,{{LDAPRootDC}}'

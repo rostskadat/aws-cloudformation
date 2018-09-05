@@ -19,12 +19,12 @@ TokenFile=$5
 GitlabDNSName=${GitlabDNSName,,}
 
 echo "Obtaining a token..."
-token=$(curl -s -F grant_type=password -F "username=${GitlabAdminUsername}" -F "password=${GitlabAdminPassword}" -X POST http://${GitlabDNSName}/oauth/token | jq -r '.access_token')
+token=$(curl -s -F grant_type=password -F "username=${GitlabAdminUsername}" -F "password=${GitlabAdminPassword}" -X POST https://${GitlabDNSName}/oauth/token | jq -r '.access_token')
 [ "$token" == "null" ] && echo "Failed to get Gitlab token" && exit 1
 
 gitlabSonarqubePassword=$(echo -n "${SonarqubeAdminEmail}" | md5sum | cut -d ' ' -f 1)
 SonarqubeAdminEmail=sonarqube@${SonarqubeAdminEmail##*@}
-url="http://${GitlabDNSName}/api/v4"
+url="https://${GitlabDNSName}/api/v4"
 
 echo "Checking if user 'sonarqube' exists..."
 userId=$(curl -s -H "Authorization: Bearer $token" "$url/users?username=sonarqube" | jq '.[] | .id')

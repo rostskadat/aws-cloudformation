@@ -5,7 +5,7 @@ artifactory.useCredentialsPlugin = false;
 artifactory.pushToBintrayEnabled = false;
 artifactory.buildInfoProxyEnabled = false;
 CredentialsConfig credentials = new CredentialsConfig('{{ArtifactoryAdminUsername}}', '{{ArtifactoryAdminPassword}}', 'ARTIFACTORY_CREDENTIALS')
-ArtifactoryServer server = new ArtifactoryServer('ARTIFACTORY', 'http://{{ArtifactoryDNSName}}/artifactory', credentials, credentials, 300, true, 3);
+ArtifactoryServer server = new ArtifactoryServer('ARTIFACTORY', 'https://{{ArtifactoryDNSName}}/artifactory', credentials, credentials, 300, true, 3);
 artifactory.artifactoryServers = [ server ]
 artifactory.save();
 println 'Artifactory configured...'

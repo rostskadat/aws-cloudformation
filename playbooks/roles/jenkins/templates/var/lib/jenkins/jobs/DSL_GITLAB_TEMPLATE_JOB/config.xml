@@ -61,7 +61,7 @@
       <evenIfUnstable>false</evenIfUnstable>
       <deployerDetails>
         <artifactoryName>ARTIFACTORY</artifactoryName>
-        <artifactoryUrl>http://{{ArtifactoryDNSName}}/artifactory</artifactoryUrl>
+        <artifactoryUrl>https://{{ArtifactoryDNSName}}/artifactory</artifactoryUrl>
         <deployReleaseRepository>
           <keyFromText>libs-releases-local</keyFromText>
           <keyFromSelect>libs-releases-local</keyFromSelect>

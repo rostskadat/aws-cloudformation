@@ -167,7 +167,7 @@
     force_basic_auth: yes
     status_code: 204,400
   with_items:
-    - { key: 'sonar.gitlab.url',                value: 'http://{{GitlabDNSName}}' }
+    - { key: 'sonar.gitlab.url',                value: 'https://{{GitlabDNSName}}' }
     - { key: 'sonar.gitlab.ignore_certificate', value: 'true' }
     - { key: 'sonar.gitlab.user_token',         value: '{{ lookup("file", "/mnt/application/gitlab_token") }}' }
     - { key: 'sonar.gitlab.ping_user',          value: 'true' }
