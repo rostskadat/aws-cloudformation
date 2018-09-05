@@ -336,7 +336,7 @@ Resources:
 Outputs: 
   DNSName: 
     Description: 'Public DNS address of the internet facing ELB'
-    Value: !GetAtt LoadBalancer.Outputs.DNSName
+    Value: !GetAtt LoadBalancer.Outputs.RecordSet
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
   AdminUsername:      

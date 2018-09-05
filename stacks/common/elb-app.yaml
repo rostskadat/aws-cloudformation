@@ -40,7 +40,7 @@ Parameters:
     Default: ''
 Conditions:
   IsPublic: !Equals [!Ref Scheme, 'internet-facing']
-  HasSubDomainName: !Not [!Equals [!Ref SubDomainName, '']]
+  CreateRecordSet: !Not [!Equals [!Ref SubDomainName, '']]
   UseHTTP: !Not [!Equals [!Ref ListenerPort, 443]]
   UseHTTPS: !Equals [!Ref ListenerPort, 443]
 Resources: 
@@ -123,14 +123,16 @@ Resources:
   # We create the internal DNS RecordSet
   #
   RecordSet:
-    Condition: HasSubDomainName
+    Condition: CreateRecordSet
     Type: 'AWS::Route53::RecordSet'
     Properties:
       AliasTarget:
         HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
         DNSName: !GetAtt LoadBalancer.DNSName
-      HostedZoneId:
-        'Fn::ImportValue': !Sub '${ParentVpcStack}-HostedZone'
+      HostedZoneName: !Sub
+      - '${HostedZoneName}.'
+      - HostedZoneName: 
+          'Fn::ImportValue': !Sub '${ParentVpcStack}-HostedZoneName'
       Name: !Sub
       - '${SubDomainName}.${HostedZoneName}'
       - SubDomainName: !Ref SubDomainName
@@ -221,6 +223,10 @@ Outputs:
   DNSName: 
     Description: 'The LoadBalancer DNSName'
     Value: !GetAtt LoadBalancer.DNSName
+  RecordSet: 
+    Condition: CreateRecordSet
+    Description: 'The RecordSet created for this service'
+    Value: !Ref RecordSet
   CanonicalHostedZoneID:
     Description: 'The LoadBalancer ARN'
     Value: !GetAtt LoadBalancer.CanonicalHostedZoneID

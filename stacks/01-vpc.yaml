@@ -58,21 +58,20 @@ Parameters:
     AllowedValues:
     - true
     - false
+  UseExistingHostedZone:
+    Description: 'Create a record on an existing HostedZone'
+    Type: String
+    Default: true
+    AllowedValues:
+    - true
+    - false
   HostedZoneName:
-    Description: 'Enter the name of the private HostedZone to create'
+    Description: 'Enter the name of the HostedZone to use. A new internal HostedZone will be created if UseExistingHostedZone is set to true'
     Type: String
     Default: 'example.com'
-  ExistingHostedZoneId:
-    Description: 'Enter the name of the public HostedZone to reuse'
-    Type: String
-    Default: ''
-  ExistingHostedZoneName:
-    Description: 'Enter the name of the public HostedZone to reuse'
-    Type: String
-    Default: ''
 Conditions: 
   HasFlowLog: !Equals [!Ref UseVPCFlowLog, 'true']
-  HasHostedZone: !Not [!Equals [!Ref HostedZoneName, '']]
+  CreateHostedZone: !Equals [!Ref UseExistingHostedZone, 'false']
   HasBackup: !Equals [!Ref UseBackup, 'true']
 Mappings:
   # cf. files/root/create_region_map.sh
@@ -727,7 +726,7 @@ Resources:
   # Create a private internal hosted zone
   #
   HostedZone:
-    Condition: HasHostedZone
+    Condition: CreateHostedZone
     Type: 'AWS::Route53::HostedZone'
     Properties: 
       HostedZoneConfig:
@@ -1211,13 +1210,12 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-S3ConfigBucketName'
   HostedZone:
-    Condition: HasHostedZone
+    Condition: CreateHostedZone
     Description: 'The HostedZone'
     Value: !Ref HostedZone
     Export:
       Name: !Sub '${AWS::StackName}-HostedZone'
   HostedZoneName:
-    Condition: HasHostedZone
     Description: 'The HostedZoneName'
     Value: !Ref HostedZoneName
     Export:

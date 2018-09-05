@@ -591,9 +591,14 @@ Resources:
 Outputs: 
   DNSName: 
     Description: 'Public DNS address of the internet facing ELB'
-    Value: !GetAtt LoadBalancer.Outputs.DNSName
+    Value: !GetAtt LoadBalancer.Outputs.RecordSet
     Export:
       Name: !Sub '${AWS::StackName}-DNSName'
+  DNSNameELB:
+    Description: 'DNS address of the ELB'
+    Value: !GetAtt LoadBalancer.Outputs.DNSName
+    Export:
+      Name: !Sub '${AWS::StackName}-DNSNameELB'
   DNSNameJNPL:
     Description: 'DNS address of the JNPL ELB'
     Value: !GetAtt LoadBalancerJNPL.Outputs.DNSName
