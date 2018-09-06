@@ -465,7 +465,7 @@ Resources:
                   'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-DNSName'
                 SonarqubeAdminUsername: 
                   'Fn::ImportValue': !Sub '${ParentSonarqubeStack}-AdminUsername'
-                JenkinsDNSName: !GetAtt LoadBalancer.Outputs.DNSName
+                JenkinsDNSName: !GetAtt LoadBalancer.Outputs.RecordSet
           commands:
             '01_get_playbook': 
               command: !Sub 'sudo aws s3 sync ${GetConfig.S3ConfigBucketS3Url}/playbooks /root/playbooks --exclude "group_vars/*.*" --no-progress'
