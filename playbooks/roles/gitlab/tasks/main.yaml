@@ -81,7 +81,8 @@
 
 - name: Obtaining token
   uri:
-    url: http://localhost:80/oauth/token
+    url: http://localhost/oauth/token
+    validate_certs: no
     method: POST
     body_format: json
     body:
@@ -96,7 +97,8 @@
 
 - name: Changing settings
   uri:
-    url: 'http://localhost:80/api/v4/application/settings?{{item.key}}={{item.value}}'
+    url: 'http://localhost/api/v4/application/settings?{{item.key}}={{item.value}}'
+    validate_certs: no
     method: PUT
     headers:
       Authorization: 'Bearer {{token}}'
@@ -111,7 +113,8 @@
 
 - name: Creating Developers group
   uri:
-    url: 'http://localhost:80/api/v4/groups'
+    url: 'http://localhost/api/v4/groups'
+    validate_certs: no
     method: POST
     headers:
       Authorization: 'Bearer {{token}}'
@@ -124,7 +127,8 @@
 
 - name: Revoking token
   uri:
-    url: 'http://localhost:80/oauth/revoke'
+    url: 'http://localhost/oauth/revoke'
+    validate_certs: no
     method: POST
     headers:
       Authorization: 'Bearer {{token}}'

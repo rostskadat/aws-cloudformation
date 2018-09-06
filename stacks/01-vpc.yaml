@@ -690,7 +690,7 @@ Resources:
           Values: [ !Sub '${AWS::StackName}' ]
 
   # This document allows to replay the Install Playbook
-  DocumentReplayPlaybook:
+  DocumentReplayInstallPlaybook:
     Type: 'AWS::SSM::Document'
     Properties: 
       DocumentType: Command
@@ -707,14 +707,47 @@ Resources:
         - Key: PLATFORM
           Value: !Sub '${AWS::StackName}'
         - Key: Name
-          Value: !Sub '${AWS::StackName}-ReplayPlaybook'
+          Value: !Sub '${AWS::StackName}-ReplayInstallPlaybook'
 
-  AssociationReplayPlaybook:
+  AssociationReplayInstallPlaybook:
     Condition: HasBackup
     Type: 'AWS::SSM::Association'
     Properties: 
-      AssociationName: !Sub '${AWS::StackName}-ReplayPlaybook'
-      Name: !Ref DocumentReplayPlaybook
+      AssociationName: !Sub '${AWS::StackName}-ReplayInstallPlaybook'
+      Name: !Ref DocumentReplayInstallPlaybook
+      Targets:
+        - Key: 'Tag:PLATFORM'
+          Values: [ !Sub '${AWS::StackName}' ]
+
+  DocumentCfnInit:
+    Type: 'AWS::SSM::Document'
+    Properties: 
+      DocumentType: Command
+      Content: 
+        schemaVersion: '2.0'
+        description: 'Document to run the Init section of the corresponding stack'
+        parameters:
+          StackName:
+            type: String
+            default: !Sub '${AWS::StackName}-?'
+            description: "The stack name on which you want to run CfnInit. Beware to match the StackName with the selected instance"
+        mainSteps: 
+        - name: CfnInit
+          action: aws:runShellScript
+          inputs:
+            runCommand: 
+              - !Sub 'sudo /opt/aws/bin/cfn-init --verbose --region ${AWS::Region} --stack {{StackName}} --resource LaunchConfiguration'
+      Tags:
+        - Key: PLATFORM
+          Value: !Sub '${AWS::StackName}'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-DocumentCfnInit'
+
+  AssociationCfnInit:
+    Type: 'AWS::SSM::Association'
+    Properties: 
+      AssociationName: !Sub '${AWS::StackName}-CfnInit'
+      Name: !Ref DocumentCfnInit
       Targets:
         - Key: 'Tag:PLATFORM'
           Values: [ !Sub '${AWS::StackName}' ]

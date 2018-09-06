@@ -265,7 +265,7 @@ Resources:
                 DBAdminUsername: '{{DBAdminUsername}}'
                 DBAdminPassword: '${DBMasterPassword}'
                 
-                ExternalUrl: '${LoadBalancer.Outputs.DNSName}'
+                ExternalUrl: '${LoadBalancer.Outputs.RecordSet}'
 
                 GitlabAdminEmail: '${GitlabAdminEmail}'
                 GitlabAdminPassword: '${GitlabAdminPassword}'

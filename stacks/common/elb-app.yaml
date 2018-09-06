@@ -110,8 +110,8 @@ Resources:
       Certificates:
       - CertificateArn: !Ref CertificateArn
       DefaultActions:
-      - TargetGroupArn: !Ref TargetGroup
-        Type: forward
+      - Type: forward
+        TargetGroupArn: !Ref TargetGroup
       LoadBalancerArn: !Ref LoadBalancer
       Port: !Ref ListenerPort
       Protocol: HTTPS
