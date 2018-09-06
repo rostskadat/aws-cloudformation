@@ -93,6 +93,7 @@ Resources:
       TargetGroupAttributes:
         - Key: 'deregistration_delay.timeout_seconds'
           Value: 30
+
   ListenerHTTP:
     Condition: UseHTTP
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
@@ -103,6 +104,7 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: !Ref ListenerPort
       Protocol: HTTP
+
   ListenerHTTPS:
     Condition: UseHTTPS
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
@@ -115,6 +117,28 @@ Resources:
       LoadBalancerArn: !Ref LoadBalancer
       Port: !Ref ListenerPort
       Protocol: HTTPS
+
+  # Once https://forums.aws.amazon.com/message.jspa?messageID=861188 is solved we can implement it
+  # In the mean time you need to create a redirect listener from the console.
+#  ListenerRedirectHTTP2HTTPS:
+#    Condition: UseHTTPS
+#    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+#    Properties:
+#      Certificates:
+#      - CertificateArn: !Ref CertificateArn
+#      DefaultActions:
+#      - Type: redirect
+#        RedirectConfig:
+#          Protocol: HTTPS
+#          Host: !Sub
+#            - '${SubDomainName}.${HostedZoneName}'
+#            - SubDomainName: !Ref SubDomainName
+#              HostedZoneName: 
+#                'Fn::ImportValue': !Sub '${ParentVpcStack}-HostedZoneName'
+#          StatusCode: HTTP_302
+#      LoadBalancerArn: !Ref LoadBalancer
+#      Port: 80
+#      Protocol: HTTP
 
   #----------------------------------------------------------------------------
   #
