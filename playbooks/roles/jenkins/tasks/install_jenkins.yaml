@@ -13,6 +13,7 @@
     - { src: /root/configure_sonarqube.groovy, mode: '0600', user: root }
     - { src: /root/configure_gitlabhook.groovy, mode: '0600', user: root }
     - { src: /root/configure_smtp.groovy, mode: '0600', user: root }
+    - { src: /root/configure_view.groovy, mode: '0600', user: root }
     - { src: /var/lib/jenkins/.m2/settings.xml, mode: '0600', user: jenkins }
     - { src: /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml, mode: '0644', user: jenkins }
 

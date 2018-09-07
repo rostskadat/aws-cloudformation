@@ -15,6 +15,11 @@
 #    - name: Creating Jenkins job
 #      debug: msg='Using jenkins_job config(lookup)'
 
+- name: Crating default views
+  jenkins_script: script='{{item}}' user=admin password='{{current_password}}'
+  with_items:
+    - '{{lookup("file", "/root/configure_views.groovy")}}'
+
 #
 # BEWARE: Make sure that the last configuration is LDAP
 # 
