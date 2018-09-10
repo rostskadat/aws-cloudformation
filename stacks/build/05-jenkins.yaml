@@ -550,7 +550,7 @@ Resources:
         'Fn::ImportValue': !Sub '${ParentVpcStack}-InstanceProfileEC2Instance'      
       ImageId: 
         'Fn::ImportValue': !Sub '${ParentVpcStack}-DefaultImageId'
-      InstanceType: t2.micro
+      InstanceType: t3.small
       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
       SecurityGroups: 
         - 'Fn::ImportValue': !Sub '${ParentVpcStack}-SecurityGroupPrivate'
