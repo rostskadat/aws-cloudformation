@@ -127,7 +127,7 @@ Parameters:
   SwarmMaxSize:
     Description: 'The maximum size of the Swarm'
     Type: Number
-    Default: 2
+    Default: 5
     ConstraintDescription: 'Must be >= 1'
     MinValue: 1
   SwarmDesiredCapacity:
