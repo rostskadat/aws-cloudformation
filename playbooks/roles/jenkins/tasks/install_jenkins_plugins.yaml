@@ -29,6 +29,9 @@
     - github-organization-folder
     - git-parameter
     - gitlab-hook
+    - gitlab-logo
+    - gitlab-merge-request-jenkins
+    - gitlab-plugin
     - gradle
     - greenballs
     - groovy
