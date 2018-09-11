@@ -6,10 +6,8 @@
 #   stack.
 #
 #
-- name: Copying signaling script
-  copy: src='files{{item}}' dest='{{item}}' owner=root group=root mode='0700'
-  with_items:
-    - /root/signal_asg.sh
+- name: Installing ASG signalling
+  include_role: name=common tasks_from=configure_asg
 
 - name: Removing obsolete packages
   yum:
@@ -24,13 +22,8 @@
     - htop
     - chrony
 
-- name: Creating template .bashrc
-  template:
-    src: templates/home/ec2-user/.bashrc
-    dest: /home/ec2-user/.bashrc
-    owner: root
-    group: root
-    mode: 0644
+- name: Installing ASG signalling
+  include_role: name=common tasks_from=configure_bashrc
 
 - name: Installing and configuring ansible playbooks
   include_role: name=common tasks_from=configure_playbooks

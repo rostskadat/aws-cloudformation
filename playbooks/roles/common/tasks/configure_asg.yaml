@@ -1,0 +1,5 @@
+---
+- name: Copying signaling script
+  copy: src='files{{item}}' dest='{{item}}' owner=root group=root mode='0700'
+  with_items:
+    - /root/signal_asg.sh
