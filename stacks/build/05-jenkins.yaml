@@ -343,7 +343,7 @@ Resources:
     Properties:
       AdjustmentType: ChangeInCapacity
       AutoScalingGroupName: !Ref AutoScalingGroupSwarm
-      Cooldown: 300
+      Cooldown: 60
       ScalingAdjustment: 1
   BuildQueueHighAlarm:
     Type: 'AWS::CloudWatch::Alarm'
@@ -352,7 +352,7 @@ Resources:
       Statistic: Maximum  
       Threshold: 1
       AlarmDescription: 'Alarm if Build Queue is high.'
-      Period: 120
+      Period: 60
       AlarmActions:
         - !Ref SwarmScalingOutPolicy
       Namespace: !Ref 'AWS::StackName'
@@ -363,7 +363,7 @@ Resources:
     Properties:
       AdjustmentType: ChangeInCapacity
       AutoScalingGroupName: !Ref AutoScalingGroupSwarm
-      Cooldown: 300
+      Cooldown: 120
       ScalingAdjustment: -1
   BuildActiveEmptyAlarm:
     Type: 'AWS::CloudWatch::Alarm'
