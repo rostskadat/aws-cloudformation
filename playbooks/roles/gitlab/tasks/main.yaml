@@ -29,16 +29,22 @@
     - psycopg2-binary
     - pyapi-gitlab
 
-- name: Downloading Gitlab repository
+- name: Downloading Gitlab repositories
   get_url:
-    url: https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh
-    dest: /root/gitlab-ee.repo.sh
+    url: '{{item.url}}'
+    dest: '{{item.dest}}'
     mode: 700
+  with_items:
+    - { url: 'https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh', dest: '/root/gitlab-ee.repo.sh' } 
+    - { url: 'https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.rpm.sh', dest: '/root/gitlab-runner.repo.sh' } 
 
-- name: Adding Gitlab repository
-  shell: /root/gitlab-ee.repo.sh
+- name: Adding Gitlab repositories
+  shell: '{{item.shell}}'
   args:
-    creates: /etc/yum.repos.d/gitlab_gitlab-ee.repo
+    creates: '{{item.creates}}'
+  with_items:
+    - { shell: '/root/gitlab-ee.repo.sh', creates: '/etc/yum.repos.d/gitlab_gitlab-ee.repo' } 
+    - { shell: '/root/gitlab-runner.repo.sh', creates: '/etc/yum.repos.d/runner_gitlab-runner.repo' } 
 
 - name: Creating and mounting EFS
   include_role: name=common tasks_from=create_fs
@@ -55,9 +61,12 @@
   loop_control:
     loop_var: log
 
-- name: Installing Gitlab     
+- name: Installing Gitlab Packages
   yum:
-    name: gitlab-ee
+    name: '{{items}}'
+  with_items: 
+    - gitlab-ee
+    - gitlab-runner
 
 - name: Templating /etc/gitlab/gitlab.rb
   template: 
