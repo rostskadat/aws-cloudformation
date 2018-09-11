@@ -252,6 +252,7 @@ Resources:
               - Effect: 'Allow'
                 Action:
                   - 'cloudformation:DescribeStacks'
+                  - 'cloudformation:DescribeStackResources'
                 Resource: '*'
         - PolicyName: 'AllowEC2SQSActions'
           PolicyDocument:
