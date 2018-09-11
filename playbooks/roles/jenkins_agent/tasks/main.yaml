@@ -30,7 +30,7 @@
     shell: /bin/bash
 
 - name: Downloading swarm client
-  get_url: url=https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/swarm-client/1.26/swarm-client-1.26.jar dest=/home/builder/swarm-client.jar mode=644
+  get_url: url=https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/swarm-client/3.14/swarm-client-3.14.jar dest=/home/builder/swarm-client.jar mode=644
   
 - name: Creating Directories
   file: path='{{item.path}}' state=directory owner='{{item.owner}}' group='{{item.owner}}' mode=0755
