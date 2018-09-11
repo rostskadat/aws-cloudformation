@@ -20,8 +20,9 @@ SWARM_USERNAME="-username {{JenkinsAdminUsername}}"
 SWARM_PASSWORD="-password {{JenkinsAdminPassword}}"
 SWARM_MASTER="-master http://{{JenkinsJNPLDNSName}}:8080"
 SWARM_FSROOT="-fsroot /home/builder/jobs"
+SWARM_EXECUTORS="-executors 1"
 
-SWARM_CLIENT_CMD="/usr/bin/java -jar $SWARM_JAR $SWARM_NAME $SWARM_USERNAME $SWARM_PASSWORD $SWARM_MASTER $SWARM_FSROOT"
+SWARM_CLIENT_CMD="/usr/bin/java -jar $SWARM_JAR $SWARM_NAME $SWARM_USERNAME $SWARM_PASSWORD $SWARM_MASTER $SWARM_FSROOT $SWARM_EXECUTORS"
 PIDFILE=/var/run/jenkins-swarm-client.pid
 IS_ACTIVE=1
 
