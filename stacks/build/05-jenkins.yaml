@@ -272,6 +272,10 @@ Resources:
     DependsOn: AutoScalingGroup
     Properties:
       LaunchConfigurationName: !Ref LaunchConfigurationSwarm
+      MetricsCollection:
+        - Granularity: 1Minute
+          Metrics:
+            - GroupInServiceInstances
       MinSize: !Ref SwarmMinSize
       MaxSize: !Ref SwarmMaxSize
       DesiredCapacity: !Ref SwarmDesiredCapacity
@@ -363,12 +367,12 @@ Resources:
     Properties:
       AdjustmentType: ChangeInCapacity
       AutoScalingGroupName: !Ref AutoScalingGroupSwarm
-      Cooldown: 120
+      Cooldown: 60
       ScalingAdjustment: -1
   BuildActiveEmptyAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      EvaluationPeriods: 5
+      EvaluationPeriods: 1
       Statistic: Maximum  # special rule because we scale on build queue length
       Threshold: 0
       AlarmDescription: 'Alarm if Build Queue is empty.'
