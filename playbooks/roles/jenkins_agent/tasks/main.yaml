@@ -1,4 +1,38 @@
 ---
+- name: Configuring SSH for IAM User Access
+  include_role: name=common tasks_from=configure_asg
+
+- name: Removing obsolete packages
+  yum:
+    name: 'ntp*'
+    state: absent
+
+- name: Installing default packages
+  yum:
+    name: '{{item}}'
+  with_items:
+    - awslogs
+    - wget
+    - htop
+    - chrony
+
+- name: Installing ASG signalling
+  include_role: name=common tasks_from=configure_bashrc
+
+- name: Configuring SSH for IAM User Access
+  include_role: name=common tasks_from=configure_sshd
+  when: 
+    - HasIAMUserSSHAccess is defined
+    - HasIAMUserSSHAccess == true 
+
+- name: Enabling services
+  service:
+    name: '{{item}}'
+    state: started
+    enabled: yes
+  with_items:
+    - chronyd
+
 - name: Removing obsolete packages
   yum: name='{{item}}' state=absent
   with_items:
@@ -43,12 +77,22 @@
     - { src: /home/builder/.m2/settings.xml, mode: '0600', user: builder }
     - { src: /etc/init.d/jenkins-swarm-client, mode: '0700', user: root }
 
-- name: Monitoring application logs
-  include_role: name=common tasks_from=configure_awslogs_extra
-  with_items: 
-    - { name: 'jenkins-swarm-client', filename: '/var/log/jenkins-swarm-client.log' }
-  loop_control:
-    loop_var: log
+- name: Creating templates
+  template:
+    src: 'templates{{item}}'
+    dest: '{{item}}'
+    owner: root
+    group: root
+    mode: 0644
+  with_items:
+    - /etc/awslogs/awscli.conf
+    - /etc/awslogs/awslogs.conf
+
+- name: Enabling services
+  service: name='{{item}}' state=started enabled=yes
+  with_items:
+    - awslogs
+  notify: restart awslogs
 
 - name: Enabling services
   service: name='{{item}}' state=started enabled=yes

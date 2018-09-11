@@ -4,5 +4,4 @@
   vars_files: 
     - vars/config.yml
   roles:
-    - common
     - jenkins_agent
