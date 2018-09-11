@@ -13,6 +13,8 @@
 
 ENV="env -i LANG=C PATH=/sbin:/usr/sbin:/bin:/usr/bin DISPLAY=:99"
 
+exec > >(tee -a "/var/log/jenkins-swarm-client.log") 2> >(tee -a "/var/log/jenkins-swarm-client.log")
+
 SWARM_NAME="-name $(uname -n)"
 SWARM_UID=builder
 SWARM_JAR=/home/builder/swarm-client.jar
