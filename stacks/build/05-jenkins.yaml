@@ -329,6 +329,12 @@ Resources:
       LogGroupName: !Sub '${AWS::StackName}'
       RetentionInDays: 7
 
+  LogGroupSwarm: 
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Sub '${AWS::StackName}-SWARM'
+      RetentionInDays: 7
+
   Dashboard: 
     Type: 'AWS::CloudWatch::Dashboard'
     Properties:
@@ -512,7 +518,7 @@ Resources:
                 Region: '${AWS::Region}'
                 StackName: '${AWS::StackName}'
                 PromptName: '${AWS::StackName}-SWARM'
-                LogGroup: '${AWS::StackName}'
+                LogGroup: '${AWS::StackName}-SWARM'
                 S3ConfigBucketName: '${GetConfig.S3ConfigBucketName}'
                 HasIAMUserSSHAccess: ${IAMUserSSHAccess}
                 PlaybookInstall: /root/playbooks/jenkins_agent.yaml
